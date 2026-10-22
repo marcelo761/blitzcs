@@ -1,0 +1,25 @@
+{
+  "sdl_version_encoded": 3004018,
+  "sdl_library": "/usr/lib64/libSDL3.so.0",
+  "profiles": [
+    {
+      "requested_driver": "dummy",
+      "exit_code": 0,
+      "stdout": "1\n1\n",
+      "stderr": ""
+    },
+    {
+      "requested_driver": "host default",
+      "exit_code": 0,
+      "stdout": "1\n1\n",
+      "stderr": ""
+    },
+    {
+      "requested_driver": "blitzcs_nonexistent_driver",
+      "exit_code": 0,
+      "stdout": "0\n0\n",
+      "stderr": "Audio target 'blitzcs_nonexistent_driver' not available\n"
+    }
+  ],
+  "playback_requested": false
+}

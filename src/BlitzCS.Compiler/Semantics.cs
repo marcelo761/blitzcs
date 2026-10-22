@@ -68,6 +68,7 @@ internal sealed record IrProgram(IrScope Main, IReadOnlyList<IrArray> Arrays, IR
 
 internal sealed partial class SemanticAnalysis(string sourcePath, ExternalFunctionRegistry? externals = null)
 {
+    internal List<UnboundExternalCall> UnboundExternalCalls { get; } = [];
     private readonly Dictionary<string, IrObjectType> objectTypes = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IrArray> arrays = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Function> functions = new(StringComparer.OrdinalIgnoreCase);

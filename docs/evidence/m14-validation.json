@@ -1,0 +1,103 @@
+{
+  "milestone": 14,
+  "date": "2026-10-22",
+  "baseline_checkpoint": "5484fb3",
+  "final_dotnet": {
+    "release": {
+      "passed": 572,
+      "failed": 0,
+      "skipped": 0,
+      "suites": {
+        "Blitz3DCS.Audio.Tests.dll": 15,
+        "BlitzCS.NativeInterop.Tests.dll": 11,
+        "BlitzCS.Compiler.Tests.dll": 284,
+        "BlitzCS.CLI.Tests.dll": 262
+      },
+      "warnings": 0,
+      "errors": 0,
+      "log_sha256": "54c00d0975322f66cc7e3f7e1d73f3acf362cd24149c21df179b751a82baaf72"
+    },
+    "debug": {
+      "passed": 572,
+      "failed": 0,
+      "skipped": 0,
+      "suites": {
+        "BlitzCS.NativeInterop.Tests.dll": 11,
+        "Blitz3DCS.Audio.Tests.dll": 15,
+        "BlitzCS.Compiler.Tests.dll": 284,
+        "BlitzCS.CLI.Tests.dll": 262
+      },
+      "warnings": 0,
+      "errors": 0,
+      "log_sha256": "77bbe33f01473249b0f8721cbf1c97ddef148eb6ee4e0820f8140b31b2d8eb74"
+    }
+  },
+  "python_passed": 40,
+  "local_fixtures_passed": 86,
+  "verify_script_exit_code": 0,
+  "regression_differential": {
+    "original_reused": 86,
+    "fresh_original": 0,
+    "match": 85,
+    "mismatch": 1,
+    "details": "m14-regression-differential.json"
+  },
+  "new_audio_comparison": {
+    "original_profile": "fresh FMOD 3.75 Win32 x86 Proton NOSOUND capture",
+    "local_profile": "SDL3 x64 dummy, no playback",
+    "matched_init_returns": 5,
+    "deliberate_flag_divergences": 2,
+    "details": "m14-audio-comparison.json",
+    "not_added_to_language_fixture_totals": true
+  },
+  "scp": {
+    "before_compiled_isolated": 2,
+    "after_compiled_isolated": 3,
+    "total_isolated": 30,
+    "source_hashes_preserved": 30,
+    "next_diagnostic": "fullscreen_window_fix.bb:45:23 SystemProperty",
+    "game_assembly_emitted": false,
+    "game_executed": false,
+    "details": "m14-scp.json"
+  },
+  "memory_stress": [
+    {
+      "batch": 1,
+      "operations": 100000,
+      "liveBefore": 61056,
+      "allocatedBytes": 11200448,
+      "beforeCollection": 9035584,
+      "liveAfter": 60656,
+      "estimatedReclaimedBytes": 8974928,
+      "committedBytes": 10575872,
+      "handleEntries": 0,
+      "handleCapacity": 3,
+      "positions": 0,
+      "lastHandle": 101000,
+      "failures": 0
+    },
+    {
+      "batch": 2,
+      "operations": 100000,
+      "liveBefore": 69312,
+      "allocatedBytes": 11200448,
+      "beforeCollection": 9043520,
+      "liveAfter": 62264,
+      "estimatedReclaimedBytes": 8981256,
+      "committedBytes": 10571776,
+      "handleEntries": 0,
+      "handleCapacity": 3,
+      "positions": 0,
+      "lastHandle": 201000,
+      "failures": 0
+    }
+  ],
+  "interrupted_validation": {
+    "release_attempt_incomplete": true,
+    "debug_timeout_test": "MultiFileTests.IncludedRuntimeGuardsPointToOriginalFile",
+    "cause": "not established; occurred during interrupted concurrent validation",
+    "isolated_reproduction": "2/2 pass without source change",
+    "full_sequential_debug": "572 pass without changing or weakening the test"
+  },
+  "publication": "isolated program with managed Audio assembly and copied SDL3 library; native OS dependencies remain system dependencies"
+}

@@ -1,0 +1,48 @@
+{
+  "source": "/tmp/blitzcs-fmod-probe-ndg9zepk/probe.bb",
+  "source_sha256": "fe7b25fb5606514031f917779cdac52d5b6160deb743b89daad86702247e9acb",
+  "project_sources_sha256": {
+    "probe.bb": "fe7b25fb5606514031f917779cdac52d5b6160deb743b89daad86702247e9acb"
+  },
+  "processes": [
+    {
+      "stage": "compile",
+      "command": [
+        "/home/marcelo/.local/share/Steam/steamapps/common/Proton 11.0/files/bin/wine",
+        "/tmp/blitzcs-fmod-probe-ndg9zepk/bin/blitzcc.exe",
+        "+q",
+        "-d",
+        "-o",
+        "Z:\\tmp\\blitz-original-capture-anezus2a\\program.exe",
+        "Z:\\tmp\\blitz-original-capture-anezus2a\\input.bb"
+      ],
+      "cwd": "/tmp/blitzcs-fmod-probe-ndg9zepk",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "ntsync: up and running.\n"
+    },
+    {
+      "stage": "run",
+      "command": [
+        "/home/marcelo/.local/share/Steam/steamapps/common/Proton 11.0/files/bin/wine",
+        "/tmp/blitz-original-capture-anezus2a/program.exe"
+      ],
+      "cwd": "/tmp/blitzcs-fmod-probe-ndg9zepk",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "ntsync: up and running.\n"
+    }
+  ],
+  "instrumented_stdout_file": {
+    "exists": true,
+    "size_bytes": 237,
+    "text": "3.75\r\n31160833\r\n1\r\ninit-valid\r\n1\r\n0\r\ninit-while-active\r\n1\r\n0\r\nclosed-once\r\nreinit-valid-flag\r\n1\r\n0\r\nclosed-twice\r\ninit-zero-rate\r\n0\r\n14\r\ninit-zero-channels\r\n1\r\n0\r\ninit-negative-channels\r\n0\r\n14\r\ninit-unknown-flag-bit\r\n1\r\n0\r\nclosed-final\r\n",
+    "hex": "332e37350d0a33313136303833330d0a310d0a696e69742d76616c69640d0a310d0a300d0a696e69742d7768696c652d6163746976650d0a310d0a300d0a636c6f7365642d6f6e63650d0a7265696e69742d76616c69642d666c61670d0a310d0a300d0a636c6f7365642d74776963650d0a696e69742d7a65726f2d726174650d0a300d0a31340d0a696e69742d7a65726f2d6368616e6e656c730d0a310d0a300d0a696e69742d6e656761746976652d6368616e6e656c730d0a300d0a31340d0a696e69742d756e6b6e6f776e2d666c61672d6269740d0a310d0a300d0a636c6f7365642d66696e616c0d0a"
+  },
+  "completion_marker_file": {
+    "exists": true,
+    "size_bytes": 10,
+    "text": "complete\r\n",
+    "hex": "636f6d706c6574650d0a"
+  }
+}

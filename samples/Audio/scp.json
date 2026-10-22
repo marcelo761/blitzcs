@@ -1,0 +1,83 @@
+{
+  "functions": [
+    {
+      "name": "FileSize",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyFiles",
+      "method": "FileSize",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "FileType",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyFiles",
+      "method": "FileType",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "CurrentDir",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyFiles",
+      "method": "CurrentDir",
+      "parameters": []
+    },
+    {
+      "name": "GetEnv",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacySystem",
+      "method": "GetEnv",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "RuntimeError",
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyErrors",
+      "method": "RuntimeError",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "Chr",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Chr",
+      "parameters": [
+        "Integer"
+      ]
+    },
+    {
+      "name": "Len",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Len",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "FSOUND_Init",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "Init",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ]
+    },
+    {
+      "name": "FSOUND_Close",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "Close",
+      "parameters": []
+    }
+  ]
+}

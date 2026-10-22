@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Blitz3DCS.Audio</AssemblyName>
+    <RootNamespace>Blitz3DCS.Audio</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -128,6 +128,8 @@ header da versão efetivamente pinada (ou uma shim tipada), e não apenas a
 projeção `%/#/$` do `.decls`. A evidência original não autoriza criar bindings
 FMOD no runtime .NET atual nem registrar falsos métodos que façam o SCP avançar.
 
+A auditoria de usos e as novas capturas M14 estão em [`fmod-audit-m14.md`](fmod-audit-m14.md).
+
 `CallDLL` é um caminho diferente: recebe nomes de DLL/função e bancos de bytes
 de entrada/saída, passando ponteiros e tamanhos dos bancos ao runtime gráfico.
 Não é substituto automático para a semântica `FSOUND_*` nem para handles de

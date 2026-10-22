@@ -53,3 +53,17 @@ python3 - <<'PY'
 from pathlib import Path
 assert Path('artifacts/native-interop.stdout').read_text().splitlines() == ['42', '3.5', '9', 'native:Olá 🌱', '-1', '42', '1']
 PY
+# M14: real SDL3 lifecycle; dummy is explicitly headless and emits no sound.
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Audio/main.bb -o artifacts/audio/main.dll --externals samples/Audio/scp.json
+env SDL_AUDIODRIVER=dummy dotnet artifacts/audio/main.dll > artifacts/audio/stdout.txt
+python3 - <<'PY'
+from pathlib import Path
+assert Path('artifacts/audio/stdout.txt').read_text().splitlines() == ['1', '1']
+PY
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- check-semantics samples/Audio/declared-only.bb --externals samples/Audio/declarations.json
+if dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Audio/declared-only.bb -o artifacts/audio/unbound.dll --externals samples/Audio/declarations.json > artifacts/audio/unbound.stdout 2> artifacts/audio/unbound.stderr; then
+  echo "Declaration-only audio call unexpectedly emitted an assembly" >&2
+  exit 1
+fi
+rg -q 'declared-only.bb\(2,7\).*no implementation' artifacts/audio/unbound.stderr
+python3 tools/compare_audio_profile.py

@@ -3,6 +3,30 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace BlitzCS.Compiler;
 
+public enum ExternalValueType { Integer, Float, String }
+public sealed record UnboundExternalCall(string Name, string SourcePath, int Line, int Column);
+
+/// <summary>A callable BASIC signature independent of any executable implementation.</summary>
+/// <remarks>Signature-only declarations require every parameter. Optional defaults come from bound .NET method metadata.</remarks>
+public sealed class ExternalFunctionSignature
+{
+    public string Name { get; }
+    public ExternalValueType ReturnType { get; }
+    public IReadOnlyList<ExternalValueType> ParameterTypes { get; }
+
+    public ExternalFunctionSignature(string name, ExternalValueType returnType, IEnumerable<ExternalValueType> parameterTypes)
+    {
+        ArgumentNullException.ThrowIfNull(parameterTypes);
+        ExternalFunction.ValidateName(name);
+        if (!Enum.IsDefined(returnType)) throw new ArgumentOutOfRangeException(nameof(returnType));
+        var parameters = parameterTypes.ToArray();
+        if (parameters.Any(type => !Enum.IsDefined(type))) throw new ArgumentOutOfRangeException(nameof(parameterTypes));
+        Name = name.ToLowerInvariant();
+        ReturnType = returnType;
+        ParameterTypes = Array.AsReadOnly(parameters);
+    }
+}
+
 /// <summary>A BASIC name bound to one explicitly selected, typed .NET method.</summary>
 public sealed class ExternalFunction
 {
@@ -11,13 +35,12 @@ public sealed class ExternalFunction
     internal string Target { get; }
     internal ValueType Result { get; }
     internal IReadOnlyList<(ValueType Type, IrExpression? Default)> Parameters { get; }
+    public ExternalFunctionSignature Signature { get; }
 
     public ExternalFunction(string name, MethodInfo method)
     {
         ArgumentNullException.ThrowIfNull(method);
-        if (string.IsNullOrWhiteSpace(name) || !char.IsAsciiLetter(name[0]) ||
-            name.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_') || Parser.IsReservedName(name))
-            throw new ArgumentException("External BASIC names require a letter followed by letters, digits or underscores.", nameof(name));
+        ValidateName(name);
         if (!method.IsPublic || !method.IsStatic || method.IsGenericMethod || method.ContainsGenericParameters ||
             method.DeclaringType is not { IsVisible: true } owner || owner.IsGenericType || owner.FullName is null ||
             string.IsNullOrEmpty(owner.Assembly.Location))
@@ -45,7 +68,23 @@ public sealed class ExternalFunction
         Method = method;
         Parameters = parameters.AsReadOnly();
         Target = string.Join(".", owner.FullName.Replace('+', '.').Split('.').Select(Escape)) + "." + Escape(method.Name);
+        Signature = new(Name, ToExternal(Result), Parameters.Select(parameter => ToExternal(parameter.Type)));
     }
+
+    internal static void ValidateName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || !char.IsAsciiLetter(name[0]) ||
+            name.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_') || Parser.IsReservedName(name))
+            throw new ArgumentException("External BASIC names require a letter followed by letters, digits or underscores.", nameof(name));
+    }
+
+    private static ExternalValueType ToExternal(ValueType type) => type == ValueType.Integer ? ExternalValueType.Integer
+        : type == ValueType.Float ? ExternalValueType.Float : ExternalValueType.String;
+    internal static ValueType ToInternal(ExternalValueType type) => type switch
+    {
+        ExternalValueType.Integer => ValueType.Integer, ExternalValueType.Float => ValueType.Float,
+        ExternalValueType.String => ValueType.String, _ => throw new ArgumentOutOfRangeException(nameof(type))
+    };
 
     private static string Escape(string identifier)
     {
@@ -62,10 +101,11 @@ public sealed class ExternalFunction
 /// <summary>Immutable, per-compilation external symbols; contains no engine implementation.</summary>
 public sealed class ExternalFunctionRegistry
 {
-    public static ExternalFunctionRegistry Empty { get; } = new([]);
-    public IReadOnlyList<ExternalFunction> Functions { get; }
-    public IReadOnlyList<string> ReferencePaths { get; }
-    private readonly Dictionary<string, ExternalFunction> symbols = new(StringComparer.OrdinalIgnoreCase);
+    public static ExternalFunctionRegistry Empty { get; } = new(Array.Empty<ExternalFunction>());
+    public IReadOnlyList<ExternalFunction> Functions { get; private set; }
+    public IReadOnlyList<string> ReferencePaths { get; private set; }
+    private readonly Dictionary<string, ExternalFunction> bindings = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ExternalFunctionSignature> symbols = new(StringComparer.OrdinalIgnoreCase);
 
     public ExternalFunctionRegistry(IEnumerable<ExternalFunction> functions)
     {
@@ -73,12 +113,49 @@ public sealed class ExternalFunctionRegistry
         foreach (var function in functions)
         {
             ArgumentNullException.ThrowIfNull(function);
-            if (!symbols.TryAdd(function.Name, function))
+            if (!symbols.TryAdd(function.Name, function.Signature))
                 throw new ArgumentException($"Duplicate external BASIC name '{function.Name}'.", nameof(functions));
+            bindings.Add(function.Name, function);
         }
-        Functions = Array.AsReadOnly(symbols.Values.ToArray());
-        ReferencePaths = Array.AsReadOnly(symbols.Values.Select(f => f.Method.DeclaringType!.Assembly.Location).Distinct(StringComparer.Ordinal).ToArray());
+        Functions = Array.AsReadOnly(bindings.Values.ToArray());
+        ReferencePaths = Array.AsReadOnly(bindings.Values.Select(f => f.Method.DeclaringType!.Assembly.Location).Distinct(StringComparer.Ordinal).ToArray());
     }
+    private ExternalFunctionRegistry(IEnumerable<ExternalFunctionSignature> signatures)
+    {
+        foreach (var signature in signatures)
+        {
+            ArgumentNullException.ThrowIfNull(signature);
+            if (!symbols.TryAdd(signature.Name, signature))
+                throw new ArgumentException($"Duplicate external BASIC name '{signature.Name}'.", nameof(signatures));
+        }
+        Functions = Array.AsReadOnly(Array.Empty<ExternalFunction>());
+        ReferencePaths = Array.AsReadOnly(Array.Empty<string>());
+    }
+    public static ExternalFunctionRegistry FromSignatures(IEnumerable<ExternalFunctionSignature> signatures)
+    {
+        ArgumentNullException.ThrowIfNull(signatures);
+        return new ExternalFunctionRegistry(signatures);
+    }
+    public static ExternalFunctionRegistry FromDeclarations(IEnumerable<ExternalFunctionSignature> signatures, IEnumerable<ExternalFunction> functions)
+    {
+        ArgumentNullException.ThrowIfNull(signatures);
+        ArgumentNullException.ThrowIfNull(functions);
+        var registry = FromSignatures(signatures);
+        foreach (var function in functions)
+        {
+            ArgumentNullException.ThrowIfNull(function);
+            if (!registry.symbols.TryGetValue(function.Name, out var signature) || !SameSignature(signature, function.Signature))
+                throw new ArgumentException($"External implementation '{function.Name}' does not match a declared signature.", nameof(functions));
+            if (!registry.bindings.TryAdd(function.Name, function))
+                throw new ArgumentException($"Duplicate external implementation '{function.Name}'.", nameof(functions));
+        }
+        registry.Functions = Array.AsReadOnly(registry.bindings.Values.ToArray());
+        registry.ReferencePaths = Array.AsReadOnly(registry.bindings.Values.Select(f => f.Method.DeclaringType!.Assembly.Location).Distinct(StringComparer.Ordinal).ToArray());
+        return registry;
+    }
+    private static bool SameSignature(ExternalFunctionSignature left, ExternalFunctionSignature right) =>
+        left.ReturnType == right.ReturnType && left.ParameterTypes.SequenceEqual(right.ParameterTypes);
     internal bool Contains(string name) => symbols.ContainsKey(Primitive.Name(name));
-    internal bool TryGet(string name, out ExternalFunction function) => symbols.TryGetValue(Primitive.Name(name), out function!);
+    internal bool TryGetSignature(string name, out ExternalFunctionSignature signature) => symbols.TryGetValue(Primitive.Name(name), out signature!);
+    internal bool TryGetBinding(string name, out ExternalFunction function) => bindings.TryGetValue(Primitive.Name(name), out function!);
 }

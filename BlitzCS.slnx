@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Blitz3DCS.Runtime/Blitz3DCS.Runtime.csproj" />
+    <Project Path="src/Blitz3DCS.Audio/Blitz3DCS.Audio.csproj" />
     <Project Path="src/BlitzCS.LegacyRuntime/BlitzCS.LegacyRuntime.csproj" />
     <Project Path="src/BlitzCS.CLI/BlitzCS.CLI.csproj" />
     <Project Path="src/BlitzCS.Compiler/BlitzCS.Compiler.csproj" />
@@ -9,6 +10,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BlitzCS.CLI.Tests/BlitzCS.CLI.Tests.csproj" />
+    <Project Path="tests/Blitz3DCS.Audio.Tests/Blitz3DCS.Audio.Tests.csproj" />
     <Project Path="tests/BlitzCS.Compiler.Tests/BlitzCS.Compiler.Tests.csproj" />
     <Project Path="tests/BlitzCS.NativeInterop.Tests/BlitzCS.NativeInterop.Tests.csproj" />
   </Folder>

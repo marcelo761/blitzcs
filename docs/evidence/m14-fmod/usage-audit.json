@@ -1,0 +1,275 @@
+{
+  "source": "/tmp/scpcb-audit-source",
+  "declarations_file": "fmod.decls",
+  "header": "/tmp/blitz-research/package/deps/fmod/include/fmod.h",
+  "header_version": "FMOD 3.75",
+  "counts": {
+    "declared_symbols": 13,
+    "symbols_with_active_calls": 10,
+    "unused_non_close_symbols": 2,
+    "declared_symbols_without_active_calls_including_close": 3,
+    "close_active_calls": 0,
+    "music_calls": 0,
+    "active_call_sites": 14
+  },
+  "inventory": [
+    {
+      "name": "FSOUND_Init",
+      "decls": "FSOUND_Init%(freq%,channels%,flags%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_Init(int mixrate, int maxsoftwarechannels, unsigned int flags)",
+      "active_calls": 1,
+      "call_sites": [
+        "FMod.bb:15"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "notes": "Header return is signed char; original declaration widens it to Integer.",
+      "export": "_FSOUND_Init@12",
+      "implementation_status": "implemented Init/Close profile only",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width"
+    },
+    {
+      "name": "FSOUND_Close",
+      "decls": "FSOUND_Close%()",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [],
+      "header": "void F_API FSOUND_Close()",
+      "active_calls": 0,
+      "commented_calls": [
+        "Menu.bb:212"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "notes": "Not actively called in the snapshot.",
+      "export": "_FSOUND_Close@0",
+      "implementation_status": "implemented Init/Close profile only",
+      "native_return_contract": "void; no meaningful return value"
+    },
+    {
+      "name": "FSOUND_SetVolume",
+      "decls": "FSOUND_SetVolume(channel%,vol%)",
+      "declared_basic_return": "void (no suffix)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_SetVolume(int channel, int vol)",
+      "active_calls": 2,
+      "call_sites": [
+        "StrictLoads.bb:183",
+        "StrictLoads.bb:220"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_SetVolume@8",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width"
+    },
+    {
+      "name": "FSOUND_SetVolumeAbsolute",
+      "decls": "FSOUND_SetVolumeAbsolute%(channel%,vol%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_SetVolumeAbsolute(int channel, int vol)",
+      "active_calls": 0,
+      "call_sites": [],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_SetVolumeAbsolute@8",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width"
+    },
+    {
+      "name": "FSOUND_GetVolume",
+      "decls": "FSOUND_GetVolume(channel%)",
+      "declared_basic_return": "void (no suffix)",
+      "declared_basic_arguments": [
+        "Integer"
+      ],
+      "header": "int F_API FSOUND_GetVolume(int channel)",
+      "active_calls": 0,
+      "call_sites": [],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_GetVolume@4",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "volume integer; invalid-channel behavior not verified"
+    },
+    {
+      "name": "FSOUND_SetPaused",
+      "decls": "FSOUND_SetPaused(channel%,paused%)",
+      "declared_basic_return": "void (no suffix)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_SetPaused(int channel, signed char paused)",
+      "active_calls": 3,
+      "call_sites": [
+        "StrictLoads.bb:184",
+        "StrictLoads.bb:221",
+        "StrictLoads.bb:237"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": true,
+      "notes": "Second argument is widened in the BASIC declaration.",
+      "export": "_FSOUND_SetPaused@8",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width"
+    },
+    {
+      "name": "FSOUND_StopSound",
+      "decls": "FSOUND_StopSound(channel%)",
+      "declared_basic_return": "void (no suffix)",
+      "declared_basic_arguments": [
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_StopSound(int channel)",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:201"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_StopSound@4",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width"
+    },
+    {
+      "name": "FSOUND_Stream_Play",
+      "decls": "FSOUND_Stream_Play%(channel%,stream%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer"
+      ],
+      "header": "int F_API FSOUND_Stream_Play(int channel, FSOUND_STREAM *stream)",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:173"
+      ],
+      "return_mismatch": false,
+      "argument_mismatch": [
+        "Integer stream field carries opaque pointer bits in Win32 x86"
+      ],
+      "notes": "The pointer fits the legacy 32-bit field in x86; it is not a semantic integer.",
+      "export": "_FSOUND_Stream_Play@8",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "channel integer or -1 on error"
+    },
+    {
+      "name": "FSOUND_Stream_Stop",
+      "decls": "FSOUND_Stream_Stop%(stream%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_Stream_Stop(FSOUND_STREAM *stream)",
+      "active_calls": 2,
+      "call_sites": [
+        "StrictLoads.bb:202",
+        "Menu.bb:211"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": [
+        "Integer stream field carries opaque pointer bits in Win32 x86"
+      ],
+      "export": "_FSOUND_Stream_Stop@4",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width"
+    },
+    {
+      "name": "FSOUND_Stream_Close",
+      "decls": "FSOUND_Stream_Close%(stream%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_Stream_Close(FSOUND_STREAM *stream)",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:203"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": [
+        "Integer stream field carries opaque pointer bits in Win32 x86"
+      ],
+      "export": "_FSOUND_Stream_Close@4",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width"
+    },
+    {
+      "name": "FSOUND_Stream_Open",
+      "decls": "FSOUND_Stream_Open%(filename$,mode%,memlength%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "String",
+        "Integer",
+        "Integer"
+      ],
+      "header": "FSOUND_STREAM * F_API FSOUND_Stream_Open(const char *name_or_data, unsigned int mode, int offset, int length)",
+      "export": "_FSOUND_Stream_Open@16",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:163"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": [
+        "BASIC declaration and call have 3 arguments; header/export stdcall decoration indicate 4 32-bit arguments"
+      ],
+      "notes": "No implicit fourth argument is assumed by this audit.",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "opaque pointer or NULL on failure"
+    },
+    {
+      "name": "FSOUND_IsPlaying",
+      "decls": "FSOUND_IsPlaying%(channel%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_IsPlaying(int channel)",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:253"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_IsPlaying@4",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "signed char Boolean playing status; invalid-channel/error distinction not verified"
+    },
+    {
+      "name": "FSOUND_SetPan",
+      "decls": "FSOUND_SetPan%(channel%,pan%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_SetPan(int channel, int pan)",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:274"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_SetPan@8",
+      "implementation_status": "pending; declaration/header audit is not a binding",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width"
+    }
+  ],
+  "declarations_sha256": "89146d0d32f9816604741adee92a9ca2bd2c82594bfcad41beb0699e1af96dd5",
+  "calling_convention": "Win32 x86 __stdcall (F_API); decorated export aliases verified in the pinned DLL",
+  "native_handle_contract": "FSOUND_STREAM* is opaque and native-width; legacy x86 Integer storage is not safe on x64; new bindings must allocate managed tokens",
+  "string_contract": "const char* input is legacy NUL-terminated bytes; no stream/string API implemented by the new layer yet"
+}

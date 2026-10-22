@@ -267,6 +267,46 @@ public sealed class ExternalRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void SignatureOnlyCatalogValidatesCallsAndBuildRejectsMissingImplementation()
+    {
+        var source = Path.Combine(directory, "declaration.bb");
+        var output = Path.Combine(directory, "declaration.dll");
+        var catalog = Path.Combine(directory, "signatures.json");
+        File.WriteAllText(source, "Global result=NativeAbs(3.6)");
+        File.WriteAllText(catalog, """{"functions":[{"name":"NativeAbs","returnType":"Integer","parameters":["Integer"]}]}""");
+
+        var semanticOutput = new StringWriter();
+        Assert.Equal(0, CliApplication.Run(["check-semantics", source, "--externals", catalog], semanticOutput, new StringWriter()));
+        Assert.Contains("no implementation", semanticOutput.ToString());
+        Assert.Contains("declaration.bb(1,", semanticOutput.ToString());
+
+        var buildErrors = new StringWriter();
+        Assert.Equal(1, CliApplication.Run(["build", source, "-o", output, "--externals", catalog], new StringWriter(), buildErrors));
+        Assert.Contains("has a declared signature but no implementation", buildErrors.ToString());
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public void MetadataInspectionAndBuildDoNotRunExternalStaticInitializers()
+    {
+        var sentinel = Path.Combine(directory, "initializer-ran.txt");
+        var assembly = Path.Combine(directory, "InitializerFixture.dll");
+        var initializerSource = "public static class InitializerFixture { static InitializerFixture() => " +
+            $"System.IO.File.WriteAllText({JsonSerializer.Serialize(sentinel)}, \"ran\"); " +
+            "public static int Identity(int value) => value; public static void Main() {} }";
+        DotNetEmitter.Emit(initializerSource, assembly, "InitializerFixture");
+        var catalog = Catalog(assembly, "InitializerFixture", ("NativeIdentity", "Identity", ["Integer"]));
+        var source = Path.Combine(directory, "initializer.bb");
+        var output = Path.Combine(directory, "initializer-program.dll");
+        File.WriteAllText(source, "Global result=NativeIdentity(7)");
+
+        Assert.Equal(0, CliApplication.Run(["check-semantics", source, "--externals", catalog], TextWriter.Null, new StringWriter()));
+        Assert.False(File.Exists(sentinel));
+        Assert.Equal(0, CliApplication.Run(["build", source, "-o", output, "--externals", catalog], TextWriter.Null, new StringWriter()));
+        Assert.False(File.Exists(sentinel));
+    }
+
+    [Fact]
     public void RuntimeIsOptInAndCompilerHasNoEngineDependency()
     {
         var error = Assert.Throws<BlitzCS.Compiler.BasicDiagnosticException>(() =>

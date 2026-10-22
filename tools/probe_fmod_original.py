@@ -24,6 +24,7 @@ def main() -> int:
     parser.add_argument('--report', type=Path, required=True)
     parser.add_argument('--evidence-dir', type=Path, required=True)
     parser.add_argument('--output', choices=['nosound', 'default'], default='nosound')
+    parser.add_argument('--case', choices=['baseline', 'init-semantics'], default='baseline')
     args = parser.parse_args()
     required = ['BLITZ3D_HOME', 'BLITZ3D_WINE', 'BLITZ3D_WINEPREFIX', 'BLITZ3D_DISPLAY']
     if any(not os.environ.get(key) for key in required):
@@ -49,9 +50,29 @@ def main() -> int:
         (shadow / 'userlibs' / 'm13.decls').write_text('\n'.join(declarations) + '\n', encoding='cp1252')
         source = shadow / 'probe.bb'
         output_setup = 'Local output%=M13Output(0)\nPrint output\nPrint output And 255\n' if args.output == 'nosound' else ''
-        source.write_text('Print M13Version()\n' + output_setup + 'Local initialized%=M13Init(44100,64,0)\nPrint initialized\nPrint initialized And 255\nPrint M13Error()\nM13Close\nPrint "closed"\n', encoding='cp1252')
+        if args.case == 'baseline':
+            body = ('Local initialized%=M13Init(44100,64,0)\nPrint initialized\n'
+                    'Print initialized And 255\nPrint M13Error()\nM13Close\nPrint "closed"\n')
+        else:
+            # NOSOUND output keeps these state/parameter checks independent of
+            # an installed audio device. Zero rate and negative channels are
+            # conservative invalid inputs; zero channels checks the boundary.
+            body = ('Print "init-valid"\nPrint M13Init(44100,64,0) And 255\nPrint M13Error()\n'
+                    'Print "init-while-active"\nPrint M13Init(44100,64,0) And 255\nPrint M13Error()\n'
+                    'M13Close\nPrint "closed-once"\n'
+                    'Print "reinit-valid-flag"\nPrint M13Init(44100,64,128) And 255\nPrint M13Error()\n'
+                    'M13Close\nPrint "closed-twice"\n'
+                    'Print "init-zero-rate"\nPrint M13Init(0,64,0) And 255\nPrint M13Error()\n'
+                    'Print "init-zero-channels"\nPrint M13Init(44100,0,0) And 255\nPrint M13Error()\n'
+                    'Print "init-negative-channels"\nPrint M13Init(44100,-1,0) And 255\nPrint M13Error()\n'
+                    'Print "init-unknown-flag-bit"\nPrint M13Init(44100,64,-2147483648) And 255\nPrint M13Error()\n'
+                    'M13Close\nPrint "closed-final"\n')
+        source.write_text('Print M13Version()\n' + output_setup + body, encoding='cp1252')
         report['probe_source_sha256'] = hashlib.sha256(source.read_bytes()).hexdigest()
         report['declarations'] = declarations
+        report['case'] = args.case
+        args.evidence_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, args.evidence_dir / 'probe.bb')
         try:
             result = capture(source, home=shadow, wine=os.environ['BLITZ3D_WINE'],
                 prefix=Path(os.environ['BLITZ3D_WINEPREFIX']), display=os.environ['BLITZ3D_DISPLAY'], timeout=8)

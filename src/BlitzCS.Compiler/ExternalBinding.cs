@@ -4,18 +4,24 @@ internal sealed partial class SemanticAnalysis
 {
     private IrCall BindExternal(Call call, IReadOnlyList<IrExpression> arguments)
     {
-        if (externals is null || !externals.TryGet(call.Name, out var function))
+        if (externals is null || !externals.TryGetSignature(call.Name, out var signature))
             throw Error(call.Position, $"Unknown BASIC function or external symbol '{call.Name}'.");
-        CheckTag(call.Name, function.Result, call.Position);
-        if (arguments.Count > function.Parameters.Count)
-            throw Error(call.Position, $"External function '{call.Name}' accepts at most {function.Parameters.Count} arguments.");
-        var converted = new IrExpression[function.Parameters.Count];
+        var result = ExternalFunction.ToInternal(signature.ReturnType);
+        CheckTag(call.Name, result, call.Position);
+        if (arguments.Count > signature.ParameterTypes.Count)
+            throw Error(call.Position, $"External function '{call.Name}' accepts at most {signature.ParameterTypes.Count} arguments.");
+        var converted = new IrExpression[signature.ParameterTypes.Count];
         for (var i = 0; i < converted.Length; i++)
         {
-            var parameter = function.Parameters[i];
-            converted[i] = i < arguments.Count ? Convert(arguments[i], parameter.Type, call.Position)
-                : parameter.Default ?? throw Error(call.Position, $"External function '{call.Name}' requires argument {i + 1} ({parameter.Type}).");
+            var parameterType = ExternalFunction.ToInternal(signature.ParameterTypes[i]);
+            var bindingHasDefault = externals.TryGetBinding(call.Name, out var binding) && i < binding.Parameters.Count
+                ? binding.Parameters[i].Default : null;
+            converted[i] = i < arguments.Count ? Convert(arguments[i], parameterType, call.Position)
+                : bindingHasDefault ?? throw Error(call.Position, $"External function '{call.Name}' requires argument {i + 1} ({parameterType}).");
         }
-        return new(function.Target, converted, true, function.Result);
+        var target = externals.TryGetBinding(call.Name, out var implementation) ? implementation.Target : string.Empty;
+        if (implementation is null)
+            UnboundExternalCalls.Add(new(call.Name, call.Position.File ?? sourcePath, call.Position.Line, call.Position.Column));
+        return new(target, converted, true, result);
     }
 }

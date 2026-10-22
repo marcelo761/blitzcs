@@ -14,13 +14,33 @@ public static class BasicCompiler
         _ = new Parser(tokens, sourcePath, new IncludeResolver(sourcePath)).Parse();
     }
 
+    /// <summary>Checks BASIC semantics against declared external signatures without requiring implementations.</summary>
+    public static void ValidateSemantics(string source, string sourcePath, ExternalFunctionRegistry? externals = null)
+        => _ = CheckSemantics(source, sourcePath, externals);
+
+    /// <summary>Checks semantics and returns external calls whose declared signatures lack implementations.</summary>
+    public static IReadOnlyList<UnboundExternalCall> CheckSemantics(string source, string sourcePath, ExternalFunctionRegistry? externals = null)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        var tokens = new Lexer(source, sourcePath).Tokenize();
+        var syntax = new Parser(tokens, sourcePath, new IncludeResolver(sourcePath)).Parse();
+        var analysis = new SemanticAnalysis(sourcePath, externals);
+        _ = analysis.Analyze(syntax);
+        return Array.AsReadOnly(analysis.UnboundExternalCalls.ToArray());
+    }
+
     public static string Compile(string source, string sourcePath, ExternalFunctionRegistry? externals)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         var tokens = new Lexer(source, sourcePath).Tokenize();
         var syntax = new Parser(tokens, sourcePath, new IncludeResolver(sourcePath)).Parse();
-        var program = new SemanticAnalysis(sourcePath, externals).Analyze(syntax);
+        var analysis = new SemanticAnalysis(sourcePath, externals);
+        var program = analysis.Analyze(syntax);
+        if (analysis.UnboundExternalCalls.FirstOrDefault() is { } unbound)
+            throw new BasicDiagnosticException(unbound.SourcePath, unbound.Line, unbound.Column,
+                $"External function '{unbound.Name}' has a declared signature but no implementation.");
         return CSharpEmitter.Emit(program, sourcePath);
     }
 }

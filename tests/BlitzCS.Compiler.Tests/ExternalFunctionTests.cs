@@ -68,4 +68,48 @@ public sealed class ExternalFunctionTests
         Assert.Single(registry.Functions);
         Assert.Contains("@Abs", BasicCompiler.Compile("NativeAbs -42", "command.bb", registry));
     }
+
+    [Fact]
+    public void SignatureOnlyDeclarationsSupportSemanticValidationButCannotBuild()
+    {
+        var signature = new ExternalFunctionSignature("nativeabs", ExternalValueType.Integer,
+            [ExternalValueType.Integer]);
+        var registry = ExternalFunctionRegistry.FromSignatures([signature]);
+
+        BasicCompiler.ValidateSemantics("Global result=NativeAbs(3.6)", "external.bb", registry);
+        var error = Assert.Throws<BasicDiagnosticException>(() =>
+            BasicCompiler.Compile("Global result=NativeAbs(3.6)", "external.bb", registry));
+        Assert.Equal(1, error.Line);
+        Assert.Contains("has a declared signature but no implementation", error.Message);
+        Assert.NotEmpty(BasicCompiler.Compile("Print 1", "external.bb", registry));
+    }
+
+    [Fact]
+    public void SignatureOnlyDeclarationsStillDiagnoseTypeAndArityErrors()
+    {
+        var registry = ExternalFunctionRegistry.FromSignatures([
+            new ExternalFunctionSignature("nativeabs", ExternalValueType.Integer, [ExternalValueType.Integer])
+        ]);
+
+        Assert.Throws<BasicDiagnosticException>(() =>
+            BasicCompiler.ValidateSemantics("Global result=NativeAbs()", "external.bb", registry));
+        Assert.Throws<BasicDiagnosticException>(() =>
+            BasicCompiler.ValidateSemantics("Global result=NativeAbs#(1)", "external.bb", registry));
+    }
+
+    [Fact]
+    public void BuildReportsOnlyUsedUnboundCallsAtTheirOwnSourcePosition()
+    {
+        var registry = ExternalFunctionRegistry.FromDeclarations(
+            [new ExternalFunctionSignature("nativeabs", ExternalValueType.Integer, [ExternalValueType.Integer]),
+             new ExternalFunctionSignature("missing", ExternalValueType.Integer, [ExternalValueType.Integer]),
+             new ExternalFunctionSignature("unused", ExternalValueType.Integer, [])],
+            [Function()]);
+
+        var error = Assert.Throws<BasicDiagnosticException>(() =>
+            BasicCompiler.Compile("Print NativeAbs(1)\nPrint Missing(2)", "external.bb", registry));
+        Assert.Equal(2, error.Line);
+        Assert.Contains("missing", error.Message);
+        Assert.NotEmpty(BasicCompiler.Compile("Print 1", "external.bb", registry));
+    }
 }

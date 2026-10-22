@@ -1,0 +1,691 @@
+{
+  "baseline": "M13",
+  "before_compiled": 2,
+  "after": {
+    "declared_repository": "Regalis11/scpcb",
+    "declared_commit": "edb8fe0840b78f14d1aef3a0bf6174630e7be296",
+    "provenance_verified_by_probe": false,
+    "source_dir": "/tmp/scpcb-audit-source",
+    "cli": "/run/media/system/SSD_SATA/BlitzCS/src/BlitzCS.CLI/bin/Release/net10.0/BlitzCS.CLI.dll",
+    "timeout_seconds": 30,
+    "external_catalog": "/run/media/system/SSD_SATA/BlitzCS/samples/Audio/scp.json",
+    "native_catalog": "/run/media/system/SSD_SATA/BlitzCS/tools/scp_native_catalog.json",
+    "files_checked": 30,
+    "compiled": 3,
+    "compiler_errors": 27,
+    "infrastructure_results": 0,
+    "categories": {
+      "compiled": 3,
+      "lexical": 0,
+      "syntactic": 2,
+      "semantic_type": 9,
+      "native_unregistered": 15,
+      "external_missing": 1,
+      "infrastructure": 0,
+      "unclassified_compiler_error": 0
+    },
+    "integrated": {
+      "phase": "compiler_error",
+      "first_error": {
+        "file": "fullscreen_window_fix.bb",
+        "line": 45,
+        "column": 23,
+        "category": "native_unregistered",
+        "diagnostic": "/tmp/scpcb-audit-source/fullscreen_window_fix.bb(45,23): Unknown BASIC function or external symbol 'systemproperty'."
+      },
+      "observed_errors_lower_bound": 1,
+      "additional_errors": null,
+      "diagnostic_include_depth": 1,
+      "diagnostic_include_paths": [
+        [
+          "Main.bb",
+          "fullscreen_window_fix.bb"
+        ]
+      ],
+      "syntax_check": {
+        "phase": "syntax_validated",
+        "syntax_validated": true,
+        "semantics": "unresolved",
+        "binding": "unresolved",
+        "native_resolution": "unresolved",
+        "returncode": 0,
+        "first_diagnostic": null,
+        "duration_ms": 364
+      },
+      "entry": "Main.bb",
+      "static_include_closure": {
+        "files": [
+          "FMod.bb",
+          "StrictLoads.bb",
+          "fullscreen_window_fix.bb",
+          "KeyName.bb",
+          "Blitz_Basic_Bank.bb",
+          "Blitz_File_FileName.bb",
+          "Blitz_File_ZipApi.bb",
+          "Update.bb",
+          "DevilParticleSystem.bb",
+          "AAText.bb",
+          "Achievements.bb",
+          "Difficulty.bb",
+          "Dreamfilter.bb",
+          "Items.bb",
+          "Particles.bb",
+          "MapSystem.bb",
+          "DrawPortals.bb",
+          "Skybox.bb",
+          "NPCs.bb",
+          "UpdateEvents.bb",
+          "Menu.bb",
+          "LoadAllSounds.bb",
+          "Save.bb"
+        ],
+        "file_count": 23,
+        "missing": [],
+        "max_depth": 2
+      }
+    },
+    "results": [
+      {
+        "source": "AAText.bb",
+        "sha256": "2c3941a9ee03d0a46ec2f8fed2b17ef5bc7f651e5539c161b38c1866e141678e",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/AAText.bb(1,24): Unknown BASIC function or external symbol 'getiniint'.",
+        "assembly_emitted": false,
+        "duration_ms": 343,
+        "category": "semantic_type",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 48
+        }
+      },
+      {
+        "source": "Achievements.bb",
+        "sha256": "5a7233c39af9614cdefbf16b6e59c8ebe5576e7d11c921bacfc5319cfb918d9e",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Achievements.bb(19,26): Unknown BASIC function or external symbol 'getiniint'.",
+        "assembly_emitted": false,
+        "duration_ms": 309,
+        "category": "semantic_type",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 62
+        }
+      },
+      {
+        "source": "Blitz_Basic_Bank.bb",
+        "sha256": "af74ae4fcb6c90b83bdd433ea288dc80c1867c59f4bf8c3153837f0060c24f06",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Blitz_Basic_Bank.bb(21,21): Unknown BASIC function or external symbol 'banksize'.",
+        "assembly_emitted": false,
+        "duration_ms": 339,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 61
+        }
+      },
+      {
+        "source": "Blitz_File_FileName.bb",
+        "sha256": "66f3af39c2637b65b86f513e7789f41a83e5ea4ad8847def7119e68fa5c99fbb",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Blitz_File_FileName.bb(28,5): Unknown BASIC function or external symbol 'right'.",
+        "assembly_emitted": false,
+        "duration_ms": 326,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 46
+        }
+      },
+      {
+        "source": "Blitz_File_ZipApi.bb",
+        "sha256": "30117ad9e79b71df38f7aa7414b95b5c7e417da341149b74acef53a1b4dec505",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Blitz_File_ZipApi.bb(247,29): Unknown BASIC function or external symbol 'banksize'.",
+        "assembly_emitted": false,
+        "duration_ms": 325,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 79
+        }
+      },
+      {
+        "source": "Converter.bb",
+        "sha256": "3e35ad5289c30599b85792a19c427e854080d38ca6c9d48e75eda16583a1f61f",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Converter.bb(1,1): Unknown BASIC function or external symbol 'graphics3d'.",
+        "assembly_emitted": false,
+        "duration_ms": 337,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 70
+        }
+      },
+      {
+        "source": "CPU_Details.bb",
+        "sha256": "9ce0ec968c6b6bc89698ba801240955694ba148bb7be03f2729a9e7e33cf747a",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/CPU_Details.bb(1,1): Unknown BASIC function or external symbol 'graphics'.",
+        "assembly_emitted": false,
+        "duration_ms": 307,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 45
+        }
+      },
+      {
+        "source": "DevilParticleSystem.bb",
+        "sha256": "6a9789e3c06bccfb4d036f80f34daf7a13e2b4747c4996e3b0aaa19b7f64ab1c",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/DevilParticleSystem.bb(50,15): Unknown BASIC function or external symbol 'createpivot'.",
+        "assembly_emitted": false,
+        "duration_ms": 284,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 65
+        }
+      },
+      {
+        "source": "Difficulty.bb",
+        "sha256": "83556dab02c307bd6f5478aded9a523086518fe25989e1bd2bf510aed7ec7853",
+        "phase": "compiled",
+        "returncode": 0,
+        "first_diagnostic": null,
+        "assembly_emitted": true,
+        "duration_ms": 1732,
+        "category": "compiled",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 51
+        }
+      },
+      {
+        "source": "DrawPortals \u2013 Kopio.bb",
+        "sha256": "a8f89d5e895222b84621064eb5988d2f174222f81eb83d17198a88a6d548685c",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/DrawPortals \u2013 Kopio.bb(25,12): Unknown BASIC function or external symbol 'createtexture'.",
+        "assembly_emitted": false,
+        "duration_ms": 290,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 48
+        }
+      },
+      {
+        "source": "DrawPortals.bb",
+        "sha256": "faa0441f5a2a332c95fa35ea595841a99a47f03772443937df12e19aed69cee8",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/DrawPortals.bb(21,12): Unknown BASIC function or external symbol 'createtexture'.",
+        "assembly_emitted": false,
+        "duration_ms": 285,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 49
+        }
+      },
+      {
+        "source": "Dreamfilter.bb",
+        "sha256": "0faafc5432585a5782db8f4b4cc49db58b59ddfb5695e7966a9552594ab8e720",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Dreamfilter.bb(6,15): Unknown BASIC function or external symbol 'createcamera'.",
+        "assembly_emitted": false,
+        "duration_ms": 315,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 46
+        }
+      },
+      {
+        "source": "FMod.bb",
+        "sha256": "6e6bfa5ccb0abf4bf1ab57de657f0b1bb1e641d68e34d0d6dcf1bfed0e05e9f4",
+        "phase": "compiled",
+        "returncode": 0,
+        "first_diagnostic": null,
+        "assembly_emitted": true,
+        "duration_ms": 1800,
+        "category": "compiled",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 48
+        }
+      },
+      {
+        "source": "fullscreen_window_fix.bb",
+        "sha256": "c31d1f86d070a57602806e885ed8e16fcda310bcdf9179ab92cf5b0896824505",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/fullscreen_window_fix.bb(45,23): Unknown BASIC function or external symbol 'systemproperty'.",
+        "assembly_emitted": false,
+        "duration_ms": 273,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 45
+        }
+      },
+      {
+        "source": "Items.bb",
+        "sha256": "92958954d19c65a6139d9bb89a7eff808ac521fbad0034b175062845236dd325",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Items.bb(37,59): Unknown BASIC function or external symbol 'copyentity'.",
+        "assembly_emitted": false,
+        "duration_ms": 307,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 72
+        }
+      },
+      {
+        "source": "KeyName.bb",
+        "sha256": "0759530b7a56de5f424e1aeebf4929107a7e6c6b7130975e1bd16ef97afbc0a2",
+        "phase": "compiled",
+        "returncode": 0,
+        "first_diagnostic": null,
+        "assembly_emitted": true,
+        "duration_ms": 1642,
+        "category": "compiled",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 52
+        }
+      },
+      {
+        "source": "LightMapPNG.bb",
+        "sha256": "56b3f49cd83c0baffca8398625e4d755265b115aeded4c0d1fbef42217ab136a",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/LightMapPNG.bb(1,1): Unknown BASIC function or external symbol 'graphics3d'.",
+        "assembly_emitted": false,
+        "duration_ms": 289,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 47
+        }
+      },
+      {
+        "source": "LoadAllSounds.bb",
+        "sha256": "367da63ef43730f5e31a4f1e78bd13f1ebdc91ffeccb64b3769fc5b6c3c15971",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/LoadAllSounds.bb(4,15): Expected Close; found ','.",
+        "assembly_emitted": false,
+        "duration_ms": 93,
+        "category": "syntactic",
+        "syntax_check": {
+          "phase": "syntax_error",
+          "syntax_validated": false,
+          "semantics": "not_assessed",
+          "binding": "not_assessed",
+          "native_resolution": "not_assessed",
+          "returncode": 1,
+          "first_diagnostic": "/tmp/scpcb-audit-source/LoadAllSounds.bb(4,15): Expected Close; found ','.",
+          "duration_ms": 50
+        }
+      },
+      {
+        "source": "Main.bb",
+        "sha256": "fcc2c1504e35b6fbb09947ec1835932054c5d18c6e105a4ebf4bcb23ca249db5",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/fullscreen_window_fix.bb(45,23): Unknown BASIC function or external symbol 'systemproperty'.",
+        "assembly_emitted": false,
+        "duration_ms": 561,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 404
+        }
+      },
+      {
+        "source": "MapSystem.bb",
+        "sha256": "72a4123fa648387d458efd79c4310070a5eb9e87c7c563b85d39dcf2cd8dd3bd",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/MapSystem.bb(1793,8): Unknown Type 'doors'.",
+        "assembly_emitted": false,
+        "duration_ms": 170,
+        "category": "semantic_type",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 122
+        }
+      },
+      {
+        "source": "Menu.bb",
+        "sha256": "efc3523b8fd2883139e2fb85918e44cad78d826bccb8672b4c8543ef400e9698",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Menu.bb(1,20): Unknown BASIC function or external symbol 'loadimage_strict'.",
+        "assembly_emitted": false,
+        "duration_ms": 265,
+        "category": "semantic_type",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 83
+        }
+      },
+      {
+        "source": "MusicPlayer.bb",
+        "sha256": "701c0bb0a57f767346aef0a1711da031674c72a0bb247967b3d0c9ec345e9aa5",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/MusicPlayer.bb(1,1): Unable to open include file 'BlitzAL.bb': File or directory not found.",
+        "assembly_emitted": false,
+        "duration_ms": 95,
+        "category": "external_missing",
+        "syntax_check": {
+          "phase": "syntax_error",
+          "syntax_validated": false,
+          "semantics": "not_assessed",
+          "binding": "not_assessed",
+          "native_resolution": "not_assessed",
+          "returncode": 1,
+          "first_diagnostic": "/tmp/scpcb-audit-source/MusicPlayer.bb(1,1): Unable to open include file 'BlitzAL.bb': File or directory not found.",
+          "duration_ms": 54
+        }
+      },
+      {
+        "source": "NPCs.bb",
+        "sha256": "0ddc21639f55034ed13d40e9cd755a384a9891080c66eda1d638f4e1705ded2c",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/NPCs.bb(38,8): Unknown Type 'waypoints'.",
+        "assembly_emitted": false,
+        "duration_ms": 134,
+        "category": "semantic_type",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 120
+        }
+      },
+      {
+        "source": "Particles.bb",
+        "sha256": "872e7eed4895a660f720e2fb87d98928cd5664fc1a4aa70c31f2731b0703a1f1",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Particles.bb(95,8): Unknown Type 'rooms'.",
+        "assembly_emitted": false,
+        "duration_ms": 101,
+        "category": "semantic_type",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 45
+        }
+      },
+      {
+        "source": "RMesh_Model_Viewer.bb",
+        "sha256": "265158bfee234ead24455c51b75a3eca5212dae2d217ea0ee48cf8f6999a66ad",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/RMesh_Model_Viewer.bb(714,16): Unknown BASIC function or external symbol 'input'.",
+        "assembly_emitted": false,
+        "duration_ms": 309,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 67
+        }
+      },
+      {
+        "source": "Save.bb",
+        "sha256": "60e742fcaef01539582ef6f4b0b601747cbc86d6e128b21f63be05c3af69d5d3",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Save.bb(594,14): Expected Close; found ','.",
+        "assembly_emitted": false,
+        "duration_ms": 104,
+        "category": "syntactic",
+        "syntax_check": {
+          "phase": "syntax_error",
+          "syntax_validated": false,
+          "semantics": "not_assessed",
+          "binding": "not_assessed",
+          "native_resolution": "not_assessed",
+          "returncode": 1,
+          "first_diagnostic": "/tmp/scpcb-audit-source/Save.bb(594,14): Expected Close; found ','.",
+          "duration_ms": 63
+        }
+      },
+      {
+        "source": "Skybox.bb",
+        "sha256": "ca8708421c62bd589930e9b9b74f4472eefa656ea899b5efd643f10d16c78d76",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Skybox.bb(6,8): Unknown BASIC function or external symbol 'createmesh'.",
+        "assembly_emitted": false,
+        "duration_ms": 249,
+        "category": "native_unregistered",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 47
+        }
+      },
+      {
+        "source": "StrictLoads.bb",
+        "sha256": "984359249f5354a42540daf568e6a7ac8e1cffd91bb0d4d3a479b2e1637927b6",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/StrictLoads.bb(153,58): Const initializer must use previously declared constants.",
+        "assembly_emitted": false,
+        "duration_ms": 109,
+        "category": "semantic_type",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 45
+        }
+      },
+      {
+        "source": "Update.bb",
+        "sha256": "68f4c24b42d958152f0afa9754be398eb6e8330abaffc01484a7b86f57e1fb94",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/Update.bb(12,30): Unknown BASIC function or external symbol 'getiniint'.",
+        "assembly_emitted": false,
+        "duration_ms": 276,
+        "category": "semantic_type",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 67
+        }
+      },
+      {
+        "source": "UpdateEvents.bb",
+        "sha256": "f76e5612ee5fd6730252d2546dc0524d243e6314829aef75b61ff832d10e1a5d",
+        "phase": "compiler_error",
+        "returncode": 1,
+        "first_diagnostic": "/tmp/scpcb-audit-source/UpdateEvents.bb(2,2): Unknown BASIC function or external symbol 'catcherrors'.",
+        "assembly_emitted": false,
+        "duration_ms": 341,
+        "category": "semantic_type",
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 99
+        }
+      }
+    ]
+  },
+  "source_hashes_unchanged": true
+}

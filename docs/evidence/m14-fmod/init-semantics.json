@@ -1,0 +1,20 @@
+{
+  "dll_sha256": "1e08da161cf78746304a834973971ee47a24817ee4e28df74e3f37dbbb383b22",
+  "profile": "original Win32 runtime; explicit FMOD_OUTPUT_NOSOUND=0; no playback requested",
+  "native_return_note": "FMOD signed-char results are declared Integer by historical .decls; upper EAX bits are not stable ABI results.",
+  "probe_source_sha256": "fe7b25fb5606514031f917779cdac52d5b6160deb743b89daad86702247e9acb",
+  "declarations": [
+    ".lib \"Z:\\run\\media\\system\\SSD_SATA\\BlitzCS\\artifacts\\m13-fmod\\fmod.dll\"",
+    "M13Version#():\"_FSOUND_GetVersion@0\"",
+    "M13Init%(freq%,channels%,flags%):\"_FSOUND_Init@12\"",
+    "M13Error%():\"_FSOUND_GetError@0\"",
+    "M13Output%(mode%):\"_FSOUND_SetOutput@4\"",
+    "M13Close():\"_FSOUND_Close@0\""
+  ],
+  "case": "init-semantics",
+  "capture": {
+    "phase": "run",
+    "stdout": "3.75\n31160833\n1\ninit-valid\n1\n0\ninit-while-active\n1\n0\nclosed-once\nreinit-valid-flag\n1\n0\nclosed-twice\ninit-zero-rate\n0\n14\ninit-zero-channels\n1\n0\ninit-negative-channels\n0\n14\ninit-unknown-flag-bit\n1\n0\nclosed-final\n",
+    "exit_code": 0
+  }
+}

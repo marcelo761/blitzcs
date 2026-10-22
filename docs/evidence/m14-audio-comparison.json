@@ -1,0 +1,55 @@
+{
+  "original_profile": "original Win32 runtime; explicit FMOD_OUTPUT_NOSOUND=0; no playback requested",
+  "local_profile": "SDL3 Linux x64, dummy audio driver; no playback requested",
+  "scope": "Init result normalized to 0/1 only; no comparison of error numbers, mixer or audio output",
+  "original_evidence_sha256": "12a9e81e3e6114b83d30a5f6891b0c128fe2268cf7e53d736d75caac8557f06f",
+  "source_sha256": "cd451dd1b1ecea4ad1ef4d30a31414485759f5ce5bb8fe42e5285a937bff9a9e",
+  "build_exit_code": 0,
+  "run_exit_code": 0,
+  "stdout": "init-valid\n1\ninit-while-active\n1\nreinit-valid-flag\n0\ninit-zero-rate\n0\ninit-zero-channels\n1\ninit-negative-channels\n0\ninit-unknown-flag-bit\n0\n",
+  "stderr": "",
+  "comparisons": [
+    {
+      "case": "init-valid",
+      "original_low_byte": 1,
+      "local": 1,
+      "status": "match"
+    },
+    {
+      "case": "init-while-active",
+      "original_low_byte": 1,
+      "local": 1,
+      "status": "match"
+    },
+    {
+      "case": "reinit-valid-flag",
+      "original_low_byte": 1,
+      "local": 0,
+      "status": "known_divergence"
+    },
+    {
+      "case": "init-zero-rate",
+      "original_low_byte": 0,
+      "local": 0,
+      "status": "match"
+    },
+    {
+      "case": "init-zero-channels",
+      "original_low_byte": 1,
+      "local": 1,
+      "status": "match"
+    },
+    {
+      "case": "init-negative-channels",
+      "original_low_byte": 0,
+      "local": 0,
+      "status": "match"
+    },
+    {
+      "case": "init-unknown-flag-bit",
+      "original_low_byte": 1,
+      "local": 0,
+      "status": "known_divergence"
+    }
+  ]
+}
