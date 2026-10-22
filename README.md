@@ -1,223 +1,159 @@
 # BlitzCS
 
-Legacy syntax. Modern runtime. Zero mandatory rewrites.
+BlitzCS is an experimental, general-purpose BlitzBasic language compiler and interoperability infrastructure for .NET 10. It compiles BASIC and embedded C# into one assembly through Roslyn, with typed calls and shared state in both directions.
 
-Compilador experimental BlitzBasic → C# → assembly .NET 10, com interop híbrida
-tipada, Roslyn, símbolos portáveis e diagnósticos mapeados para o `.bb`.
+Created and led by **Marcelo Buratti de Freitas Filho**, the project explores how legacy BASIC programs can move to a managed runtime while integrating modern C# and native libraries. Compatibility research uses the original Blitz3D compiler and real legacy projects, including SCP: Containment Breach. These are reference targets, not a restriction on what BlitzCS can be used to build.
 
-## Executar
+BlitzCS is an independent project. It is not an official Blitz Research, Microsoft, FMOD, or SCP project.
 
-Requer SDK .NET 10 estável no `PATH`. Neste ambiente ele está em
-`/var/home/marcelo/.local/share/causoryn-dotnet`; acrescente esse diretório ao `PATH`
-da sessão, se necessário.
+## Quick start
 
-```bash
-dotnet build BlitzCS.slnx
-dotnet test BlitzCS.slnx
-dotnet run --project src/BlitzCS.CLI -- build samples/Legacy/hello.bb -o artifacts/hello.dll
-dotnet artifacts/hello.dll
-```
-
-Saída esperada:
-
-```text
-Hello from BlitzCS
-14
--3
-```
-
-O destino também recebe `.generated.cs`, `.pdb` e `.runtimeconfig.json`.
-O assembly executa com o runtime .NET 10, sem precisar da CLI ou de Roslyn.
-`bash scripts/verify.sh` automatiza build Release, testes .NET/Python, execução dos
-exemplos e fixtures de compatibilidade. Requer Python 3 para o harness.
-
-## Exemplo híbrido
+For the verified full-solution build, use **Linux**, the **.NET 10 SDK**, and a **C compiler available as `cc`**. The native integration test project explicitly requires Linux. Run these commands from a checkout of this repository:
 
 ```bash
-dotnet run --project src/BlitzCS.CLI -- build samples/Hybrid/answer.bb -o artifacts/answer.dll
+dotnet restore BlitzCS.slnx
+dotnet build BlitzCS.slnx -c Release --nologo
+dotnet run --project src/BlitzCS.CLI -c Release --no-build -- build samples/Hybrid/answer.bb -o artifacts/answer.dll
 dotnet artifacts/answer.dll
 ```
 
-Imprime `42`. O exemplo chama C# a partir de BASIC, C# chama uma função BASIC e
-um bloco C# modifica a global compartilhada antes de BASIC imprimi-la.
-`Global answer%` é exposto como `BB.answer`; `Function Add%(a%,b%)` como
-`BB.add(int,int)`. Os dois lados usam o mesmo campo `int` no mesmo assembly.
-Blocos `<?cs ... ?>` executam instruções; `<?cs module ... ?>` definem classes.
-O [contrato híbrido](docs/hybrid.md) detalha tipos, escopos e sintaxe `CS::`.
+The program prints `42`. The compiler also writes generated C#, portable debugging symbols and runtime configuration alongside the assembly. Generated programs need .NET 10; compilation needs the SDK and Roslyn. External runtime libraries must accompany programs that use them.
 
-## Exemplo tipado
+This is a source distribution: no published NuGet package, global tool installation, or downloadable release is claimed here. Linux x64 is the verified development platform. Other platforms and native-library combinations need validation.
+
+## Architecture
+
+```text
+.bb entry + Include files + embedded C#
+                   |
+       lexer / parser / semantic analysis
+                   |
+       generated C# + external bindings
+                   |
+                Roslyn
+                   |
+         one .NET program assembly
+```
+
+| Component | Responsibility |
+| --- | --- |
+| `BlitzCS.Compiler` | Language parsing, typing, compatibility semantics and C# generation |
+| `BlitzCS.CLI` | Compilation, diagnostics, catalogs and deployment of dependencies |
+| `BlitzCS.NativeInterop` | Generic native-library ownership and typed binding infrastructure |
+| `BlitzCS.LegacyRuntime` | Optional legacy error service |
+| `Blitz3DCS.Runtime` | Engine-specific legacy file, string and system services |
+| `Blitz3DCS.Audio` | FSOUND compatibility layer, SDL3 output and managed PCM mixing |
+
+**BlitzCS is language infrastructure; Blitz3DCS is an engine integration built on it.** The compiler has no dependency on the Blitz3DCS projects. Other engines can register their own typed external functions without adopting Blitz3D APIs.
+
+See [compiler architecture](docs/architecture.md), [external functions](docs/external-functions.md), [native interoperability](docs/native-interop-m13.md) and the [proposed Blitz3DCS architecture](docs/blitz3dcs-architecture.md).
+
+## BASIC and C# in one program
+
+This is the checked-in [answer example](samples/Hybrid/answer.bb):
+
+```blitzbasic
+Global answer%=0
+
+<?cs module
+public static class MathBridge
+{
+    public static int Compute() => BB.add(19, 22);
+}
+?>
+
+answer = CS::MathBridge.Compute()
+<?cs
+BB.answer += 1;
+?>
+Print answer
+End
+
+Function Add%(left%, right%)
+    Return left + right
+End Function
+```
+
+`CS::` calls C# from BASIC. `BB.` exposes BASIC globals and functions to C#. Statement blocks use `<?cs ... ?>`; module blocks use `<?cs module ... ?>`. Both languages share the same generated state and assembly. The primitive bridge supports Integer `%` (`System.Int32`), Float `#` (`System.Single`) and String `$` (`System.String`), with static signature and overload checking.
+
+The [typed example](samples/Hybrid/typed.bb) prints `42`, `3.5` and `[Blitz] C#`:
 
 ```bash
-dotnet run --project src/BlitzCS.CLI -- build samples/Hybrid/typed.bb -o artifacts/typed.dll
+dotnet run --project src/BlitzCS.CLI -c Release --no-build -- build samples/Hybrid/typed.bb -o artifacts/typed.dll
 dotnet artifacts/typed.dll
 ```
 
-Imprime `42`, `3.5` e `[Blitz] C#`. Troca Integer `%` (`Int32`), Float `#`
-(`Single`) e String `$` (`String`) nos dois sentidos, com globais compartilhadas.
-O [contrato tipado](docs/typed-interop.md) documenta conversões, sobrecargas e
-limites da compatibilidade semântica.
+The [multifile example](samples/Hybrid/MultiFile/main.bb) demonstrates the same bridge across `Include` files. See [hybrid syntax](docs/hybrid.md), [typed semantics](docs/typed-interop.md) and [Include resolution](docs/multifile.md). Embedded C# is executable application code, not a sandbox.
 
-## Linguagem legada e arrays
+## Implemented language capabilities
 
-São suportados os blocos If/ElseIf/Else, While, For, Repeat, Select e Exit,
-com aninhamento, precedência histórica, expressões relacionais e bitwise.
-`Dim` oferece arrays Integer/Float/String, múltiplas dimensões, limites inclusivos,
-acesso por funções e reinicialização ao executar `Dim` novamente.
+- Typed globals, locals and functions; constant expressions, hexadecimal/binary literals and optional trailing parameters.
+- `If`, `ElseIf`, `While`, `For`, `Repeat`, `Select`, nested control flow and `Exit`.
+- `Dim` arrays with inclusive upper bounds and multiple dimensions; fixed vectors, including fields.
+- `Type`, `Field`, `New`, `Delete`, ordered object lists, `For Each`, navigation and managed object handles.
+- `Data`, `Read`, `Restore`, labels, `Goto` and `Gosub` within the implemented legacy control-flow contract.
+- Multifile compilation into one assembly, preserving original `.bb` locations in diagnostics.
+- Managed lifetime handling for deleted objects and explicit native resource ownership.
 
-```bash
-dotnet run --project src/BlitzCS.CLI -- build samples/Hybrid/legacy-loops.bb -o artifacts/legacy-loops.dll
-dotnet artifacts/legacy-loops.dll
-```
+These are tested capabilities, not a claim of complete BlitzBasic compatibility. Detailed contracts and edge cases are in [legacy language](docs/legacy-language.md), [fixed vectors](docs/fixed-vectors.md), [objects](docs/legacy-objects.md), [handles](docs/handles.md), [Data](docs/data-M10.md) and [runtime errors](docs/runtime-errors.md).
 
-Imprime `15` usando C# dentro de laços BASIC. `samples/Legacy/arrays.bb` demonstra
-arrays tipados e redimensionamento. Veja o [contrato legado](docs/legacy-language.md).
-O [harness diferencial](docs/differential.md) executa as fixtures localmente e
-aceita o [adaptador original](docs/original-adapter.md), validado com a distribuição
-oficial V1.118 via Proton em um prefixo isolado. Expectativas locais continuam
-separadas das capturas reais.
+## External and native libraries
 
-## Vetores fixos e constantes
+Typed catalogs separate three stages: **semantic declaration**, **binding to an implementation**, and **runtime execution**. A declaration can be checked before a library runs; emitting a used declaration without an implementation fails explicitly. Registered managed functions compile to direct static calls.
 
-`Global estados#[6]`, `Local nomes$[2]` e `Field filhos.Node[3]` aceitam
-limites constantes inclusivos e acesso por colchetes. `Const` oferece valores
-escalares tipados e expressões constantes. Veja o [contrato](docs/fixed-vectors.md)
-e a [evolução da auditoria SCP](docs/scp-milestone8.md).
+C/C++ integration uses explicit bindings, ABI contracts and resource ownership. It does not make arbitrary BASIC integers into native pointers. The [native sample](samples/NativeInterop) and its [contract](docs/native-interop-m13.md) exercise integers, floats, UTF-8 strings, library errors and resource release. A Win32 FMOD DLL cannot be loaded into the verified Linux x64 .NET process; the original FMOD is used separately under Proton as a compatibility reference.
+
+The optional audio layer supports sample and stream playback, managed channel handles, volume, pan, frequency, looping, pause, stop and cleanup. SDL3 provides output and system libsndfile decodes supported assets. Streams currently decode into memory, with a 256 MiB decoded-file limit. See [audio implementation and differences](docs/audio-milestone15.md) and [audio requirements](src/Blitz3DCS.Audio/README.md). This is not complete binary or behavioral equivalence with FMOD 3.75.
+
+## Build and validation
 
 ```bash
-dotnet run --project src/BlitzCS.CLI -- build samples/Hybrid/FixedVectors/main.bb -o artifacts/fixed-vectors.dll
-dotnet artifacts/fixed-vectors.dll
+dotnet build BlitzCS.slnx -c Release --nologo
+dotnet test BlitzCS.slnx -c Release --no-build --nologo
+dotnet build BlitzCS.slnx -c Debug --nologo
+dotnet test BlitzCS.slnx -c Debug --no-build --nologo
+python3 -m unittest discover -s tests/differential -v
+bash scripts/verify.sh
 ```
 
-O exemplo multifile imprime `42` e `3.5`, usando funções BASIC para acessar
-vetores a partir de C# e preservando a ponte pública de tipos primitivos.
+The complete verification script additionally needs **Python 3**, a **C compiler available as `cc`**, **SDL3** and **libsndfile**. On the verified Linux host, the native libraries are `libSDL3.so.0` and `libsndfile.so.1`. Install equivalent runtime packages from your distribution. The script exercises default, dummy and disk audio paths; a headless machine may lack a usable default device. Basic compiler examples do not require these audio libraries.
 
-## Objetos legados
+At the M16 checkpoint (`216c025`, `blitzcs-m16-checkpoint`):
 
-`Type / Field / End Type`, referências `.Tipo`, `New`, `Delete`, `Delete Each`,
-`First / Last / Before / After`, `Insert` e `For Each` estão implementados.
-O [contrato de objetos](docs/legacy-objects.md) descreve aliases, invalidação,
-ordem das listas e limites de gerenciamento de memória.
+| Verification | Recorded result |
+| --- | --- |
+| .NET tests, Release and Debug | 611 passing in each configuration |
+| Python harness tests | 40 passing |
+| Local language fixtures | 86 passing |
+| Differential language comparisons | 85 of 86 match captured original results |
 
-```bash
-dotnet run --project src/BlitzCS.CLI -- build samples/Hybrid/objects.bb -o artifacts/objects.dll
-dotnet artifacts/objects.dll
-```
+The publication audit reruns the available suite; see [release validation and audit](docs/public-release-audit.md) for its actual results. Differential replay reuses recorded genuine original captures where stated; it is not a new run of the original compiler for every fixture. Local expectations alone do not prove equivalence. The known `upper-bound-error` difference retains useful nonzero error termination in BlitzCS. See [differential validation](docs/differential.md) and [M16 evidence](docs/evidence/m16-validation.json).
 
-Imprime `42` e `1`, com C# chamando funções BASIC que manipulam a lista de objetos.
+Audio evidence includes non-silent PCM measured after SDL's disk output and playback tests. It does not prove audible sound at a physical speaker. The FMOD comparison records deliberate and unresolved differences separately.
 
-## Projetos com vários arquivos
+## Current limitations and SCP status
 
-`Include "arquivo.bb"` compartilha tipos, funções, globais, arrays e módulos C#
-no mesmo programa e assembly. Todos os caminhos relativos usam a pasta do arquivo
-principal, inclusive Includes em subpastas. Duplicatas e ciclos seguem as regras
-verificadas no original; veja [compilação multifile](docs/multifile.md).
+SCP: Containment Breach is a real-world compatibility case study. Its original sources and assets are **not distributed here**. The M16 audit records integrated syntax validation of `Main.bb` and its Include tree, with **3 of 30 files compiling independently**. Integrated semantic compilation stops at **`fullscreen_window_fix.bb:47:8`, `Windowed3D`**. The game assembly has not been emitted and the game does not run on BlitzCS. See [latest SCP audit](docs/system-runtime-m16.md).
 
-```bash
-dotnet run --project src/BlitzCS.CLI -- build samples/Hybrid/MultiFile/main.bb -o artifacts/multifile.dll
-dotnet artifacts/multifile.dll
-```
+There is no renderer, Vulkan backend, physics implementation or editor. Some native commands and external dependencies remain unavailable. `SystemProperty("AppHWND")` reports an unsupported capability without a real window host. Direct array/object interoperability is outside the public primitive `BB.` bridge. Floating-point boundaries, encodings and other historical corner cases still need broader differential coverage. `Print` targets the console here, while original Blitz3D draws to a graphical surface.
 
-O exemplo imprime `42` com interoperabilidade nos dois sentidos. A
-[auditoria do fonte oficial de SCP](docs/scp-compatibility.md) registra a cobertura
-e os bloqueios reais; o jogo completo ainda não compila. Blitz3DCS será uma
-integração que consome BlitzCS, sem dependências de engine no compilador.
+## Roadmap
 
-## Expansão legada e funções externas
+1. Expand differential coverage and resolve remaining language and runtime gaps without changing original application sources.
+2. Continue real external runtime implementations, dependency packaging and platform validation.
+3. Develop Blitz3DCS independently, starting with a reviewed graphical vertical slice. Vulkan 1.4 is planned; Direct3D 12 and Metal are future possibilities.
+4. Evaluate modern graphics, physics and other engine facilities in Blitz3DCS, without making them compiler dependencies.
 
-Parâmetros BASIC aceitam defaults constantes e omissão de argumentos finais.
-Literais `$FF`, `$80000000` e `$FFFFFFFF` usam Integer com wrap em 32 bits.
-Inicializadores de `Field` são aceitos; conforme Blitz3D V1.118, `New` mantém
-campos em zero, string vazia ou Null, sem executar essas expressões.
-Veja a [pesquisa de linguagem M9](docs/m9-language-research.md).
+These are future directions, not implemented features or delivery guarantees.
 
-Um registro explícito liga nomes BASIC a métodos .NET públicos estáticos,
-com assinaturas Integer/Float/String e chamadas diretas na execução. A
-[biblioteca opcional de RuntimeError](docs/external-functions.md) demonstra
-um serviço real fora do compilador; não há dependência do núcleo em Blitz3DCS.
-A [auditoria SCP M9](docs/scp-milestone9.md) separa erros de linguagem,
-símbolos nativos não registrados e dependências externas.
+## Contributing and project history
 
-## Handles e fluxo Data
+Read [CONTRIBUTING.md](CONTRIBUTING.md). Existing commits and milestone tags are retained. Historical research notes and reports are point-in-time records; some are in Portuguese and contain development-machine paths. Trail-Code is used for optional repository context; its generated cache is not shipped as source. No Trail installation is required to build the compiler.
 
-`Handle(objeto)` retorna um Integer estável; `Object.Tipo(numero)` recupera
-referências tipadas ou Null. Delete invalida o número e remove o registro sem
-reter objetos excluídos. Veja [handles gerenciados](docs/handles.md), o exemplo
-multifile `samples/Hybrid/Handles/main.bb` e a [medição de memória](docs/handles-design.md).
-`Abs` e `Sgn` preservam os tipos Integer/Float como operadores da linguagem original.
-`Data`, `Read` e `Restore` oferecem um fluxo primitivo compartilhado, labels para
-Restore e coerções históricas; [o contrato Data](docs/data-M10.md) registra limites.
+## License and credits
 
-A [auditoria M10](docs/scp-milestone10.md) inclui compilação integrada e profundidade
-do arquivo do diagnóstico. SCP ainda não compila como projeto; não há renderer
-nem comandos fictícios para mascarar dependências.
+Copyright 2026 Marcelo Buratti de Freitas Filho. Project created and led by Marcelo Buratti de Freitas Filho.
 
-## Lifetime e memória gerenciada
+Original BlitzCS and Blitz3DCS contributions in this repository are licensed under the **Apache License 2.0**, subject to the explicit scope and exclusions in [LICENSING.md](LICENSING.md). See [LICENSE](LICENSE), [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Third-party code, dependencies, excerpts and separately licensed fixtures retain their own terms.
 
-Após `Delete`, os campos são limpos e a lista deixa de manter uma referência
-forte ao objeto. Aliases ainda observáveis preservam identidade e posição;
-objetos excluídos sem aliases podem ser coletados, e a limpeza incremental
-remove posições vazias. Objetos vivos continuam pertencendo à lista até Delete.
-
-O [projeto de lifetime](docs/object-lifetime-design.md) explica a referência fraca
-restrita aos registros excluídos e seus trade-offs. O
-[relatório de memória](docs/memory-methodology.md) separa contagens estruturais,
-alocações, memória após coleta e memória comprometida pelo GC. O
-[contrato de erros](docs/runtime-errors.md) mantém falhas de runtime não zero,
-mesmo quando o original encerra com código zero.
-
-## Limites
-
-Suporta atribuições primitivas, `Global`, `Local`, funções tipadas com parâmetros
-e `Return`, chamadas e blocos C#, identificadores case-insensitive com `%`
-opcional e tags `#`/`$`, `Print` de texto ou número, `End`, comentários `;`, separadores `:`,
-aritmética `+ - * /` e parênteses. Outras construções produzem diagnóstico.
-Literais binários e hexadecimais preservam os 32 bits baixos. Literais decimais
-positivos saturam em 2147483647 antes do menos unário, conforme V1.118;
-`-2147483648` resulta em -2147483647. Veja a [pesquisa M11](docs/m11-language-research.md).
-`Print` sem argumento ainda não é suportado.
-
-O host desta fatia mapeia `Print` para o console para validar os valores calculados.
-No Blitz3D original, `Print` desenha texto na superfície gráfica; equivalência
-visual e semântica completa não são reivindicadas. Há comparações executáveis
-limitadas com o original; não há renderização 3D. Interop direta de arrays e
-objetos não integra a ponte pública `BB`. Fronteiras x87/CRT, encoding e
-reutilização de objetos ainda precisam de cobertura diferencial ampliada.
-
-Veja [arquitetura](docs/architecture.md), [pesquisa](docs/research.md) e
-[compatibilidade](docs/compatibility.md).
-
-## SCP e próximo runtime
-
-A [auditoria M13](docs/scp-milestone13.md) distingue análise sintática,
-resolução de símbolos e emissão. A árvore integrada de Main passa na sintaxe,
-mas a compilação para em `FSOUND_Init` não registrado em FMod.bb:15; o assembly do jogo não foi emitido.
-`blitzcs check-syntax projeto.bb` valida somente sintaxe e Includes.
-A [arquitetura proposta do Blitz3DCS](docs/blitz3dcs-architecture.md) mantém
-o compilador independente e planeja Vulkan 1.4, sem renderer implementado.
-O [runtime inicial](docs/native-runtime-m12.md) implementa consultas reais de arquivos,
-sistema e duas funções de strings através de um catálogo opt-in, com publicação
-de dependências gerenciadas transitivas. O [catálogo de APIs SCP](docs/scp-native-catalog-m12.md)
-separa frequências candidatas de chamadas semanticamente resolvidas.
-A [interop nativa M13](docs/native-interop-m13.md) acrescenta bindings Cdecl
-explícitos e publicação de bibliotecas nativas. A FMOD 3.75 Win32 foi investigada
-e executada como referência separada, mas ainda não está vinculada ao jogo .NET.
-
-## Trail-Code
-
-O projeto foi inicializado com Trail-Code. `trail build` atualiza o mapa local,
-`trail map` apresenta a estrutura e `trail ask "BasicCompiler" --source` recupera
-os símbolos. O cache é ignorado pelo Git; decisões ficam em `.trail/learnings/`.
-Se o comando não estiver no `PATH`, use a instalação existente:
-
-```bash
-node /var/home/marcelo/.local/share/dev-agent-tools/npm/lib/node_modules/@trailhq/trail-code/dist/bin/trail.js build
-```
-
-## Dependências e licenças
-
-Implementação própria; nenhum código dos forks foi incorporado.
-Roslyn (`Microsoft.CodeAnalysis.CSharp` 5.0.0, MIT) é dependência do compilador
-(para tokenizar os blocos C#) e da CLI (para emitir o assembly).
-Os testes usam xUnit (Apache-2.0), runner Visual Studio (Apache-2.0) e Microsoft
-Test SDK (MIT). A licença de distribuição do próprio BlitzCS ainda não foi
-escolhida; nenhuma licença de código externo é implicitamente adotada.
+Blitz Research Ltd and the original Blitz3D authors provided the legacy compiler/runtime reference. Microsoft and .NET contributors provide .NET and Roslyn; SDL, libsndfile and xUnit contributors provide important runtime and test dependencies. SCP: Containment Breach and its contributors provide a separately licensed compatibility target. These acknowledgments do not imply endorsement or transfer of ownership.

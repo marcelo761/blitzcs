@@ -1,0 +1,16 @@
+BlitzCS
+
+Copyright 2026 Marcelo Buratti de Freitas Filho.
+
+Project created and led by Marcelo Buratti de Freitas Filho.
+
+This notice identifies the origin and leadership of BlitzCS. It does not claim
+exclusive authorship of third-party software, documentation, or assets.
+
+BlitzCS is independent of Blitz Research Ltd and the original Blitz3D project.
+Blitz3D reference source: Copyright (c) 2013 Blitz Research Ltd; zlib/libpng
+license. Its origin and license are preserved in licenses/blitz3d-zlib.txt.
+
+Third-party dependencies and reference material retain their original ownership
+and licenses. See THIRD_PARTY_NOTICES.md and LICENSING.md. The synthetic
+Vorbis test fixture is separately dedicated under CC0-1.0.

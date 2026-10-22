@@ -1,0 +1,107 @@
+{
+  "source": "Restored project.assets.json plus package .nuspec metadata; exact currently restored dependency graph",
+  "packages": [
+    {
+      "name": "Microsoft.CodeAnalysis.Analyzers",
+      "version": "3.11.0",
+      "license": "MIT",
+      "copyright": "\u00a9 Microsoft Corporation. All rights reserved."
+    },
+    {
+      "name": "Microsoft.CodeAnalysis.Common",
+      "version": "5.0.0",
+      "license": "MIT",
+      "copyright": "\u00a9 Microsoft Corporation. All rights reserved."
+    },
+    {
+      "name": "Microsoft.CodeAnalysis.CSharp",
+      "version": "5.0.0",
+      "license": "MIT",
+      "copyright": "\u00a9 Microsoft Corporation. All rights reserved."
+    },
+    {
+      "name": "Microsoft.CodeCoverage",
+      "version": "17.14.1",
+      "license": "MIT",
+      "copyright": "\u00a9 Microsoft Corporation. All rights reserved."
+    },
+    {
+      "name": "Microsoft.NET.Test.Sdk",
+      "version": "17.14.1",
+      "license": "MIT",
+      "copyright": "\u00a9 Microsoft Corporation. All rights reserved."
+    },
+    {
+      "name": "Microsoft.TestPlatform.ObjectModel",
+      "version": "17.14.1",
+      "license": "MIT",
+      "copyright": "\u00a9 Microsoft Corporation. All rights reserved."
+    },
+    {
+      "name": "Microsoft.TestPlatform.TestHost",
+      "version": "17.14.1",
+      "license": "MIT",
+      "copyright": "\u00a9 Microsoft Corporation. All rights reserved."
+    },
+    {
+      "name": "Newtonsoft.Json",
+      "version": "13.0.3",
+      "license": "MIT",
+      "copyright": "Copyright \u00a9 James Newton-King 2008"
+    },
+    {
+      "name": "xunit",
+      "version": "2.9.3",
+      "license": "Apache-2.0",
+      "copyright": "Copyright (C) .NET Foundation"
+    },
+    {
+      "name": "xunit.abstractions",
+      "version": "2.0.3",
+      "license": "Apache-2.0 (upstream licenseUrl)",
+      "copyright": null
+    },
+    {
+      "name": "xunit.analyzers",
+      "version": "1.18.0",
+      "license": "Apache-2.0",
+      "copyright": "Copyright (C) .NET Foundation"
+    },
+    {
+      "name": "xunit.assert",
+      "version": "2.9.3",
+      "license": "Apache-2.0",
+      "copyright": "Copyright (C) .NET Foundation"
+    },
+    {
+      "name": "xunit.core",
+      "version": "2.9.3",
+      "license": "Apache-2.0",
+      "copyright": "Copyright (C) .NET Foundation"
+    },
+    {
+      "name": "xunit.extensibility.core",
+      "version": "2.9.3",
+      "license": "Apache-2.0",
+      "copyright": "Copyright (C) .NET Foundation"
+    },
+    {
+      "name": "xunit.extensibility.execution",
+      "version": "2.9.3",
+      "license": "Apache-2.0",
+      "copyright": "Copyright (C) .NET Foundation"
+    },
+    {
+      "name": "xunit.runner.visualstudio",
+      "version": "3.1.4",
+      "license": "Apache-2.0",
+      "copyright": "Copyright (C) .NET Foundation"
+    },
+    {
+      "name": "xunit.runner.visualstudio",
+      "version": "3.1.5",
+      "license": "Apache-2.0",
+      "copyright": "Copyright (C) .NET Foundation"
+    }
+  ]
+}

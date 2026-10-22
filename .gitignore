@@ -9,3 +9,42 @@ __pycache__/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Private research downloads and third-party game/SDK material.
+/ignoredartifacts/
+
+# .NET results, packages and editor state.
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+*.nupkg
+*.snupkg
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Local credentials/configuration; templates may be shared after review.
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Temporary and platform files.
+*.tmp
+*.temp
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Local crash dumps.
+*.dmp
+/core
+/core.[0-9]*

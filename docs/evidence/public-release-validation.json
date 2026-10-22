@@ -1,0 +1,97 @@
+{
+  "baseline": "216c02590e6ec789c8e5afa1903a6df86a4932ec",
+  "branch": "codex/public-release",
+  "sdk": "10.0.401",
+  "validation": {
+    "Release": {
+      "passed": 611,
+      "failed": 0,
+      "skipped": 0,
+      "warnings": 0,
+      "errors": 0,
+      "command": "bash scripts/verify.sh"
+    },
+    "Debug": {
+      "passed": 611,
+      "failed": 0,
+      "skipped": 0,
+      "warnings": 0,
+      "errors": 0,
+      "command": "dotnet build BlitzCS.slnx -c Debug --nologo && dotnet test BlitzCS.slnx -c Debug --no-build --nologo"
+    },
+    "python_passed": 40,
+    "local_fixture_passed": 86,
+    "original_comparisons": "No fresh original Blitz3D runs in this publication task; existing M16 evidence retained",
+    "fmod_replay": {
+      "match": 34,
+      "documented_divergence": 8,
+      "mismatch": 0
+    }
+  },
+  "git_audit": {
+    "scope": "all objects reachable from all local refs; heuristic scan, not proof of absence",
+    "reachable_objects": 629,
+    "historical_paths": 429,
+    "matches": [],
+    "binary_blobs": [
+      {
+        "object": "c460f9a34a7d7068d2e18ad9425e918360a184fd",
+        "path": "docs/evidence/m15-fmod/tone.wav",
+        "bytes": 132344
+      },
+      {
+        "object": "ad27df0ac74e8516a5fa254004140e83dc54554e",
+        "path": "tests/Blitz3DCS.Audio.Tests/Fixtures/generated-tone.ogg",
+        "bytes": 3694
+      }
+    ]
+  },
+  "all_stored_object_scan": {
+    "objects": 850,
+    "blobs": 556,
+    "matches": [],
+    "binary_blobs": [
+      {
+        "object": "ad27df0ac74e8516a5fa254004140e83dc54554e",
+        "bytes": 3694
+      },
+      {
+        "object": "c460f9a34a7d7068d2e18ad9425e918360a184fd",
+        "bytes": 132344
+      }
+    ]
+  },
+  "log_sha256": {
+    "blitzcs-public-release.log": "b51bf07c30ba4222b23f83ab493fa03e84af6863098dafde20ae554c743085ba",
+    "blitzcs-public-debug.log": "d5ef412c73f25d4932503728a20bfab951ce7e3ec3c7a18382cfce45316e17a2"
+  },
+  "remotes": [],
+  "tags_preserved": [
+    "3065162b2c61366d28357f5fdeb8609e3ffef133 refs/tags/blitzcs-m11-checkpoint",
+    "9aab5b71ecba69b801ba24fe533a1b78f4a1737f refs/tags/blitzcs-m12-checkpoint",
+    "eb835de4938984cded1977f1fa86641a1cb3bf08 refs/tags/blitzcs-m13-checkpoint",
+    "ec33c9cc38fe5bb3f0642d3e21cde2624971c711 refs/tags/blitzcs-m14-checkpoint",
+    "79c89abb822a8e4ad334eb588d3fc82dccd8d9bd refs/tags/blitzcs-m15-checkpoint",
+    "216c02590e6ec789c8e5afa1903a6df86a4932ec refs/tags/blitzcs-m16-checkpoint"
+  ],
+  "original_refs_before_publication_commit": [
+    "abd833bfd48e6fc045a974a6d8858016cc72ad74 refs/codex/turn-diffs/captures/1792620906987/c4689e66-d276-4b35-8556-180045440938/base",
+    "dfe252a42731a6b57544ea5f0cafafb9ae7982e4 refs/codex/turn-diffs/captures/1792691761170/2f7a40bc-ee56-4d6a-acb8-795c2603c519/base",
+    "b1fa8e2faa7f8500cb9bac062403f8334907f338 refs/codex/turn-diffs/captures/1792701402299/808178cb-5cdd-4703-966c-d8828e6020af/base",
+    "b1fa8e2faa7f8500cb9bac062403f8334907f338 refs/codex/turn-diffs/checkpoints/8daaa7ef32b5ee23db739149ad7abe17/42c32bf6f9801a1f58e6aee831fd0733/1792700033006/9ef4bf23-1831-4e33-a413-3d178e2180ac",
+    "5ae2bc2aa9eeb25dd2e2d21c9c490827a613fd57 refs/heads/codex/milestone-11",
+    "2e7b1eb55c0cccd4d532b8a9b50dc0e9cbad7d4b refs/heads/codex/milestone-12",
+    "5484fb3b90be50051e7ea0b24e2e3edfc3dfb115 refs/heads/codex/milestone-13",
+    "ec33c9cc38fe5bb3f0642d3e21cde2624971c711 refs/heads/codex/milestone-14",
+    "79c89abb822a8e4ad334eb588d3fc82dccd8d9bd refs/heads/codex/milestone-15",
+    "216c02590e6ec789c8e5afa1903a6df86a4932ec refs/heads/codex/milestone-16",
+    "216c02590e6ec789c8e5afa1903a6df86a4932ec refs/heads/codex/public-release",
+    "62c1dbb7ab1bcbb444746ce6874916e9dcda5c79 refs/heads/main",
+    "3065162b2c61366d28357f5fdeb8609e3ffef133 refs/tags/blitzcs-m11-checkpoint",
+    "9aab5b71ecba69b801ba24fe533a1b78f4a1737f refs/tags/blitzcs-m12-checkpoint",
+    "eb835de4938984cded1977f1fa86641a1cb3bf08 refs/tags/blitzcs-m13-checkpoint",
+    "ec33c9cc38fe5bb3f0642d3e21cde2624971c711 refs/tags/blitzcs-m14-checkpoint",
+    "79c89abb822a8e4ad334eb588d3fc82dccd8d9bd refs/tags/blitzcs-m15-checkpoint",
+    "216c02590e6ec789c8e5afa1903a6df86a4932ec refs/tags/blitzcs-m16-checkpoint"
+  ]
+}
