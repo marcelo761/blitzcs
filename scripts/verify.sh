@@ -47,3 +47,9 @@ python3 tools/prepare_native_fixtures.py artifacts/m12-assets
 env -u BLITZCS_M12_MISSING BLITZCS_M12_ROOT="$PWD/artifacts/m12-assets" python3 tools/differential.py --manifest tests/Compatibility/milestone12.json --externals samples/Native/blitz3dcs.json --report artifacts/m12-native-local.json
 dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Hybrid/NativeFiles/main.bb -o artifacts/native-files-hybrid.dll --externals samples/Native/blitz3dcs.json
 dotnet artifacts/native-files-hybrid.dll
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/NativeInterop/main.bb -o artifacts/native-interop.dll --externals samples/NativeInterop/native.json
+env -u BLITZCS_NATIVEINTEROP_LIBRARY dotnet artifacts/native-interop.dll > artifacts/native-interop.stdout
+python3 - <<'PY'
+from pathlib import Path
+assert Path('artifacts/native-interop.stdout').read_text().splitlines() == ['42', '3.5', '9', 'native:Olá 🌱', '-1', '42', '1']
+PY

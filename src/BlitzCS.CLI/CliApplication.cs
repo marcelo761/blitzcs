@@ -26,9 +26,12 @@ public static class CliApplication
                 return 0;
             }
             var outputPath = Path.GetFullPath(args[3]);
-            var externals = args.Length == 6 ? ExternalCatalog.Load(args[5]) : ExternalFunctionRegistry.Empty;
-            var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, externals);
-            DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram", referencePaths: externals.ReferencePaths);
+            var catalog = args.Length == 6
+                ? ExternalCatalog.Load(args[5])
+                : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
+            var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions);
+            DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram",
+                referencePaths: catalog.Functions.ReferencePaths, nativeLibraryPaths: catalog.NativeLibraries);
             output.WriteLine(outputPath);
             return 0;
         }

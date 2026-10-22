@@ -119,3 +119,12 @@ O [relatório M12](scp-milestone12.md) registra a integração real de arquivos,
 sistema e Chr/Len. Main ultrapassa FileSize e para em FSOUND_Init de FMod.bb:15,
 declaração externa para fmod.dll ainda não vinculada. Sintaxe integrada preservada,
 2/30 assemblies isolados, sem assembly integrado ou execução funcional do jogo.
+
+## Atualização Milestone 13
+
+A [auditoria M13](scp-milestone13.md) mantém 2/30 assemblies isolados e bloqueio
+integrado FSOUND_Init em FMod.bb:15. A nova infraestrutura executa bibliotecas C
+reais da plataforma; não registra FMOD indisponível para avançar artificialmente.
+A DLL FMOD exata do jogo foi identificada e executada em processo Win32 separado,
+sem comprovar playback ou integração .NET. O [handoff](../handoff.md) registra ABI,
+processo compatível, ownership e alternativas para o próximo passo.

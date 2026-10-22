@@ -1,0 +1,61 @@
+{
+  "functions": [
+    {
+      "name": "NativeAdd",
+      "assembly": "ManagedBinding/bin/Release/net10.0/BlitzCS.NativeInterop.ManagedBinding.dll",
+      "type": "BlitzCS.NativeInterop.ManagedBinding.NativeDemoBindings",
+      "method": "Add",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ]
+    },
+    {
+      "name": "NativeScale",
+      "assembly": "ManagedBinding/bin/Release/net10.0/BlitzCS.NativeInterop.ManagedBinding.dll",
+      "type": "BlitzCS.NativeInterop.ManagedBinding.NativeDemoBindings",
+      "method": "Scale",
+      "parameters": [
+        "Float",
+        "Float"
+      ]
+    },
+    {
+      "name": "NativeUtf8Length",
+      "assembly": "ManagedBinding/bin/Release/net10.0/BlitzCS.NativeInterop.ManagedBinding.dll",
+      "type": "BlitzCS.NativeInterop.ManagedBinding.NativeDemoBindings",
+      "method": "Utf8ByteLength",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "NativeMessage",
+      "assembly": "ManagedBinding/bin/Release/net10.0/BlitzCS.NativeInterop.ManagedBinding.dll",
+      "type": "BlitzCS.NativeInterop.ManagedBinding.NativeDemoBindings",
+      "method": "Message",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "NativeByte",
+      "assembly": "ManagedBinding/bin/Release/net10.0/BlitzCS.NativeInterop.ManagedBinding.dll",
+      "type": "BlitzCS.NativeInterop.ManagedBinding.NativeDemoBindings",
+      "method": "SignedByte",
+      "parameters": [
+        "Integer"
+      ]
+    },
+    {
+      "name": "NativeClose",
+      "assembly": "ManagedBinding/bin/Release/net10.0/BlitzCS.NativeInterop.ManagedBinding.dll",
+      "type": "BlitzCS.NativeInterop.ManagedBinding.NativeDemoBindings",
+      "method": "Close",
+      "parameters": []
+    }
+  ],
+  "nativeLibraries": [
+    "../../tests/BlitzCS.NativeInterop.Tests/bin/Release/net10.0/native/libblitzcs_native_demo.so"
+  ]
+}

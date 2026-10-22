@@ -57,6 +57,24 @@ se ela não estiver nessa pasta. O emissor compila contra essa cadeia e copia os
 assemblies ao diretório de saída para que o programa rode sem acesso à pasta
 original dos módulos.
 
+O catálogo também pode declarar `nativeLibraries` como uma lista opcional de
+caminhos relativos ao próprio catálogo. A CLI copia esses arquivos ao lado do
+assembly gerado, junto com os assemblies gerenciados descobertos. Eles não são
+referências de compilação nem entram automaticamente no registro BASIC; um
+módulo gerenciado opt-in continua responsável por carregar e chamar a biblioteca
+nativa. Caminhos ausentes e colisões de nome com dependências gerenciadas ou
+arquivos de saída são rejeitados antes de alterar a saída.
+
+```json
+{
+  "functions": [
+    { "name": "NativeAdd", "assembly": "wrapper/NativeWrapper.dll",
+      "type": "NativeWrapper", "method": "Add", "parameters": ["Integer", "Integer"] }
+  ],
+  "nativeLibraries": ["native/libexample.so"]
+}
+```
+
 As referências do runtime .NET não são copiadas. Colisões de nome no diretório
 de saída e uma saída que sobrescreveria uma referência são rejeitadas antes de
 alterar arquivos do programa. A resolução usa referências de assembly, não varre

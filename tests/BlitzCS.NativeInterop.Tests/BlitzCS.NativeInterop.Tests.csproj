@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><IsPackable>false</IsPackable><IsTestProject>true</IsTestProject></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" PrivateAssets="all" />
+    <ProjectReference Include="../../src/BlitzCS.NativeInterop/BlitzCS.NativeInterop.csproj" />
+    <ProjectReference Include="../../src/BlitzCS.Compiler/BlitzCS.Compiler.csproj" />
+    <ProjectReference Include="../../src/BlitzCS.CLI/BlitzCS.CLI.csproj" />
+    <ProjectReference Include="../../samples/NativeInterop/ManagedBinding/BlitzCS.NativeInterop.ManagedBinding.csproj" />
+  </ItemGroup>
+  <Target Name="RequireNativeInteropFixturePlatform" BeforeTargets="Build" Condition="!$([MSBuild]::IsOSPlatform('Linux'))">
+    <Error Text="Native interop integration fixture currently requires Linux and the cc C compiler." />
+  </Target>
+  <Target Name="BuildNativeInteropFixture" BeforeTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <MakeDir Directories="$(OutDir)native" />
+    <Exec Command="cc -std=c11 -Wall -Wextra -Werror -fPIC -shared &quot;$(MSBuildProjectDirectory)/native/demo.c&quot; -o &quot;$(OutDir)native/libblitzcs_native_demo.so&quot;" />
+  </Target>
+</Project>

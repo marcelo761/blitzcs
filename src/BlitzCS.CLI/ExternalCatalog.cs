@@ -6,12 +6,19 @@ namespace BlitzCS.CLI;
 
 internal static class ExternalCatalog
 {
-    internal static ExternalFunctionRegistry Load(string catalogPath)
+    internal static ExternalCatalogResult Load(string catalogPath)
     {
         catalogPath = Path.GetFullPath(catalogPath);
         using var document = JsonDocument.Parse(File.ReadAllText(catalogPath));
+        var root = document.RootElement;
         var functions = new List<ExternalFunction>();
-        var items = document.RootElement.GetProperty("functions").EnumerateArray().ToArray();
+        var items = root.GetProperty("functions").EnumerateArray().ToArray();
+        var nativeLibraries = root.TryGetProperty("nativeLibraries", out var libraries)
+            && libraries.ValueKind != JsonValueKind.Null
+            ? libraries.EnumerateArray().Select(item => Path.GetFullPath(
+                item.GetString() ?? throw new ArgumentException("External catalog 'nativeLibraries' entries cannot be null."),
+                Path.GetDirectoryName(catalogPath)!)).ToArray()
+            : [];
         string Read(JsonElement item, string key) => item.GetProperty(key).GetString()
             ?? throw new ArgumentException($"External catalog '{key}' cannot be null.");
         var assemblyPaths = items.Select(item => Path.GetFullPath(Read(item, "assembly"), Path.GetDirectoryName(catalogPath)!)).ToArray();
@@ -36,8 +43,12 @@ internal static class ExternalCatalog
                 ?? throw new ArgumentException($"External method '{type.FullName}.{methodName}' with the declared signature does not exist.");
             functions.Add(new ExternalFunction(Read(item, "name"), method));
         }
-        return new(functions);
+        return new(new ExternalFunctionRegistry(functions), nativeLibraries);
         }
         finally { context.Dispose(); }
     }
 }
+
+internal sealed record ExternalCatalogResult(
+    ExternalFunctionRegistry Functions,
+    IReadOnlyList<string> NativeLibraries);

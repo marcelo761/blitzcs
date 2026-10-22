@@ -169,3 +169,13 @@ remain explicit. [Debug lifetime investigation](debug-lifetime-m12.md) identifie
 and removes a test-induced strong root without changing object runtime code.
 [The SCP report](scp-milestone12.md) reaches FSOUND_Init in FMod.bb:15 and does not
 claim full semantic compilation or a game assembly.
+
+## Milestone 13: explicit native ABI contracts
+
+[NativeInterop](native-interop-m13.md) adds typed Cdecl bindings, explicit resource
+ownership and native asset publication. Binary export signatures cannot be inferred
+from `.decls`; [FMOD research](native-original-m13.md) proves the signed-char versus
+Int32 mismatch on the actual game DLL. The original DLL initialized under Win32
+Proton, but is not a .NET/Linux game binding. [SCP M13](scp-milestone13.md) preserves
+the FSOUND_Init blocker and distinguishes the executed C library demo from game
+compilation. No automatic pointer/array import or full native-library parity is claimed.

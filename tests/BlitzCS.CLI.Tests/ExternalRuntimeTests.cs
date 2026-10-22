@@ -12,11 +12,27 @@ public sealed class ExternalRuntimeTests : IDisposable
 
     private string Catalog(string assembly, string type, params (string Basic, string Method, string[] Types)[] functions)
     {
+        return WriteCatalog(assembly, type, functions, null);
+    }
+
+    private string CatalogWithNativeLibraries(string assembly, string type, string[] nativeLibraries,
+        params (string Basic, string Method, string[] Types)[] functions) =>
+        WriteCatalog(assembly, type, functions, nativeLibraries);
+
+    private string WriteCatalog(string assembly, string type,
+        (string Basic, string Method, string[] Types)[] functions, string[]? nativeLibraries)
+    {
         var path = Path.Combine(directory, "externals.json");
-        File.WriteAllText(path, JsonSerializer.Serialize(new { functions = functions.Select(f => new
+        var payload = new
         {
-            name = f.Basic, assembly, type, method = f.Method, parameters = f.Types
-        }) }));
+            functions = functions.Select(f => new
+            {
+                name = f.Basic, assembly, type, method = f.Method, parameters = f.Types
+            }),
+            nativeLibraries
+        };
+        File.WriteAllText(path, JsonSerializer.Serialize(payload,
+            new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));
         return path;
     }
 
@@ -87,6 +103,114 @@ public sealed class ExternalRuntimeTests : IDisposable
         Assert.Equal(0, result.ExitCode);
         Assert.Equal(Lines("42"), result.Stdout);
         Assert.Equal("", result.Stderr);
+    }
+
+    [Fact]
+    public async Task CatalogPublishesNativeLibraryBesideManagedWrapperAndRunsFromIsolatedDirectory()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        var nativeSource = Path.Combine(directory, "native.c");
+        var nativeLibrary = Path.Combine(directory, "libblitzcs_publish_fixture.so");
+        File.WriteAllText(nativeSource, "#include <stdint.h>\nint32_t blitz_add(int32_t left, int32_t right) { return left + right; }\n");
+        var cc = new ProcessStartInfo("cc") { RedirectStandardError = true, UseShellExecute = false };
+        cc.ArgumentList.Add("-shared");
+        cc.ArgumentList.Add("-fPIC");
+        cc.ArgumentList.Add("-o");
+        cc.ArgumentList.Add(nativeLibrary);
+        cc.ArgumentList.Add(nativeSource);
+        using (var compiler = Process.Start(cc)!)
+        {
+            var compileError = await compiler.StandardError.ReadToEndAsync();
+            await compiler.WaitForExitAsync();
+            Assert.True(compiler.ExitCode == 0, compileError);
+        }
+
+        var helper = Path.Combine(directory, "NativeHelper.dll");
+        DotNetEmitter.Emit("""
+            using System.Runtime.InteropServices;
+            public static class NativeHelper {
+                [DllImport("libblitzcs_publish_fixture.so", EntryPoint="blitz_add", CallingConvention=CallingConvention.Cdecl)]
+                private static extern int Add(int left, int right);
+                public static int Call(int left, int right) => Add(left, right);
+                public static void Main() {}
+            }
+            """, helper, "NativeHelper");
+        var wrapper = Path.Combine(directory, "NativeWrapper.dll");
+        DotNetEmitter.Emit("public static class NativeWrapper { public static int Add(int a, int b) => NativeHelper.Call(a, b); public static void Main() {} }",
+            wrapper, "NativeWrapper", [helper]);
+        var catalog = CatalogWithNativeLibraries(wrapper, "NativeWrapper",
+            [Path.GetFileName(nativeLibrary)], ("NativeAdd", "Add", ["Integer", "Integer"]));
+
+        var result = await BuildAndRun("Print NativeAdd(19, 23)", catalog, runInIsolatedDirectory: true);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(Lines("42"), result.Stdout);
+        Assert.Equal("", result.Stderr);
+    }
+
+    [Fact]
+    public void MissingNativeLibraryPreservesExistingOutputFiles()
+    {
+        var catalog = CatalogWithNativeLibraries(Fixture(), "Fixture", ["missing-native.so"],
+            ("NativeAdd", "Add", ["Integer", "Integer"]));
+        var source = Path.Combine(directory, "main.bb");
+        var output = Path.Combine(directory, "out", "program.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        File.WriteAllText(source, "Print NativeAdd(1, 2)");
+        File.WriteAllText(output, "keep assembly");
+        File.WriteAllText(Path.ChangeExtension(output, ".generated.cs"), "keep source");
+        using var error = new StringWriter();
+
+        Assert.Equal(1, CliApplication.Run(["build", source, "-o", output, "--externals", catalog], TextWriter.Null, error));
+
+        Assert.Contains("missing-native.so", error.ToString());
+        Assert.Equal("keep assembly", File.ReadAllText(output));
+        Assert.Equal("keep source", File.ReadAllText(Path.ChangeExtension(output, ".generated.cs")));
+    }
+
+    [Fact]
+    public void NativeLibraryBasenameCollisionWithManagedAssemblyPreservesOutputs()
+    {
+        var managedDirectory = Path.Combine(directory, "managed");
+        var nativeDirectory = Path.Combine(directory, "native");
+        Directory.CreateDirectory(managedDirectory);
+        Directory.CreateDirectory(nativeDirectory);
+        var managed = Path.Combine(managedDirectory, "Fixture.dll");
+        DotNetEmitter.Emit("public static class Fixture { public static void Main() {} }", managed, "Fixture");
+        var native = Path.Combine(nativeDirectory, "Fixture.dll");
+        File.WriteAllText(native, "native");
+        var output = Path.Combine(directory, "out", "program.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        File.WriteAllText(output, "keep assembly");
+        File.WriteAllText(Path.ChangeExtension(output, ".generated.cs"), "keep source");
+
+        var error = Assert.Throws<ArgumentException>(() => DotNetEmitter.Emit(
+            "internal static class App { public static void Main() {} }", output, "App", [managed], [native]));
+
+        Assert.Contains("same output filename", error.Message);
+        Assert.Equal("keep assembly", File.ReadAllText(output));
+        Assert.Equal("keep source", File.ReadAllText(Path.ChangeExtension(output, ".generated.cs")));
+        Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(output)!, "Fixture.dll")));
+    }
+
+    [Fact]
+    public void NativeLibraryBasenameCollisionWithGeneratedOutputIsRejectedBeforeWrites()
+    {
+        var directory = Path.Combine(this.directory, "native-output-collision");
+        Directory.CreateDirectory(directory);
+        var native = Path.Combine(directory, "program.generated.cs");
+        File.WriteAllText(native, "native asset");
+        var output = Path.Combine(directory, "program.dll");
+        File.WriteAllText(output, "keep assembly");
+        File.WriteAllText(Path.ChangeExtension(output, ".generated.cs"), "keep source");
+
+        var error = Assert.Throws<ArgumentException>(() => DotNetEmitter.Emit(
+            "internal static class App { public static void Main() {} }", output, "App", null, [native]));
+
+        Assert.Contains("output file", error.Message);
+        Assert.Equal("keep assembly", File.ReadAllText(output));
+        Assert.Equal("keep source", File.ReadAllText(Path.ChangeExtension(output, ".generated.cs")));
     }
 
     [Fact]

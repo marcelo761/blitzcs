@@ -13,7 +13,11 @@ public static class DotNetEmitter
     public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName = null) =>
         Emit(generatedCode, outputPath, entryPointTypeName, null);
 
-    public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName, IEnumerable<string>? referencePaths)
+    public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName, IEnumerable<string>? referencePaths) =>
+        Emit(generatedCode, outputPath, entryPointTypeName, referencePaths, null);
+
+    public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName,
+        IEnumerable<string>? referencePaths, IEnumerable<string>? nativeLibraryPaths)
     {
         if (!string.Equals(Path.GetExtension(outputPath), ".dll", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Output must have the .dll extension.", nameof(outputPath));
@@ -29,14 +33,36 @@ public static class DotNetEmitter
         using (var context = new ExternalAssemblyLoadContext())
             externalPaths = context.Discover(referencePaths ?? []).ToArray();
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var nativePaths = (nativeLibraryPaths ?? []).Select(Path.GetFullPath).Distinct(comparer).ToArray();
+        foreach (var path in nativePaths)
+            if (!File.Exists(path) || Directory.Exists(path))
+                throw new FileNotFoundException($"Native library '{path}' does not exist or is not a file.", path);
+
+        var outputDirectory = Path.GetDirectoryName(outputPath)!;
+        var reservedTargets = new HashSet<string>(comparer)
+        {
+            outputPath,
+            generatedPath,
+            Path.ChangeExtension(outputPath, ".pdb"),
+            Path.ChangeExtension(outputPath, ".runtimeconfig.json")
+        };
         var targets = new Dictionary<string, string>(comparer);
         foreach (var path in externalPaths)
         {
-            var target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(outputPath)!, Path.GetFileName(path)));
-            if (comparer.Equals(target, outputPath))
+            var target = Path.GetFullPath(Path.Combine(outputDirectory, Path.GetFileName(path)));
+            if (reservedTargets.Contains(target))
                 throw new ArgumentException("External assembly cannot overwrite the output assembly.");
             if (targets.TryGetValue(target, out var previous) && !comparer.Equals(previous, path))
                 throw new ArgumentException($"External assemblies have the same output filename '{Path.GetFileName(path)}'.");
+            targets[target] = path;
+        }
+        foreach (var path in nativePaths)
+        {
+            var target = Path.GetFullPath(Path.Combine(outputDirectory, Path.GetFileName(path)));
+            if (reservedTargets.Contains(target))
+                throw new ArgumentException($"Native library cannot overwrite an output file '{Path.GetFileName(path)}'.");
+            if (targets.TryGetValue(target, out var previous) && !comparer.Equals(previous, path))
+                throw new ArgumentException($"Managed and native assets have the same output filename '{Path.GetFileName(path)}'.");
             targets[target] = path;
         }
         var references = platformAssemblies.Split(Path.PathSeparator).Concat(externalPaths).Distinct(StringComparer.Ordinal)
@@ -55,10 +81,9 @@ public static class DotNetEmitter
                 result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)));
 
         // Compile before touching outputs, so diagnostics leave no partial assembly.
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-        foreach (var path in externalPaths)
+        Directory.CreateDirectory(outputDirectory);
+        foreach (var (target, path) in targets)
         {
-            var target = Path.Combine(Path.GetDirectoryName(outputPath)!, Path.GetFileName(path));
             if (comparer.Equals(path, target)) continue;
             File.Copy(path, target, overwrite: true);
         }

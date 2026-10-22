@@ -7,6 +7,11 @@ M12 adds a real opt-in filesystem/system/string query module in
 This establishes the generic static binding and managed publication path;
 it does not implement any graphics backend or engine services proposed below.
 
+M13 adds [generic native interop](native-interop-m13.md) outside the compiler:
+explicit typed host bindings and native asset publication. The executed profile
+is Linux/Cdecl; FMOD Win32 remains a separate compatibility/integration problem.
+This is a reusable binding foundation, not a graphics backend.
+
 Blitz3DCS is planned as a compatibility layer that preserves the historical public
 Blitz3D programming API while supplying a modern managed runtime. Its first graphics
 backend is planned for Vulkan 1.4, called from C#/.NET through native bindings where

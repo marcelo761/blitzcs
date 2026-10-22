@@ -688,3 +688,19 @@ Demonstração multifile C#→BASIC→runtime externo executada: 42, 1, 42. Publ
 transitiva A→B→C e casos negativos passaram. O stress de 2×100.000 operações
 manteve zero handles vivos/posições após coleta e manutenção. Relatório e
 [evidência](evidence/m12-validation.json) preservam os resultados e limites.
+
+## Milestone 13 — interoperabilidade nativa
+
+Release e Debug: 552 testes .NET (281 compilador, 260 CLI, 11 interop), sem erros
+ou avisos na compilação. `scripts/verify.sh` terminou com status 0, incluindo 40
+Python, 86 fixtures locais e a demonstração BASIC/C#/C publicada. A demonstração
+produziu 42, 3.5, 9, native:Olá 🌱, -1, 42, 1. Os testes nativos compilam C real
+com cc, verificam ABI/lifetime/UTF-8 e falhas; não substituem comandos SCP por mocks.
+
+As 85 coincidências foram preservadas por execução local contra os 86 oráculos
+originais M11/M12 de mesmos hashes. Upper-bound-error continua divergente.
+Dois probes FMOD novos executaram a DLL 3.75 em Win32 via Proton; são investigação
+de ABI, não novas equivalências BlitzCS/FMOD. Fonte, cabeçalho, hashes, imports,
+exports e capturas: [evidências M13](evidence/m13-validation.json) e
+[FMOD](evidence/m13-fmod.json). A compilação integrada segue em FMod.bb:15,
+FSOUND_Init não registrado; nenhum assembly do jogo foi emitido.
