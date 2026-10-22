@@ -48,3 +48,9 @@ Thumbs.db
 *.dmp
 /core
 /core.[0-9]*
+
+# Local agent instructions, handoffs and context graph.
+/AGENTS.md
+/continue.md
+/handoff.md
+/.trail/

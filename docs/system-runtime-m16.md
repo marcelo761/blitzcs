@@ -76,7 +76,8 @@ python3 tools/scp_compile_probe.py --source-dir /tmp/scpcb-audit-source \
 Os exemplos versionados são `samples/Native/system-property.bb` e
 `system-property-unsupported.bb`. O segundo deve compilar e terminar com erro
 de capacidade no runtime atual. Os resultados finais estão em m16-validation.json
-nesta pasta de evidências; continue.md na raiz é o documento autocontido de retomada.
+na [pasta de evidências](evidence/m16-validation.json). As próximas tarefas estão
+registradas neste relatório; notas locais de retomada não integram a distribuição.
 
 ## Regressões finais
 

@@ -148,8 +148,8 @@ alegação de PCM bit a bit equivalente ao mixer/decoder original.
   integrado ou execução do jogo. Não se implementou outro subsistema para ocultar
   esse diagnóstico.
 
-O [handoff](../handoff.md) lista os limites e alternativas para ampliar a
-compatibilidade. O resultado é áudio funcional do perfil auditado, não uma
+As limitações e divergências registradas neste relatório delimitam os próximos
+passos para ampliar a compatibilidade. O resultado é áudio funcional do perfil auditado, não uma
 certificação de toda a FMOD nem uma declaração de que o áudio de uma sessão
 completa do SCP já foi validado.
 

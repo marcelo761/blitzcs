@@ -23,7 +23,7 @@ Add focused positive and negative tests. For legacy semantic changes, cite origi
 
 Keep `BlitzCS.Compiler` independent of engine-specific APIs. Put Blitz3D-specific services in Blitz3DCS components and use typed external registration. Preserve BASIC/C#/native interoperability, source diagnostics, managed object lifetime and resource ownership. Public contracts and deliberate divergences need documentation.
 
-For repository context, follow [AGENTS.md](AGENTS.md). Trail-Code is optional developer tooling; `trail map`, `trail ask "symbol" --source` and `trail build` help navigate and refresh the local graph. Do not commit its cache.
+Keep agent instructions, session handoffs and generated context graphs local. They are excluded from version control; enduring technical decisions belong in the public architecture and compatibility documentation.
 
 ## Licensing and attribution
 

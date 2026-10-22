@@ -148,7 +148,7 @@ These are future directions, not implemented features or delivery guarantees.
 
 ## Contributing and project history
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md). Existing commits and milestone tags are retained. Historical research notes and reports are point-in-time records; some are in Portuguese and contain development-machine paths. Trail-Code is used for optional repository context; its generated cache is not shipped as source. No Trail installation is required to build the compiler.
+Read [CONTRIBUTING.md](CONTRIBUTING.md). Existing commits and milestone tags are retained. Historical research notes and reports are point-in-time records; some are in Portuguese and contain development-machine paths.
 
 ## License and credits
 

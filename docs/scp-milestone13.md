@@ -47,7 +47,7 @@ preservar a DLL, com custo de IPC/implantação/lifetime; um backend moderno evi
 esse ambiente, mas precisa implementar e validar streams, canais e formatos.
 Nenhum deles foi fingido com retornos constantes. Licenciamento e distribuição
 da FMOD continuam separados da licença do fonte SCP; o DLL não foi redistribuído.
-O [handoff](../handoff.md) delimita o próximo trabalho, sem escalonamento automático.
+A [pesquisa de interop nativa](native-original-m13.md) registra limites e alternativas para o próximo trabalho.
 
 ## Compilação integrada do SCP: sem avanço artificial
 

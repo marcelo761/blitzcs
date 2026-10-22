@@ -126,5 +126,5 @@ A [auditoria M13](scp-milestone13.md) mantém 2/30 assemblies isolados e bloquei
 integrado FSOUND_Init em FMod.bb:15. A nova infraestrutura executa bibliotecas C
 reais da plataforma; não registra FMOD indisponível para avançar artificialmente.
 A DLL FMOD exata do jogo foi identificada e executada em processo Win32 separado,
-sem comprovar playback ou integração .NET. O [handoff](../handoff.md) registra ABI,
+sem comprovar playback ou integração .NET. A [pesquisa de interop nativa](native-original-m13.md) registra ABI,
 processo compatível, ownership e alternativas para o próximo passo.
