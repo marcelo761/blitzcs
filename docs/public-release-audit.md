@@ -80,3 +80,13 @@ No renderer or other feature was added. Native library distribution is platform-
 - Added: this audit, `docs/github-publication.md`, package inventory and validation evidence.
 
 The staged file list contains 25 files. Authored documentation passes whitespace checks; the copied SDL3 and libsndfile license texts intentionally retain upstream whitespace and are byte-identical to the installed notices. The final staged file list and diff are reviewed before committing. No generated assemblies, caches, private research downloads, credentials or source implementation changes belong in this commit. The GitHub description and suggested topics are prepared in `docs/github-publication.md`; no account or destination is assumed.
+
+## Official publication follow-up
+
+After preparation, the owner explicitly identified `https://github.com/marcelo761/BlitzCS.git` as the official destination and requested publication. It was configured as `origin`. GitHub metadata confirmed owner `marcelo761`, public visibility and default branch `main`; `git ls-remote` returned no existing refs. No unrelated remote work required reconciliation.
+
+Local `main` at `62c1dbb` was an ancestor of `codex/public-release` at `743acc3` (0 commits exclusive to main, 7 exclusive to the publication branch). `git merge --ff-only codex/public-release` advanced `main` without creating replacement commits, dropping history or changing the publication branch. All existing milestone branches and six tag object IDs were preserved.
+
+The local metadata was reviewed again before publication. The research records contain 49 local-user-path occurrences, 22 mounted-path occurrences and 3 audio-routing-name occurrences across 30 documentation/research files. No email-bearing content was found in that scoped recheck; Git retains the existing GitHub noreply author address. These values are environment provenance, not authentication secrets. No correction to those historical observations is necessary, and changing only the current files would not remove earlier copies. No private credential, proprietary binary or protected game recording was identified that would require blocking this source publication. Heuristic scanning still cannot guarantee absence of all conceivable secrets.
+
+This follow-up changes documentation only. The integrated source tree equals the previously validated publication checkpoint. The Release/Debug and other results above therefore remain applicable; no additional compiler/runtime change or test run is claimed. Network push results must be confirmed from the live remote refs, as described in `github-publication.md`.

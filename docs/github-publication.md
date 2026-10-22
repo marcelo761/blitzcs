@@ -10,10 +10,12 @@ General-purpose BlitzBasic compiler for .NET 10 with bidirectional C# interopera
 
 These describe implemented technology and compatibility targets. No Vulkan/renderer topic is proposed for an unimplemented backend.
 
-## Publication status
+## Official repository and branch
 
-No remote is configured in this checkout. No GitHub repository URL has been inferred, created or used. The documentation checkpoint is local, on `codex/public-release`; existing branches and milestone tags remain intact.
+The project owner confirmed the official Git remote as **https://github.com/marcelo761/BlitzCS.git**. GitHub reports the canonical repository name as `marcelo761/blitzcs`; repository names are case-insensitive. The local `origin` uses the exact owner-provided URL.
 
-Before publication, the owner must provide or configure the official destination and review the environment metadata disclosed in the audit. Verify repository ownership and its existing refs before pushing. If it already has unrelated history, stop and reconcile with the owner; do not force-push or overwrite it.
+The remote was public, empty, and configured with `main` as its default branch when inspected. Local `main` was an ancestor of `codex/public-release` and advanced by fast-forward from `62c1dbb` to `743acc3`, preserving all seven intervening commits. Existing milestone branches and the six official milestone tags retain their identities.
 
-Use a normal push of the reviewed branch after destination verification. Push milestone tags only intentionally, preserving their existing object IDs. This preparation is not a GitHub Release, a signed release archive or a package publication.
+The metadata review found development paths, process IDs and temporary audio-routing names in research records, with no detected credentials. These records remain intact; no history rewrite or metadata redaction is required for the identified non-secret values. See the publication follow-up in the audit.
+
+Publication uses ordinary pushes of the existing branches and official tags. It does not create a GitHub Release, signed archive or package. Verify the live state with `git ls-remote --symref origin` and compare local/remote branch and tag object IDs; this document records the preparation and integration rather than assuming a network push has succeeded.
