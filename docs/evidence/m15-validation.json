@@ -1,0 +1,133 @@
+{
+  "milestone": 15,
+  "baseline": "ec33c9c",
+  "date": "2026-10-22",
+  "dotnet": {
+    "release": {
+      "passed": 601,
+      "failed": 0,
+      "skipped": 0,
+      "build_warnings": 0,
+      "build_errors": 0,
+      "suites": {
+        "BlitzCS.NativeInterop.Tests.dll": 11,
+        "Blitz3DCS.Audio.Tests.dll": 44,
+        "BlitzCS.Compiler.Tests.dll": 284,
+        "BlitzCS.CLI.Tests.dll": 262
+      },
+      "log_sha256": "eac166bda9de9091647ab20ed9baa20663fb8866df26c49e851c47ac1360bec6"
+    },
+    "debug": {
+      "passed": 601,
+      "failed": 0,
+      "skipped": 0,
+      "build_warnings": 0,
+      "build_errors": 0,
+      "suites": {
+        "BlitzCS.NativeInterop.Tests.dll": 11,
+        "Blitz3DCS.Audio.Tests.dll": 44,
+        "BlitzCS.Compiler.Tests.dll": 284,
+        "BlitzCS.CLI.Tests.dll": 262
+      },
+      "log_sha256": "097bbcffd7ca37e1e8a4f51d5592ea67cbb292d622186810355a770f1e415cbd"
+    }
+  },
+  "python_passed": 40,
+  "local_language_fixtures_passed": 86,
+  "verify_exit_code": 0,
+  "language_differential": {
+    "fresh_original": 0,
+    "reused_original": 86,
+    "match": 85,
+    "mismatch": 1,
+    "known_mismatch": "upper-bound-error modern nonzero exit vs original zero",
+    "details": "m15-regression-differential.json"
+  },
+  "fmod_runtime_comparison": {
+    "fresh_original_run": true,
+    "groups": 42,
+    "match": 34,
+    "documented_divergence": 8,
+    "mismatch": 0,
+    "opaque_ids_normalized": true,
+    "details": "m15-fmod-comparison.json"
+  },
+  "playback": {
+    "actual_scp_asset": "DoorOpen1.ogg",
+    "profiles": [
+      "dummy",
+      "host default",
+      "disk"
+    ],
+    "post_sdl_pcm": true,
+    "physical_audibility_human_confirmed": false,
+    "details": "m15-playback.json"
+  },
+  "audio_lifetime": {
+    "channel_reuse_operations": 10000,
+    "old_tokens_invalidated": true,
+    "assets_after_close": 0,
+    "channels_after_close": 0,
+    "render_managed_allocation_assertion": "zero bytes after warmup",
+    "token_exhaustion": "fails before untracked playback"
+  },
+  "object_lifetime_regression": [
+    {
+      "batch": 1,
+      "operations": 100000,
+      "liveBefore": 61056,
+      "allocatedBytes": 11200448,
+      "beforeCollection": 9035584,
+      "liveAfter": 60656,
+      "estimatedReclaimedBytes": 8974928,
+      "committedBytes": 10575872,
+      "handleEntries": 0,
+      "handleCapacity": 3,
+      "positions": 0,
+      "lastHandle": 101000,
+      "failures": 0
+    },
+    {
+      "batch": 2,
+      "operations": 100000,
+      "liveBefore": 69312,
+      "allocatedBytes": 11200448,
+      "beforeCollection": 9043520,
+      "liveAfter": 62264,
+      "estimatedReclaimedBytes": 8981256,
+      "committedBytes": 10571776,
+      "handleEntries": 0,
+      "handleCapacity": 3,
+      "positions": 0,
+      "lastHandle": 201000,
+      "failures": 0
+    }
+  ],
+  "scp": {
+    "isolated_compiled": 3,
+    "total": 30,
+    "hashes_unchanged": 30,
+    "next_error": "fullscreen_window_fix.bb:45:23 SystemProperty",
+    "game_assembly_emitted": false,
+    "game_executed": false
+  },
+  "dependencies": {
+    "target": "Linux x64 net10.0",
+    "libsndfile": "1.2.2",
+    "sdl": "3.4.18",
+    "copied_in_publication_test": [
+      "Blitz3DCS.Audio.dll",
+      "libSDL3.so.0",
+      "libsndfile.so.1"
+    ],
+    "indirect_native_dependencies": "system dependencies; not a universal RID package"
+  },
+  "limits": [
+    "buffered complete-file decoding, 256 MiB/file, mono/stereo",
+    "nonzero Init flags not implemented",
+    "physical channel-zero controls and nonpositive frequencies differ from original",
+    "entire game asset set/session not validated",
+    "no physical audibility confirmation; Pulse private-capture routing unsuccessful",
+    "no complete FMOD 3.75 compatibility claim"
+  ]
+}

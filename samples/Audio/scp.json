@@ -70,14 +70,403 @@
         "Integer",
         "Integer",
         "Integer"
-      ]
+      ],
+      "returnType": "Integer"
     },
     {
       "name": "FSOUND_Close",
       "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
       "type": "Blitz3DCS.Audio.FSOUND",
       "method": "Close",
+      "parameters": [],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_GetError",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "GetError",
       "parameters": []
+    },
+    {
+      "name": "FSOUND_Stream_Open",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "StreamOpen",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_Stream_Play",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "StreamPlay",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_Stream_Stop",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "StreamStop",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_Stream_Close",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "StreamClose",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_SetVolume",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SetVolume",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_SetVolumeAbsolute",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SetVolume",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_SetPan",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SetPan",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_SetFrequency",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SetFrequency",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_SetPaused",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SetPaused",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_GetVolume",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "GetVolume",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_GetFrequency",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "GetFrequency",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_GetPan",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "GetPan",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_GetPaused",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "GetPaused",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_IsPlaying",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "IsPlaying",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_StopSound",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "StopSound",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_Sample_Load",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SampleLoad",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_Sample_Free",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SampleFree",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_PlaySample",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "PlaySample",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_SampleLoop",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SampleLoop",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_SampleVolume",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SampleVolume",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_SamplePan",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SamplePan",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FSOUND_SampleFrequency",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.FSOUND",
+      "method": "SampleFrequency",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "LoadSound",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "LoadSound",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FreeSound",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "FreeSound",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "PlaySound",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "PlaySound",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "ChannelPlaying",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "ChannelPlaying",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "StopChannel",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "StopChannel",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "ChannelVolume",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "ChannelVolume",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "ChannelPan",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "ChannelPan",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "ChannelPitch",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "ChannelPitch",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "PauseChannel",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "PauseChannel",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "ResumeChannel",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "ResumeChannel",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "LoopSound",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "LoopSound",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "SoundVolume",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "SoundVolume",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "SoundPan",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "SoundPan",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "SoundPitch",
+      "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+      "type": "Blitz3DCS.Audio.NativeAudio",
+      "method": "SoundPitch",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
     }
   ]
 }

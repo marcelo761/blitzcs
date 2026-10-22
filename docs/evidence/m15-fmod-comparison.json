@@ -1,0 +1,487 @@
+{
+  "original_capture_sha256": "f34091b17f127480049a8bc855ffe2574fcc0bc5da07c46c9e609721aba043df",
+  "local_source_sha256": "0e79394ca78ddddc3cfc4d7d481c5939f98196891db6cef84749153efd3bae6e",
+  "source": "/run/media/system/SSD_SATA/BlitzCS/artifacts/m15-fmod-local/probe.bb",
+  "local_profile": "SDL3 dummy; native mono WAV; no physical-audio claim",
+  "stdout": "init\n1\nerror\n0\nchannel-zero-is-playing\n0\n14\nchannel-zero-volume\n0\n14\nchannel-zero-pause\n0\n14\nchannel-zero-stop\n0\n14\nchannel-large-is-playing\n0\n14\nopen-length-minus-one\n4096\n14\n1\nopen-loop-valid\n4097\n0\nopen-error-read-again\n0\nplay-free\n4098\n0\nplaying-before-pause\n1\nvolume-128\n1\n128\nvolume-zero\n1\n0\nvolume-255\n1\n255\nvolume-256\n1\n0\nvolume-minus-one\n1\n0\n0\nrestore-volume-128\n1\n128\nfrequency-11025\n1\n11025\nfrequency-zero\n0\n11025\n0\nfrequency-minus-one\n0\n11025\n0\nfrequency-reset-22050\n1\n22050\n0\npan-left\n1\npause\n1\n1\nplaying-paused\n1\nresume\n1\n0\nplaying-after-source-duration-loop-mode-2\n1\n0\nvolume-all-64\n0\n18\npan-right\n1\nchannel-stop\n1\n0\nplaying-after-stop\n0\nstream-stop-after-channel-stop\n1\n14\nstream-close\n1\n0\nchannel-playing-after-stream-close\n0\n14\nopen-missing\n0\n9\nclose\nclosed\nchannel-playing-after-device-close\n0\n2\ndevice-close-error-read-again\n2\nreinit-after-device-close\n1\n0\nclose-after-reinit\nclosed-again\n",
+  "normalization": "Only non-null asset handles and successful channel identities are normalized; return/error pairs remain intact",
+  "comparisons": [
+    {
+      "case": "init",
+      "original": [
+        1
+      ],
+      "local": [
+        1
+      ],
+      "status": "match"
+    },
+    {
+      "case": "error",
+      "original": [
+        0
+      ],
+      "local": [
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "channel-zero-is-playing",
+      "original": [
+        0,
+        0
+      ],
+      "local": [
+        0,
+        14
+      ],
+      "status": "documented_divergence"
+    },
+    {
+      "case": "channel-zero-volume",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        0,
+        14
+      ],
+      "status": "documented_divergence"
+    },
+    {
+      "case": "channel-zero-pause",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        0,
+        14
+      ],
+      "status": "documented_divergence"
+    },
+    {
+      "case": "channel-zero-stop",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        0,
+        14
+      ],
+      "status": "documented_divergence"
+    },
+    {
+      "case": "channel-large-is-playing",
+      "original": [
+        0,
+        14
+      ],
+      "local": [
+        0,
+        14
+      ],
+      "status": "match"
+    },
+    {
+      "case": "open-length-minus-one",
+      "original": [
+        1,
+        14,
+        1
+      ],
+      "local": [
+        1,
+        14,
+        1
+      ],
+      "status": "match"
+    },
+    {
+      "case": "open-loop-valid",
+      "original": [
+        1,
+        14
+      ],
+      "local": [
+        1,
+        0
+      ],
+      "status": "documented_divergence"
+    },
+    {
+      "case": "open-error-read-again",
+      "original": [
+        14
+      ],
+      "local": [
+        0
+      ],
+      "status": "documented_divergence"
+    },
+    {
+      "case": "play-free",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        1,
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "playing-before-pause",
+      "original": [
+        1
+      ],
+      "local": [
+        1
+      ],
+      "status": "match"
+    },
+    {
+      "case": "volume-128",
+      "original": [
+        1,
+        128
+      ],
+      "local": [
+        1,
+        128
+      ],
+      "status": "match"
+    },
+    {
+      "case": "volume-zero",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        1,
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "volume-255",
+      "original": [
+        1,
+        255
+      ],
+      "local": [
+        1,
+        255
+      ],
+      "status": "match"
+    },
+    {
+      "case": "volume-256",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        1,
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "volume-minus-one",
+      "original": [
+        1,
+        0,
+        0
+      ],
+      "local": [
+        1,
+        0,
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "restore-volume-128",
+      "original": [
+        1,
+        128
+      ],
+      "local": [
+        1,
+        128
+      ],
+      "status": "match"
+    },
+    {
+      "case": "frequency-11025",
+      "original": [
+        1,
+        11025
+      ],
+      "local": [
+        1,
+        11025
+      ],
+      "status": "match"
+    },
+    {
+      "case": "frequency-zero",
+      "original": [
+        1,
+        0,
+        0
+      ],
+      "local": [
+        0,
+        11025,
+        0
+      ],
+      "status": "documented_divergence"
+    },
+    {
+      "case": "frequency-minus-one",
+      "original": [
+        1,
+        -1,
+        0
+      ],
+      "local": [
+        0,
+        11025,
+        0
+      ],
+      "status": "documented_divergence"
+    },
+    {
+      "case": "frequency-reset-22050",
+      "original": [
+        1,
+        22050,
+        0
+      ],
+      "local": [
+        1,
+        22050,
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "pan-left",
+      "original": [
+        1
+      ],
+      "local": [
+        1
+      ],
+      "status": "match"
+    },
+    {
+      "case": "pause",
+      "original": [
+        1,
+        1
+      ],
+      "local": [
+        1,
+        1
+      ],
+      "status": "match"
+    },
+    {
+      "case": "playing-paused",
+      "original": [
+        1
+      ],
+      "local": [
+        1
+      ],
+      "status": "match"
+    },
+    {
+      "case": "resume",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        1,
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "playing-after-source-duration-loop-mode-2",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        1,
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "volume-all-64",
+      "original": [
+        0,
+        18
+      ],
+      "local": [
+        0,
+        18
+      ],
+      "status": "match"
+    },
+    {
+      "case": "pan-right",
+      "original": [
+        1
+      ],
+      "local": [
+        1
+      ],
+      "status": "match"
+    },
+    {
+      "case": "channel-stop",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        1,
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "playing-after-stop",
+      "original": [
+        0
+      ],
+      "local": [
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "stream-stop-after-channel-stop",
+      "original": [
+        1,
+        14
+      ],
+      "local": [
+        1,
+        14
+      ],
+      "status": "match"
+    },
+    {
+      "case": "stream-close",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        1,
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "channel-playing-after-stream-close",
+      "original": [
+        0,
+        14
+      ],
+      "local": [
+        0,
+        14
+      ],
+      "status": "match"
+    },
+    {
+      "case": "open-missing",
+      "original": [
+        0,
+        9
+      ],
+      "local": [
+        0,
+        9
+      ],
+      "status": "match"
+    },
+    {
+      "case": "close",
+      "original": [],
+      "local": [],
+      "status": "match"
+    },
+    {
+      "case": "closed",
+      "original": [],
+      "local": [],
+      "status": "match"
+    },
+    {
+      "case": "channel-playing-after-device-close",
+      "original": [
+        0,
+        2
+      ],
+      "local": [
+        0,
+        2
+      ],
+      "status": "match"
+    },
+    {
+      "case": "device-close-error-read-again",
+      "original": [
+        2
+      ],
+      "local": [
+        2
+      ],
+      "status": "match"
+    },
+    {
+      "case": "reinit-after-device-close",
+      "original": [
+        1,
+        0
+      ],
+      "local": [
+        1,
+        0
+      ],
+      "status": "match"
+    },
+    {
+      "case": "close-after-reinit",
+      "original": [],
+      "local": [],
+      "status": "match"
+    },
+    {
+      "case": "closed-again",
+      "original": [],
+      "local": [],
+      "status": "match"
+    }
+  ],
+  "totals": {
+    "match": 34,
+    "documented_divergence": 8,
+    "mismatch": 0
+  }
+}

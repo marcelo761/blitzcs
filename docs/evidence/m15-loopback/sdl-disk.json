@@ -1,0 +1,38 @@
+{
+  "exit_code": 0,
+  "audio_driver": "disk",
+  "device_routing": "SDL disk output file; no Pulse sink/device selected",
+  "asset_sha256": "ec32c710984ceae747f9e8cae60e2c00f8154bca4f2b22f37a1baa6d4c35b6e6",
+  "playback_sha256": "66777f5c981926ef2b8a68e2536da03a383593216bc38c74422836a847432cc7",
+  "stdout": "{\"Assets\":2,\"Channels\":2,\"SubmittedFrames\":45056,\"NonSilentFrames\":45056,\"PcmEnergy\":8.679480131825265}\n{\"Assets\":0,\"Channels\":0,\"SubmittedFrames\":48128,\"NonSilentFrames\":48128,\"PcmEnergy\":10.17129676946633}\n",
+  "stderr": "ERROR: You are using the SDL disk i/o audio driver!\nERROR:  Writing to file [/tmp/blitzcs-sdl-disk-6cobmb4u/post-sdl.raw], format=F32LE channels=2 freq=44100.\n",
+  "snapshots": [
+    {
+      "Assets": 2,
+      "Channels": 2,
+      "SubmittedFrames": 45056,
+      "NonSilentFrames": 45056,
+      "PcmEnergy": 8.679480131825265
+    },
+    {
+      "Assets": 0,
+      "Channels": 0,
+      "SubmittedFrames": 48128,
+      "NonSilentFrames": 48128,
+      "PcmEnergy": 10.17129676946633
+    }
+  ],
+  "raw_pcm": {
+    "bytes": 385024,
+    "sha256": "4ee74466c591c7cf3f744f07d1c21a24bb3d7ed22ef7ff06ce363d21d638f798",
+    "format": "F32LE",
+    "channels": 2,
+    "sample_rate": 44100,
+    "samples": 96256,
+    "frames": 48128,
+    "finite_samples": 96256,
+    "nonzero_samples": 94208,
+    "rms": 0.010064997666045612,
+    "peak": 0.07199529558420181
+  }
+}

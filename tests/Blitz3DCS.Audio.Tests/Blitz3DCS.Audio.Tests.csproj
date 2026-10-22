@@ -16,4 +16,7 @@
     <ProjectReference Include="../../src/BlitzCS.Compiler/BlitzCS.Compiler.csproj" />
     <ProjectReference Include="../../src/BlitzCS.CLI/BlitzCS.CLI.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="Fixtures/generated-tone.ogg" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

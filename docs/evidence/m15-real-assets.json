@@ -1,0 +1,49 @@
+{
+  "retrieved_at_utc": "2026-10-22T18:56:59Z",
+  "source": {
+    "repository": "https://github.com/Regalis11/scpcb",
+    "commit": "edb8fe0840b78f14d1aef3a0bf6174630e7be296",
+    "asset_path": "SFX/Door/DoorOpen1.ogg",
+    "raw_url": "https://raw.githubusercontent.com/Regalis11/scpcb/edb8fe0840b78f14d1aef3a0bf6174630e7be296/SFX/Door/DoorOpen1.ogg",
+    "referenced_by": {
+      "file": "/tmp/scpcb-audit-source/LoadAllSounds.bb",
+      "line": 4,
+      "pattern": "SFX\\Door\\DoorOpen + (i + 1) + .ogg"
+    },
+    "http_status": 200,
+    "license_status": "Not verified; retained only in ignored local artifacts, not committed."
+  },
+  "local_artifact": {
+    "path": "ignoredartifacts/m15-assets/DoorOpen1.ogg",
+    "bytes": 39693,
+    "sha256": "ec32c710984ceae747f9e8cae60e2c00f8154bca4f2b22f37a1baa6d4c35b6e6"
+  },
+  "audit_scope": {
+    "file": "/tmp/scpcb-audit-source/LoadAllSounds.bb",
+    "load_sound_references": 79,
+    "literal_extension_counts": {
+      "ogg": 79
+    },
+    "scope_note": "Counts refer only to the LoadSound calls in this file, not all assets or music/stream loaders in the game."
+  },
+  "ffprobe": {
+    "format_name": "ogg",
+    "codec_name": "vorbis",
+    "sample_rate": 44100,
+    "channels": 2,
+    "channel_layout": "stereo",
+    "duration_seconds": 2.247619,
+    "bit_rate": 141280
+  },
+  "decoder": {
+    "implementation": "Blitz3DCS.Audio.AudioDecoder via libsndfile.so.1",
+    "sample_rate": 44100,
+    "channels": 2,
+    "frames": 99120,
+    "samples": 198240,
+    "minimum": -0.26086864,
+    "maximum": 0.26544362,
+    "rms": 0.036828793388625915,
+    "all_finite": true
+  }
+}

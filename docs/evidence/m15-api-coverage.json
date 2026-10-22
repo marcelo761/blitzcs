@@ -1,0 +1,458 @@
+{
+  "source": "/tmp/scpcb-audit-source",
+  "declarations_file": "fmod.decls",
+  "header": "/tmp/blitz-research/package/deps/fmod/include/fmod.h",
+  "header_version": "FMOD 3.75",
+  "counts": {
+    "declared_symbols": 13,
+    "symbols_with_active_calls": 10,
+    "unused_non_close_symbols": 2,
+    "declared_symbols_without_active_calls_including_close": 3,
+    "close_active_calls": 0,
+    "music_calls": 0,
+    "active_call_sites": 14
+  },
+  "inventory": [
+    {
+      "name": "FSOUND_Init",
+      "decls": "FSOUND_Init%(freq%,channels%,flags%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_Init(int mixrate, int maxsoftwarechannels, unsigned int flags)",
+      "active_calls": 1,
+      "call_sites": [
+        "FMod.bb:15"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "notes": "Header return is signed char; original declaration widens it to Integer.",
+      "export": "_FSOUND_Init@12",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width",
+      "managed_binding": {
+        "name": "FSOUND_Init",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "Init",
+        "parameters": [
+          "Integer",
+          "Integer",
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_Close",
+      "decls": "FSOUND_Close%()",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [],
+      "header": "void F_API FSOUND_Close()",
+      "active_calls": 0,
+      "commented_calls": [
+        "Menu.bb:212"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "notes": "Not actively called in the snapshot.",
+      "export": "_FSOUND_Close@0",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "void; no meaningful return value",
+      "managed_binding": {
+        "name": "FSOUND_Close",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "Close",
+        "parameters": [],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_SetVolume",
+      "decls": "FSOUND_SetVolume(channel%,vol%)",
+      "declared_basic_return": "void (no suffix)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_SetVolume(int channel, int vol)",
+      "active_calls": 2,
+      "call_sites": [
+        "StrictLoads.bb:183",
+        "StrictLoads.bb:220"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_SetVolume@8",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width",
+      "managed_binding": {
+        "name": "FSOUND_SetVolume",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "SetVolume",
+        "parameters": [
+          "Integer",
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_SetVolumeAbsolute",
+      "decls": "FSOUND_SetVolumeAbsolute%(channel%,vol%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_SetVolumeAbsolute(int channel, int vol)",
+      "active_calls": 0,
+      "call_sites": [],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_SetVolumeAbsolute@8",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width",
+      "managed_binding": {
+        "name": "FSOUND_SetVolumeAbsolute",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "SetVolume",
+        "parameters": [
+          "Integer",
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_GetVolume",
+      "decls": "FSOUND_GetVolume(channel%)",
+      "declared_basic_return": "void (no suffix)",
+      "declared_basic_arguments": [
+        "Integer"
+      ],
+      "header": "int F_API FSOUND_GetVolume(int channel)",
+      "active_calls": 0,
+      "call_sites": [],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_GetVolume@4",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "volume integer; invalid-channel behavior not verified",
+      "managed_binding": {
+        "name": "FSOUND_GetVolume",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "GetVolume",
+        "parameters": [
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_SetPaused",
+      "decls": "FSOUND_SetPaused(channel%,paused%)",
+      "declared_basic_return": "void (no suffix)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_SetPaused(int channel, signed char paused)",
+      "active_calls": 3,
+      "call_sites": [
+        "StrictLoads.bb:184",
+        "StrictLoads.bb:221",
+        "StrictLoads.bb:237"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": true,
+      "notes": "Second argument is widened in the BASIC declaration.",
+      "export": "_FSOUND_SetPaused@8",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width",
+      "managed_binding": {
+        "name": "FSOUND_SetPaused",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "SetPaused",
+        "parameters": [
+          "Integer",
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_StopSound",
+      "decls": "FSOUND_StopSound(channel%)",
+      "declared_basic_return": "void (no suffix)",
+      "declared_basic_arguments": [
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_StopSound(int channel)",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:201"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_StopSound@4",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width",
+      "managed_binding": {
+        "name": "FSOUND_StopSound",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "StopSound",
+        "parameters": [
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_Stream_Play",
+      "decls": "FSOUND_Stream_Play%(channel%,stream%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer"
+      ],
+      "header": "int F_API FSOUND_Stream_Play(int channel, FSOUND_STREAM *stream)",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:173"
+      ],
+      "return_mismatch": false,
+      "argument_mismatch": [
+        "Integer stream field carries opaque pointer bits in Win32 x86"
+      ],
+      "notes": "The pointer fits the legacy 32-bit field in x86; it is not a semantic integer.",
+      "export": "_FSOUND_Stream_Play@8",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "channel integer or -1 on error",
+      "managed_binding": {
+        "name": "FSOUND_Stream_Play",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "StreamPlay",
+        "parameters": [
+          "Integer",
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_Stream_Stop",
+      "decls": "FSOUND_Stream_Stop%(stream%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_Stream_Stop(FSOUND_STREAM *stream)",
+      "active_calls": 2,
+      "call_sites": [
+        "StrictLoads.bb:202",
+        "Menu.bb:211"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": [
+        "Integer stream field carries opaque pointer bits in Win32 x86"
+      ],
+      "export": "_FSOUND_Stream_Stop@4",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width",
+      "managed_binding": {
+        "name": "FSOUND_Stream_Stop",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "StreamStop",
+        "parameters": [
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_Stream_Close",
+      "decls": "FSOUND_Stream_Close%(stream%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_Stream_Close(FSOUND_STREAM *stream)",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:203"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": [
+        "Integer stream field carries opaque pointer bits in Win32 x86"
+      ],
+      "export": "_FSOUND_Stream_Close@4",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width",
+      "managed_binding": {
+        "name": "FSOUND_Stream_Close",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "StreamClose",
+        "parameters": [
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_Stream_Open",
+      "decls": "FSOUND_Stream_Open%(filename$,mode%,memlength%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "String",
+        "Integer",
+        "Integer"
+      ],
+      "header": "FSOUND_STREAM * F_API FSOUND_Stream_Open(const char *name_or_data, unsigned int mode, int offset, int length)",
+      "export": "_FSOUND_Stream_Open@16",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:163"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": [
+        "BASIC declaration and call have 3 arguments; header/export stdcall decoration indicate 4 32-bit arguments"
+      ],
+      "notes": "No implicit fourth argument is assumed by this audit.",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "opaque pointer or NULL on failure",
+      "managed_binding": {
+        "name": "FSOUND_Stream_Open",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "StreamOpen",
+        "parameters": [
+          "String",
+          "Integer",
+          "Integer",
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_IsPlaying",
+      "decls": "FSOUND_IsPlaying%(channel%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_IsPlaying(int channel)",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:253"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_IsPlaying@4",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "signed char Boolean playing status; invalid-channel/error distinction not verified",
+      "managed_binding": {
+        "name": "FSOUND_IsPlaying",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "IsPlaying",
+        "parameters": [
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    },
+    {
+      "name": "FSOUND_SetPan",
+      "decls": "FSOUND_SetPan%(channel%,pan%)",
+      "declared_basic_return": "Integer (32-bit)",
+      "declared_basic_arguments": [
+        "Integer",
+        "Integer"
+      ],
+      "header": "signed char F_API FSOUND_SetPan(int channel, int pan)",
+      "active_calls": 1,
+      "call_sites": [
+        "StrictLoads.bb:274"
+      ],
+      "return_mismatch": true,
+      "argument_mismatch": false,
+      "export": "_FSOUND_SetPan@8",
+      "implementation_status": "implemented; see M15 tests and scope/semantic divergences",
+      "native_return_contract": "signed char: 0 failure, nonzero success; interpreted at native width",
+      "managed_binding": {
+        "name": "FSOUND_SetPan",
+        "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
+        "type": "Blitz3DCS.Audio.FSOUND",
+        "method": "SetPan",
+        "parameters": [
+          "Integer",
+          "Integer"
+        ],
+        "returnType": "Integer"
+      }
+    }
+  ],
+  "declarations_sha256": "89146d0d32f9816604741adee92a9ca2bd2c82594bfcad41beb0699e1af96dd5",
+  "calling_convention": "Win32 x86 __stdcall (F_API); decorated export aliases verified in the pinned DLL",
+  "native_handle_contract": "FSOUND_STREAM* is opaque and native-width; legacy x86 Integer storage is not safe on x64; new bindings must allocate managed tokens",
+  "string_contract": "const char* input is legacy NUL-terminated bytes; no stream/string API implemented by the new layer yet",
+  "milestone": 15,
+  "profile": "Linux x64; SDL3 + libsndfile; mono/stereo OGG/WAV",
+  "audio_filename_literals": {
+    "counts": {
+      "ogg": 450,
+      "wav": 1
+    },
+    "method": "lexical filename references in non-comment line prefixes; includes extension filters/dynamic fragments, not an asset inventory",
+    "complete_asset_set_available": false,
+    "authentic_asset_decoded": "SFX/Door/DoorOpen1.ogg",
+    "source_hashes": {
+      "AAText.bb": "2c3941a9ee03d0a46ec2f8fed2b17ef5bc7f651e5539c161b38c1866e141678e",
+      "Achievements.bb": "5a7233c39af9614cdefbf16b6e59c8ebe5576e7d11c921bacfc5319cfb918d9e",
+      "Blitz_Basic_Bank.bb": "af74ae4fcb6c90b83bdd433ea288dc80c1867c59f4bf8c3153837f0060c24f06",
+      "Blitz_File_FileName.bb": "66f3af39c2637b65b86f513e7789f41a83e5ea4ad8847def7119e68fa5c99fbb",
+      "Blitz_File_ZipApi.bb": "30117ad9e79b71df38f7aa7414b95b5c7e417da341149b74acef53a1b4dec505",
+      "CPU_Details.bb": "9ce0ec968c6b6bc89698ba801240955694ba148bb7be03f2729a9e7e33cf747a",
+      "Converter.bb": "3e35ad5289c30599b85792a19c427e854080d38ca6c9d48e75eda16583a1f61f",
+      "DevilParticleSystem.bb": "6a9789e3c06bccfb4d036f80f34daf7a13e2b4747c4996e3b0aaa19b7f64ab1c",
+      "Difficulty.bb": "83556dab02c307bd6f5478aded9a523086518fe25989e1bd2bf510aed7ec7853",
+      "DrawPortals \u2013 Kopio.bb": "a8f89d5e895222b84621064eb5988d2f174222f81eb83d17198a88a6d548685c",
+      "DrawPortals.bb": "faa0441f5a2a332c95fa35ea595841a99a47f03772443937df12e19aed69cee8",
+      "Dreamfilter.bb": "0faafc5432585a5782db8f4b4cc49db58b59ddfb5695e7966a9552594ab8e720",
+      "FMod.bb": "6e6bfa5ccb0abf4bf1ab57de657f0b1bb1e641d68e34d0d6dcf1bfed0e05e9f4",
+      "Items.bb": "92958954d19c65a6139d9bb89a7eff808ac521fbad0034b175062845236dd325",
+      "KeyName.bb": "0759530b7a56de5f424e1aeebf4929107a7e6c6b7130975e1bd16ef97afbc0a2",
+      "LightMapPNG.bb": "56b3f49cd83c0baffca8398625e4d755265b115aeded4c0d1fbef42217ab136a",
+      "LoadAllSounds.bb": "367da63ef43730f5e31a4f1e78bd13f1ebdc91ffeccb64b3769fc5b6c3c15971",
+      "Main.bb": "fcc2c1504e35b6fbb09947ec1835932054c5d18c6e105a4ebf4bcb23ca249db5",
+      "Map Creator/mapcreator_new.bb": "d2926e4fb6f85a60be98f6b0197a98eadbe8932477b5c6476113f40d1a3b4adb",
+      "Map Creator/window3d.bb": "a90b2b9cb864f42e874c9d5202283b5226531ce5a779d5236f0b34c098392cd6",
+      "MapSystem.bb": "72a4123fa648387d458efd79c4310070a5eb9e87c7c563b85d39dcf2cd8dd3bd",
+      "Menu.bb": "efc3523b8fd2883139e2fb85918e44cad78d826bccb8672b4c8543ef400e9698",
+      "MusicPlayer.bb": "701c0bb0a57f767346aef0a1711da031674c72a0bb247967b3d0c9ec345e9aa5",
+      "NPCs.bb": "0ddc21639f55034ed13d40e9cd755a384a9891080c66eda1d638f4e1705ded2c",
+      "Particles.bb": "872e7eed4895a660f720e2fb87d98928cd5664fc1a4aa70c31f2731b0703a1f1",
+      "RMesh_Model_Viewer.bb": "265158bfee234ead24455c51b75a3eca5212dae2d217ea0ee48cf8f6999a66ad",
+      "Save.bb": "60e742fcaef01539582ef6f4b0b601747cbc86d6e128b21f63be05c3af69d5d3",
+      "Skybox.bb": "ca8708421c62bd589930e9b9b74f4472eefa656ea899b5efd643f10d16c78d76",
+      "StrictLoads.bb": "984359249f5354a42540daf568e6a7ac8e1cffd91bb0d4d3a479b2e1637927b6",
+      "Update.bb": "68f4c24b42d958152f0afa9754be398eb6e8330abaffc01484a7b86f57e1fb94",
+      "UpdateEvents.bb": "f76e5612ee5fd6730252d2546dc0524d243e6314829aef75b61ff832d10e1a5d",
+      "fullscreen_window_fix.bb": "c31d1f86d070a57602806e885ed8e16fcda310bcdf9179ab92cf5b0896824505"
+    }
+  }
+}

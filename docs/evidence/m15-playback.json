@@ -1,0 +1,82 @@
+{
+  "asset": "/run/media/system/SSD_SATA/BlitzCS/ignoredartifacts/m15-assets/DoorOpen1.ogg",
+  "asset_sha256": "ec32c710984ceae747f9e8cae60e2c00f8154bca4f2b22f37a1baa6d4c35b6e6",
+  "profiles": [
+    {
+      "driver": "dummy",
+      "exit_code": 0,
+      "snapshots": [
+        {
+          "Assets": 2,
+          "Channels": 2,
+          "SubmittedFrames": 45056,
+          "NonSilentFrames": 45056,
+          "PcmEnergy": 8.518565068474793
+        },
+        {
+          "Assets": 0,
+          "Channels": 0,
+          "SubmittedFrames": 47104,
+          "NonSilentFrames": 47104,
+          "PcmEnergy": 9.579069799153274
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "driver": "host default",
+      "exit_code": 0,
+      "snapshots": [
+        {
+          "Assets": 2,
+          "Channels": 2,
+          "SubmittedFrames": 46080,
+          "NonSilentFrames": 46080,
+          "PcmEnergy": 8.430205064042426
+        },
+        {
+          "Assets": 0,
+          "Channels": 0,
+          "SubmittedFrames": 46592,
+          "NonSilentFrames": 46592,
+          "PcmEnergy": 8.619227989641594
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "driver": "disk",
+      "exit_code": 0,
+      "snapshots": [
+        {
+          "Assets": 2,
+          "Channels": 2,
+          "SubmittedFrames": 45056,
+          "NonSilentFrames": 45056,
+          "PcmEnergy": 8.518565068474793
+        },
+        {
+          "Assets": 0,
+          "Channels": 0,
+          "SubmittedFrames": 48128,
+          "NonSilentFrames": 48128,
+          "PcmEnergy": 10.00771641541094
+        }
+      ],
+      "stderr": "ERROR: You are using the SDL disk i/o audio driver!\nERROR:  Writing to file [/run/media/system/SSD_SATA/BlitzCS/artifacts/m15-playback/post-sdl.f32le], format=F32LE channels=2 freq=44100.\n"
+    }
+  ],
+  "post_sdl_pcm": {
+    "path": "artifacts/m15-playback/post-sdl.f32le",
+    "sha256": "a963049b04829ce41d13597431faca6aa5ed746b5cb36eaa98cad8ddcaa8f78b",
+    "format": "F32LE",
+    "sample_rate": 44100,
+    "channels": 2,
+    "frames": 48128,
+    "nonzero_samples": 94208,
+    "rms": 0.00997580069600696,
+    "peak": 0.07619471102952957,
+    "source": "actual SDL3 disk audio driver after the bound native stream; no hardware/loopback claim"
+  },
+  "physical_audibility": "not confirmed by a listener; default device submission and SDL disk PCM capture are separate evidence"
+}

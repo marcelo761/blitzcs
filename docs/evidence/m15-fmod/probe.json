@@ -1,0 +1,53 @@
+{
+  "dll_sha256": "1e08da161cf78746304a834973971ee47a24817ee4e28df74e3f37dbbb383b22",
+  "runtime": "original Blitz3D 1.118 Win32 under supplied Proton/Wine prefix",
+  "safety": "only valid handles returned by Stream_Open/Stream_Play are used; no invalid pointers",
+  "stream_open_abi": "header-correct four arguments: filename, mode, offset, length; @16",
+  "wave": {
+    "format": "PCM signed 16-bit mono 22050 Hz",
+    "duration_seconds": 3,
+    "sha256": "2df5324f4f8ed087f15855fdf25643146733e6883565e29bc006ae1b097068cb"
+  },
+  "cases": [
+    "FSOUND_FREE=-1",
+    "FSOUND_ALL=-3",
+    "loop mode 2",
+    "volume",
+    "pause/resume",
+    "frequency: -1, 0, 11025, restore to 22050",
+    "pan",
+    "playing",
+    "stop/close",
+    "after-stream-close status",
+    "after-device-close status and reinit",
+    "missing file",
+    "error codes"
+  ],
+  "probe_source_sha256": "f8367c3ddad2b1515795d4344b5666ea6d04ea1ab41b3ab7e1b252433601ad35",
+  "declarations": [
+    ".lib \"Z:\\tmp\\blitz-research\\package\\deps\\fmod\\bin\\fmod.dll\"",
+    "M15Version#():\"_FSOUND_GetVersion@0\"",
+    "M15Output%(mode%):\"_FSOUND_SetOutput@4\"",
+    "M15Init%(rate%,channels%,flags%):\"_FSOUND_Init@12\"",
+    "M15Error%():\"_FSOUND_GetError@0\"",
+    "M15Open%(file$,mode%,offset%,length%):\"_FSOUND_Stream_Open@16\"",
+    "M15Play%(channel%,stream%):\"_FSOUND_Stream_Play@8\"",
+    "M15IsPlaying%(channel%):\"_FSOUND_IsPlaying@4\"",
+    "M15SetVolume%(channel%,volume%):\"_FSOUND_SetVolume@8\"",
+    "M15GetVolume%(channel%):\"_FSOUND_GetVolume@4\"",
+    "M15SetPaused%(channel%,paused%):\"_FSOUND_SetPaused@8\"",
+    "M15GetPaused%(channel%):\"_FSOUND_GetPaused@4\"",
+    "M15SetFrequency%(channel%,freq%):\"_FSOUND_SetFrequency@8\"",
+    "M15GetFrequency%(channel%):\"_FSOUND_GetFrequency@4\"",
+    "M15SetPan%(channel%,pan%):\"_FSOUND_SetPan@8\"",
+    "M15StopChannel%(channel%):\"_FSOUND_StopSound@4\"",
+    "M15StopStream%(stream%):\"_FSOUND_Stream_Stop@4\"",
+    "M15CloseStream%(stream%):\"_FSOUND_Stream_Close@4\"",
+    "M15Close() :\"_FSOUND_Close@0\""
+  ],
+  "capture": {
+    "phase": "run",
+    "stdout": "version\n3.75\noutput\n31160833\ninit\n1\nerror\n0\nchannel-zero-is-playing\n0\n0\nchannel-zero-volume\n1\n0\nchannel-zero-pause\n1\n0\nchannel-zero-stop\n1\n0\nchannel-large-is-playing\n0\n14\nopen-length-minus-one\n9883896\n14\n1\nopen-loop-valid\n9883896\n14\nopen-error-read-again\n14\nplay-free\n8192\n0\nplaying-before-pause\n1\nvolume-128\n1\n128\nvolume-zero\n1\n0\nvolume-255\n1\n255\nvolume-256\n1\n0\nvolume-minus-one\n1\n0\n0\nrestore-volume-128\n1\n128\nfrequency-11025\n1\n11025\nfrequency-zero\n1\n0\n0\nfrequency-minus-one\n1\n-1\n0\nfrequency-reset-22050\n1\n22050\n0\npan-left\n1\npause\n1\n1\nplaying-paused\n1\nresume\n1\n0\nplaying-after-source-duration-loop-mode-2\n1\n0\nvolume-all-64\n0\n18\npan-right\n1\nchannel-stop\n1\n0\nplaying-after-stop\n0\nstream-stop-after-channel-stop\n1\n14\nstream-close\n1\n0\nchannel-playing-after-stream-close\n0\n14\nopen-missing\n0\n9\nclose\nclosed\nchannel-playing-after-device-close\n0\n2\ndevice-close-error-read-again\n2\nreinit-after-device-close\n1\n0\nclose-after-reinit\nclosed-again\n",
+    "exit_code": 0
+  }
+}

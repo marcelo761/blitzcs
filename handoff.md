@@ -1,57 +1,76 @@
-# Handoff M14 — Init/Close reais; SCP para em SystemProperty
+# Handoff M15 — áudio funcional; compatibilidade total ainda não certificada
 
-## Checkpoint e validação
+## Estado do repositório
 
-Base M13 `5484fb3`, tag `blitzcs-m13-checkpoint`; trabalho na branch
-`codex/milestone-14`, checkpoint final identificado pela tag
-`blitzcs-m14-checkpoint`. .NET 10.0.401/net10, Linux x64.
-O relatório [M14](docs/scp-milestone14.md) e suas evidências são a referência
-para resultados, limites e reprodução. Não há impasse estrutural que justifique
-escalonamento para um modelo caro.
+Base M14 `ec33c9c`, branch `codex/milestone-15`; o checkpoint final é identificado
+pela tag `blitzcs-m15-checkpoint`. O [relatório](docs/audio-milestone15.md) delimita
+cobertura, evidências e reprodução. Não há um impasse estrutural que tenha exigido
+modelo caro: implementação, referências e revisão usaram subagentes econômicos.
 
-## Entrega e fronteiras
+## Código funcional entregue
 
-- BlitzCS: assinaturas externas primitivas sem implementação, CheckSemantics,
-  CLI check-semantics e erro de vínculo em chamada usada sem implementação.
-  Não executa inicializador estático ou código nativo na inspeção/compilação.
-- Blitz3DCS.Audio: biblioteca independente, SDL3 Linux x64, FSOUND.Init/Close
-  reais; LastError com falhas de driver/loader. Init normaliza retorno para 0/1;
-  Close retorna 0 como adaptação ao registro (original nativo é void).
-- Tabela interna de handles preserva nint, IDs Int32 positivos monotônicos,
-  invalidação e liberação. Ainda não consumida por streams; não expõe ponteiros
-  ao BASIC nem altera os handles de objetos existentes.
-- Exemplo e catálogos: samples/Audio. Catalog scp.json registra somente as
-  implementações reais Init/Close e os comandos anteriores. declarations.json
-  demonstra Stream_Play sem implementação: semântica passa, build falha.
+`Blitz3DCS.Audio` implementa as 10 funções FSOUND usadas no SCP, com 13 declarações
+vinculadas, decoder WAV/Vorbis OGG libsndfile, mixer estéreo, sample/stream/canais,
+volume/pan/frequência positiva, looping, pausa, interrupção e liberação. Os comandos
+Blitz LoadSound/PlaySound/FreeSound e controles Channel*/Sound* usam o mesmo mixer.
+Há arquivos reais, vozes simultâneas e fila SDL nativa; não são stubs.
 
-## SCP e próximo obstáculo
+O produtor usa buffer fixo/pinado e nenhuma função managed no callback nativo.
+Tokens são Int32 positivos sem reutilização; slots internos podem ser reutilizados
+sem reviver tokens antigos. Fechamento invalida recursos e aguarda a thread;
+loads concorrentes são limitados à geração da sessão. Falhas do produtor impedem
+novo Play bem-sucedido até Close/reinit. A libsndfile fecha o arquivo em finally.
+BlitzCS e seus objetos/handles BASIC permanecem independentes de engine/áudio.
 
-Main +23 alvos Include passam sintaxe. Com o catálogo Audio/scp.json, o primeiro
-erro semântico integrado agora é fullscreen_window_fix.bb:45:23 SystemProperty,
-comando nativo ainda não registrado. FMod.bb passa a emitir assembly isolado:
-3/30 no total (também Difficulty e KeyName); mesmos 30 hashes. Não há assembly
-integrado, vínculo completo ou execução do jogo. Erros posteriores desconhecidos.
+## Evidências
 
-## Referência e limitações
+- `docs/evidence/m15-playback.json`: asset autêntico SCP, sample + stream
+  simultâneos, dummy/default/disk; zero assets/canais depois de fechar.
+- PCM pós-SDL disk: 48.128 frames F32LE estéreo 44,1 kHz, RMS ~0,0099758,
+  pico ~0,0761947. Não é prova de som ouvido em hardware físico.
+- `docs/evidence/m15-fmod/`: original FMOD 3.75 Win32 via Proton, loop depois
+  de restaurar frequência, volume/pan/frequência, pause/stop/close, erros e reinit.
+- `m15-fmod-comparison.json`: 42 grupos, 34 iguais e 8 diferenças explicitadas;
+  os 86 oráculos de linguagem permanecem separados e reutilizados (85 iguais).
+- A captura Pulse privada não demonstrou sinal: o stream foi roteado para outro
+  sink pelo ambiente. Não se alterou EQ/default do usuário nem se gravou monitor
+  global. Usou-se o driver disk SDL como prova objetiva; sinks temporários removidos.
+- `m15-validation.json`: regressões, build, testes, hashes e limitações.
 
-FMOD 3.75 original PE32/i386 permanece somente em processo x86 via Proton.
-Novo probe NOSOUND usa original verdadeiro; docs/evidence/m14-fmod contém
-fonte/captura/assinaturas. Cinco retornos Init coincidem com SDLdummy; duas flags
-aceitas no original são recusadas explicitamente. Não houve playback, comparação
-de mixer, streams ou códigos GetError. Trocar configuração exige Close; repetir
-a mesma configuração é aceito. Apenas flags=0; canais ainda não reservam mixer.
+## Limites que impedem declarar FMOD completa / toda sessão SCP validada
 
-A auditoria conta13 declarações FSOUND, 10 nomes ativos, 14 pontos de chamada e 0 FMUSIC e registra
-a divergência Stream_Open3 args no .decls versus4 no header/export. Investigar antes
-de implementar streams; nunca converter FSOUND_STREAM* x64 para Integer.
-SDL3 é dependência de sistema no exemplo; teste de publicação copia SDL nativo
-e assembly para diretório isolado. Distribuição entre SOs/RIDs ainda pendente.
+1. Streams são decodificados inteiramente, com limite de 256 MiB por arquivo;
+   não há decodificação incremental. Causa: o mixer atual consome DecodedAudio
+   residente, e o decoder abre/lê/fecha no thread do chamador fora do gate.
+   Alternativas: leitor libsndfile por worker com ring buffer limitado, ou uma
+   fonte PCM incremental por canal com backpressure e política explícita de underrun.
+2. Perfil Init=0 e mono/estéreo; não implementados frequência zero/reversa,
+   índices físicos de canal e flags fora do perfil comprovado. O token gerenciado
+   deliberadamente não imita endereços/identidades Win32. FMOD original aceita
+   alguns casos adicionais, registrados como divergências, sem falsa equivalência.
+3. O conjunto completo de assets não está instalado. Foi recuperado e decodificado
+   DoorOpen1.ogg do commit oficial pinado; testes sintéticos cobrem WAV e OGG.
+   Não há evidência sobre todos os arquivos, duração máxima, picos de memória ou
+   caminhos dinâmicos numa sessão inteira. Obter distribuição legítima completa
+   e rodar um inventário/decode em lote é o próximo teste para essa garantia.
+4. Não há confirmação de audibilidade por um ouvinte. Default/dummy/disk são
+   evidências distintas; a captura disk comprova PCM através da fila SDL.
+5. Linux x64 foi executado. Empacotamento por RID e dependências nativas indiretas
+   precisam ser completados para distribuição entre sistemas, respeitando as
+   licenças. O teste atual publica SDL/libsndfile/Audio.dll em diretório isolado.
 
-## Próximos passos
+Esses limites não são causados por falta de renderer ou por um vínculo fictício.
+Não certificar “Complete FMOD 3.75” com base no subconjunto funcional implementado.
 
-1. Implementar SystemProperty fora do núcleo após auditar chaves reais utilizadas.
-2. Repetir a compilação integrada sem mocks e separar erro semântico, vínculo e runtime.
-3. Investigar Stream_Open e implementar stream/canal real com tokens e ownership.
-4. Ampliar comparação FMOD somente sobre comportamento efetivamente executado.
+## SCP e continuidade
 
-Não implementar renderer, Vulkan, física ou áudio fictício para remover erros.
+Fontes originais sem alteração: Main +23 alvos Include passam sintaxe e a análise
+integrada continua parando em `fullscreen_window_fix.bb:45:23`, `SystemProperty`.
+São 3/30 arquivos isolados com assembly; não há assembly integrado/execução do jogo.
+Não implementar SystemProperty ou outro subsistema dentro desta tarefa de áudio.
+
+Reprodução geral: `PATH=/var/home/marcelo/.local/share/causoryn-dotnet:$PATH bash
+scripts/verify.sh`, seguido de build/test Debug. O programa híbrido é
+`samples/Audio/playback.bb`; o probe reproduzível é `tools/probe_audio_playback.py`.
+A comparação usa `tools/compare_fmod_m15.py`; nova captura do original requer
+`tools/probe_fmod_m15.py`, SDK/DLL/Proton e as variáveis registradas nos docs.

@@ -1,0 +1,52 @@
+{
+  "source_snapshot": "/tmp/scpcb-audit-source",
+  "snapshot_mutated": false,
+  "files": {
+    "FMod.bb": "6e6bfa5ccb0abf4bf1ab57de657f0b1bb1e641d68e34d0d6dcf1bfed0e05e9f4",
+    "fmod.decls": "89146d0d32f9816604741adee92a9ca2bd2c82594bfcad41beb0699e1af96dd5",
+    "StrictLoads.bb": "984359249f5354a42540daf568e6a7ac8e1cffd91bb0d4d3a479b2e1637927b6",
+    "LoadAllSounds.bb": "367da63ef43730f5e31a4f1e78bd13f1ebdc91ffeccb64b3769fc5b6c3c15971",
+    "Menu.bb": "efc3523b8fd2883139e2fb85918e44cad78d826bccb8672b4c8543ef400e9698",
+    "MapSystem.bb": "72a4123fa648387d458efd79c4310070a5eb9e87c7c563b85d39dcf2cd8dd3bd",
+    "NPCs.bb": "0ddc21639f55034ed13d40e9cd755a384a9891080c66eda1d638f4e1705ded2c",
+    "Particles.bb": "872e7eed4895a660f720e2fb87d98928cd5664fc1a4aa70c31f2731b0703a1f1"
+  },
+  "active_fsound_call_inventory": {
+    "FSOUND_Init": ["FMod.bb:15"],
+    "FSOUND_Stream_Open": ["StrictLoads.bb:163"],
+    "FSOUND_Stream_Play": ["StrictLoads.bb:173"],
+    "FSOUND_SetVolume": ["StrictLoads.bb:183", "StrictLoads.bb:220"],
+    "FSOUND_SetPaused": ["StrictLoads.bb:184", "StrictLoads.bb:221", "StrictLoads.bb:237"],
+    "FSOUND_StopSound": ["StrictLoads.bb:201"],
+    "FSOUND_Stream_Stop": ["StrictLoads.bb:202", "Menu.bb:211"],
+    "FSOUND_Stream_Close": ["StrictLoads.bb:203"],
+    "FSOUND_IsPlaying": ["StrictLoads.bb:253"],
+    "FSOUND_SetPan": ["StrictLoads.bb:274"]
+  },
+  "declared_but_not_actively_called": ["FSOUND_GetVolume", "FSOUND_SetVolumeAbsolute", "FSOUND_Close"],
+  "native_blitz_audio_primitives_used": [
+    "LoadSound", "PlaySound", "FreeSound", "ChannelPlaying", "ChannelVolume",
+    "PauseChannel", "ResumeChannel", "StopChannel", "PlaySound2", "LoopSound2"
+  ],
+  "scp_audio_wrappers_and_helpers": [
+    "LoadSound_Strict", "LoadTempSound", "FreeSound_Strict", "PlaySound_Strict",
+    "StreamSound_Strict", "StopStream_Strict", "SetStreamVolume_Strict",
+    "SetStreamPaused_Strict", "IsStreamPlaying_Strict", "SetStreamPan_Strict",
+    "UpdateStreamSoundOrigin", "UpdateSoundOrigin", "UpdateSoundOrigin2",
+    "UpdateStreamSounds", "PauseSounds", "ResumeSounds", "KillSounds",
+    "ControlSoundVolume"
+  ],
+  "additional_music_path": "MusicPlayer.bb uses alSource* calls; it is separate from the FSOUND stream path",
+  "counts_from_prior_m14_inventory": {
+    "declared_fsound_symbols": 13,
+    "active_fsound_call_sites": 14,
+    "symbols_with_active_calls": 10
+  },
+  "stream_open_abi": {
+    "header": "FSOUND_STREAM * FSOUND_Stream_Open(const char *name_or_data, unsigned int mode, int offset, int length)",
+    "export": "_FSOUND_Stream_Open@16",
+    "scp_declaration": "FSOUND_Stream_Open%(filename$,mode%,memlength%)",
+    "scp_call": "StrictLoads.bb:163 calls FSOUND_Stream_Open(file$,custommode,0)",
+    "oracle_adapter": "four explicit arguments; probe tests offset 0 with length 0 and -1"
+  }
+}

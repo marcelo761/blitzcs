@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace Blitz3DCS.Audio;
 
 /// <summary>SDL3-backed implementation of the Blitz3D FMOD initialization entry points.</summary>
-public sealed class AudioRuntime : IDisposable
+public sealed partial class AudioRuntime : IDisposable
 {
     private readonly object _gate = new();
     private readonly ISdlAudio _sdl;
@@ -29,8 +29,9 @@ public sealed class AudioRuntime : IDisposable
     {
         lock (_gate)
         {
-            if (_disposed || mixRate <= 0 || maxSoftwareChannels < 0 || flags != 0)
+            if (_disposed || mixRate <= 0 || mixRate > 384000 || maxSoftwareChannels < 0 || maxSoftwareChannels > 4096 || flags != 0)
             {
+                _errorCode = flags != 0 ? 18 : 14;
                 LastError = flags != 0 ? "Unsupported FSOUND_Init flags; only flags=0 is currently implemented." : "Invalid initialization parameters or runtime already disposed.";
                 return 0;
             }
@@ -38,17 +39,22 @@ public sealed class AudioRuntime : IDisposable
             {
                 if (mixRate != _mixRate || maxSoftwareChannels != _maxSoftwareChannels || flags != _flags)
                 {
+                    _errorCode = 14;
                     LastError = "Audio is initialized with different settings; close it before reinitializing.";
                     return 0;
                 }
+                _errorCode = 0;
                 LastError = null;
                 return 1;
             }
 
             try
             {
+                var mixer = new AudioMixer(mixRate, maxSoftwareChannels);
+                var slotTokens = new int[maxSoftwareChannels];
                 if (!_sdl.InitAudio())
                 {
+                    _errorCode = 3;
                     LastError = _sdl.GetError();
                     return 0;
                 }
@@ -58,21 +64,28 @@ public sealed class AudioRuntime : IDisposable
                 var device = _sdl.OpenDefaultPlayback(in spec);
                 if (device == 0)
                 {
+                    _errorCode = 3;
                     LastError = _sdl.GetError();
                     _sdl.QuitAudio();
                     _ownsAudioSubsystem = false;
                     return 0;
                 }
 
+                _session++;
                 _device = device;
+                _mixer = mixer;
+                _slotTokens = slotTokens;
+                _errorCode = 0;
                 _mixRate = mixRate;
                 _maxSoftwareChannels = maxSoftwareChannels;
                 _flags = flags;
+                _errorCode = 0;
                 LastError = null;
                 return 1;
             }
             catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or MarshalDirectiveException)
             {
+                _errorCode = 3;
                 LastError = $"SDL3 audio initialization failed: {error.Message}";
                 if (_ownsAudioSubsystem)
                 {
@@ -87,8 +100,24 @@ public sealed class AudioRuntime : IDisposable
     /// <summary>Closes the playback device and releases the SDL audio subsystem.</summary>
     public void FSOUND_Close()
     {
+        Thread? thread;
+        ManualResetEventSlim? stop;
         lock (_gate)
         {
+            _session++;
+            thread = _pumpThread;
+            stop = _pumpStop;
+            _pumpStop?.Set();
+            _pumpThread = null;
+            _pumpFailure = null;
+            _pumpStop = null;
+            _playback?.Dispose();
+            _playback = null;
+            _mixer = null;
+            _assets.Clear();
+            _channels.Clear();
+            _paused.Clear();
+            _slotTokens = [];
             if (_device != 0)
             {
                 _sdl.CloseAudioDevice(_device);
@@ -97,14 +126,16 @@ public sealed class AudioRuntime : IDisposable
                 _maxSoftwareChannels = 0;
                 _flags = 0;
             }
-
             if (_ownsAudioSubsystem)
             {
                 _sdl.QuitAudio();
                 _ownsAudioSubsystem = false;
             }
             LastError = null;
+            _errorCode = 0;
         }
+        if (thread is not null && thread != Thread.CurrentThread) thread.Join();
+        stop?.Dispose();
     }
 
     public void Dispose()
@@ -112,9 +143,9 @@ public sealed class AudioRuntime : IDisposable
         lock (_gate)
         {
             if (_disposed) return;
-            FSOUND_Close();
             _disposed = true;
         }
+        FSOUND_Close();
     }
 
     private const uint SdlAudioFormatF32 = 0x8120; // SDL_AUDIO_F32 native-endian

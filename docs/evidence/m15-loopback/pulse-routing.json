@@ -1,0 +1,24 @@
+{
+  "server": "PulseAudio protocol on PipeWire 1.6.9",
+  "probe_stream": "silence-only WAV via paplay; no test tone was sent to system output",
+  "private_sink": {
+    "name": "m15_route_7e2ef907",
+    "pulse_index": 65993
+  },
+  "paplay_sink_input": {
+    "application_name": "m15_route_probe",
+    "process_id": 630550,
+    "pulse_index": 66000,
+    "target_object_property": "m15_route_7e2ef907",
+    "observed_actual_sink_index": 5959,
+    "observed_actual_sink_name": "mini_eq_sink"
+  },
+  "move_attempt": {
+    "command": ["pactl", "move-sink-input", "66000", "65993"],
+    "command_exit_code": 0,
+    "sink_index_after_command": 5959
+  },
+  "owned_sink_monitor_state_during_probe": "IDLE",
+  "default_sink_or_EQ_modified": false,
+  "other_sink_inputs_or_audio_recorded": false
+}

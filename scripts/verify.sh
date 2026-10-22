@@ -67,3 +67,7 @@ if dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- bu
 fi
 rg -q 'declared-only.bb\(2,7\).*no implementation' artifacts/audio/unbound.stderr
 python3 tools/compare_audio_profile.py
+# M15: functional playback and objective PCM from SDL's disk driver.
+# The synthetic CC0 Vorbis asset keeps this reproducible without downloading game assets.
+python3 tools/probe_audio_playback.py --asset tests/Blitz3DCS.Audio.Tests/Fixtures/generated-tone.ogg --capture-disk --report artifacts/m15-playback.json
+python3 tools/compare_fmod_m15.py --report artifacts/m15-fmod-comparison.json
