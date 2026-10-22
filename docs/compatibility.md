@@ -147,3 +147,14 @@ ElseIf, which advances the original SCP include compilation.
 [SCP M10](scp-milestone10.md) reports integrated first-error depth separately
 from static closure depth and individual-file successes. Binary literals
 remain a real next blocker; no whole-game equivalence is claimed.
+
+## Milestone 11: integrated syntax and stabilization
+
+[Binary and decimal literals](m11-language-research.md) remove both observed
+integrated parser blockers. The entire Main Include closure passes the new
+syntax-only API; binding still stops at unregistered FileSize. Standalone
+compilation remains 2/30. [The audit](scp-milestone11.md) separates contextual
+standalone array diagnostics, missing Includes and native metadata from actual
+assembly emission. No full semantic resolution, game assembly or functional
+SCP runtime is claimed. [Blitz3DCS architecture](blitz3dcs-architecture.md) is a
+proposal, with no graphics dependencies added to BlitzCS.

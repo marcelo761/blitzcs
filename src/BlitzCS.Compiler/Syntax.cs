@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 namespace BlitzCS.Compiler;
 
 internal readonly record struct SourcePosition(int Line, int Column, string? File = null);
-internal enum TokenKind { Eof, Separator, Identifier, Integer, Hex, Float, String, Abs, Sgn, Plus, Minus, Star, Slash, Mod, Power, And, Or, Xor, Not, Shl, Shr, Sar, Less, Greater, LessEqual, GreaterEqual, NotEqual, Open, Close, Equal, Percent, Hash, Dollar, Comma, Dot, OpenSquare, CloseSquare, Backslash, Bridge, CSharp, Module }
+internal enum TokenKind { Eof, Separator, Identifier, Integer, Hex, Binary, Float, String, Abs, Sgn, Plus, Minus, Star, Slash, Mod, Power, And, Or, Xor, Not, Shl, Shr, Sar, Less, Greater, LessEqual, GreaterEqual, NotEqual, Open, Close, Equal, Percent, Hash, Dollar, Comma, Dot, OpenSquare, CloseSquare, Backslash, Bridge, CSharp, Module }
 internal sealed record Token(TokenKind Kind, string Text, SourcePosition Position, string? Original = null);
 internal abstract record Expression(SourcePosition Position);
 internal sealed record Literal(object Value, SourcePosition At) : Expression(At);
@@ -123,6 +123,13 @@ internal sealed class Lexer(string source, string sourcePath)
                 continue;
             }
             var start = offset;
+            if (c == '%' && offset + 1 < source.Length && source[offset + 1] is '0' or '1')
+            {
+                Advance();
+                while (Current is '0' or '1') Advance();
+                result.Add(new(TokenKind.Binary, source[start..offset], at));
+                continue;
+            }
             if (c == '$' && offset + 1 < source.Length && Uri.IsHexDigit(source[offset + 1]))
             {
                 Advance();
@@ -597,14 +604,28 @@ internal sealed class Parser(IReadOnlyList<Token> tokens, string sourcePath, Inc
         switch (token.Kind)
         {
             case TokenKind.Integer:
-                if (!int.TryParse(token.Text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number))
-                    throw Error(token, "Integer literal is outside the supported signed 32-bit range.");
+                var number = 0;
+                foreach (var digit in token.Text.AsSpan())
+                {
+                    var value = digit - '0';
+                    if (number > (int.MaxValue - value) / 10)
+                    {
+                        number = int.MaxValue;
+                        break;
+                    }
+                    number = number * 10 + value;
+                }
                 left = new Literal(number, token.Position); break;
             case TokenKind.Hex:
                 var hexValue = 0;
                 foreach (var digit in token.Text.AsSpan(1))
                     hexValue = unchecked(hexValue * 16 + (digit is >= '0' and <= '9' ? digit - '0' : char.ToUpperInvariant(digit) - 'A' + 10));
                 left = new Literal(hexValue, token.Position); break;
+            case TokenKind.Binary:
+                var binaryValue = 0;
+                foreach (var digit in token.Text.AsSpan(1))
+                    binaryValue = unchecked(binaryValue * 2 + (digit == '1' ? 1 : 0));
+                left = new Literal(binaryValue, token.Position); break;
             case TokenKind.Float:
                 if (!float.TryParse(token.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var floating) || !float.IsFinite(floating))
                     throw Error(token, "Float literal is outside the supported single-precision range.");

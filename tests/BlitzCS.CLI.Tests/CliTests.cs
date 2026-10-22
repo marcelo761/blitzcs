@@ -55,6 +55,34 @@ public sealed class CliTests : IDisposable
         Assert.Contains("Usage:", errors.ToString());
     }
 
+    [Fact]
+    public void SyntaxCheckDoesNotClaimExternalBindingOrEmitAssembly()
+    {
+        var source = Path.Combine(directory, "engine.bb");
+        File.WriteAllText(source, "Graphics3D 800,600\n");
+        var output = new StringWriter();
+        var errors = new StringWriter();
+        Assert.Equal(0, CliApplication.Run(["check-syntax", source], output, errors));
+        Assert.Contains("were not checked", output.ToString());
+        Assert.Equal("", errors.ToString());
+        Assert.Single(Directory.GetFiles(directory));
+        Assert.Equal(1, CliApplication.Run(["build", source, "-o", Path.Combine(directory, "engine.dll")], new StringWriter(), errors));
+        Assert.Contains("Graphics3D", errors.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SyntaxCheckReportsOriginalIncludedFile()
+    {
+        var source = Path.Combine(directory, "main.bb");
+        var included = Path.Combine(directory, "broken.bb");
+        File.WriteAllText(source, "Include \"broken.bb\"\n");
+        File.WriteAllText(included, "Print (\n");
+        var errors = new StringWriter();
+        Assert.Equal(1, CliApplication.Run(["check-syntax", source], new StringWriter(), errors));
+        Assert.Contains("broken.bb(1,", errors.ToString());
+        Assert.Equal(2, Directory.GetFiles(directory).Length);
+    }
+
     [Theory]
     [InlineData("Print 2 + 3 * 4", "14")]
     [InlineData("Print (2 + 3) * 4", "20")]

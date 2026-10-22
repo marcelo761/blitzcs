@@ -103,3 +103,12 @@ A auditoria acima é o checkpoint histórico do Milestone 7. O
 snapshot: vetores fixos e Const implementados, 2/30 arquivos independentes
 compilados (Difficulty e KeyName), Main ainda bloqueado em RuntimeError na linha16.
 Nenhum fonte do jogo foi modificado e não há equivalência integral reivindicada.
+
+## Atualização Milestone 11
+
+O [relatório M11](scp-milestone11.md) substitui a cobertura atual dos checkpoints
+históricos acima: 27/30 arquivos passam na verificação sintática isolada e a
+árvore integrada de Main também passa. A compilação completa permanece em 2/30
+isolados e Main para em FileSize não registrado na linha 12. Sem resolução
+semântica completa ou assembly do jogo emitido. O inventário de nomes nativos
+é metadado para planejar implementações reais, não um runtime simulado.

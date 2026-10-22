@@ -261,6 +261,47 @@ def probe(source: Path, dotnet: str, cli: Path, timeout: float,
     return record
 
 
+def syntax_probe(source: Path, dotnet: str, cli: Path, timeout: float) -> dict[str, object]:
+    """Ask the CLI to validate syntax without claiming semantic or native binding."""
+    record: dict[str, object] = {
+        "phase": "infrastructure_error",
+        "syntax_validated": False,
+        "semantics": "not_assessed",
+        "binding": "not_assessed",
+        "native_resolution": "not_assessed",
+        "returncode": None,
+        "first_diagnostic": None,
+    }
+    command = [dotnet, str(cli), "check-syntax", str(source)]
+    started = time.monotonic()
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        record["phase"] = "infrastructure_timeout"
+        record["first_diagnostic"] = f"syntax check exceeded {timeout:g}s timeout"
+    except OSError as error:
+        record["first_diagnostic"] = f"could not start CLI: {error}"
+    else:
+        record["returncode"] = result.returncode
+        diagnostic = next((line.strip() for text in (result.stderr, result.stdout)
+                           for line in text.splitlines() if line.strip()), None)
+        if result.returncode == 0:
+            record.update({
+                "phase": "syntax_validated",
+                "syntax_validated": True,
+                "semantics": "unresolved",
+                "binding": "unresolved",
+                "native_resolution": "unresolved",
+            })
+        else:
+            record["first_diagnostic"] = diagnostic
+            record["phase"] = (
+                "syntax_error" if parse_diagnostic_location(diagnostic) is not None
+                else "infrastructure_error")
+    record["duration_ms"] = round((time.monotonic() - started) * 1000)
+    return record
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path, required=True,
@@ -278,6 +319,8 @@ def main() -> int:
     parser.add_argument("--report", type=Path, default=Path("artifacts/scp-compilation.json"))
     parser.add_argument("--timeout", type=float, default=30,
                         help="per-file timeout in seconds; timeouts are infrastructure results")
+    parser.add_argument("--check-syntax", action="store_true",
+                        help="also run syntax-only validation for each file and the integrated entry")
     args = parser.parse_args()
 
     source_dir = args.source_dir.resolve()
@@ -300,15 +343,23 @@ def main() -> int:
     natives = load_native_symbols(args.native_catalog)
     results = [probe(source, args.dotnet, cli, args.timeout, declared, natives, args.externals)
                for source in sources]
+    if args.check_syntax:
+        for source, result in zip(sources, results):
+            result["syntax_check"] = syntax_probe(source, args.dotnet, cli, args.timeout)
     integrated_entry = source_dir / args.integrated_entry
     if not integrated_entry.is_file():
         parser.error(f"integrated entry source does not exist: {integrated_entry}")
     integrated_probe = probe(integrated_entry, args.dotnet, cli, args.timeout,
                              declared, natives, args.externals)
+    if args.check_syntax:
+        integrated_probe["syntax_check"] = syntax_probe(
+            integrated_entry, args.dotnet, cli, args.timeout)
     static_closure = include_closure(integrated_entry)
     diagnostic_depth, diagnostic_paths = diagnostic_include_location(
         static_closure, integrated_probe["first_diagnostic"])
     integrated = summarize_integrated(integrated_probe, diagnostic_depth, diagnostic_paths)
+    if args.check_syntax:
+        integrated["syntax_check"] = integrated_probe["syntax_check"]
     integrated["entry"] = integrated_entry.name
     integrated["static_include_closure"] = {
         key: static_closure[key] for key in ("files", "file_count", "missing", "max_depth")

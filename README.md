@@ -171,8 +171,10 @@ Suporta atribuições primitivas, `Global`, `Local`, funções tipadas com parâ
 e `Return`, chamadas e blocos C#, identificadores case-insensitive com `%`
 opcional e tags `#`/`$`, `Print` de texto ou número, `End`, comentários `;`, separadores `:`,
 aritmética `+ - * /` e parênteses. Outras construções produzem diagnóstico.
-Literais decimais positivos limitam-se a 2147483647; a forma direta
-`-2147483648` ainda é rejeitada. `Print` sem argumento ainda não é suportado.
+Literais binários e hexadecimais preservam os 32 bits baixos. Literais decimais
+positivos saturam em 2147483647 antes do menos unário, conforme V1.118;
+`-2147483648` resulta em -2147483647. Veja a [pesquisa M11](docs/m11-language-research.md).
+`Print` sem argumento ainda não é suportado.
 
 O host desta fatia mapeia `Print` para o console para validar os valores calculados.
 No Blitz3D original, `Print` desenha texto na superfície gráfica; equivalência
@@ -183,6 +185,15 @@ reutilização de objetos ainda precisam de cobertura diferencial ampliada.
 
 Veja [arquitetura](docs/architecture.md), [pesquisa](docs/research.md) e
 [compatibilidade](docs/compatibility.md).
+
+## SCP e próximo runtime
+
+A [auditoria M11](docs/scp-milestone11.md) distingue análise sintática,
+resolução de símbolos e emissão. A árvore integrada de Main passa na sintaxe,
+mas a compilação para em `FileSize` não registrado; o assembly do jogo não foi emitido.
+`blitzcs check-syntax projeto.bb` valida somente sintaxe e Includes.
+A [arquitetura proposta do Blitz3DCS](docs/blitz3dcs-architecture.md) mantém
+o compilador independente e planeja Vulkan 1.4, sem renderer implementado.
 
 ## Trail-Code
 

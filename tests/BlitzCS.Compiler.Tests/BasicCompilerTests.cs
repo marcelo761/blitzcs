@@ -56,12 +56,22 @@ public class BasicCompilerTests
     [InlineData("Print Print")]
     [InlineData("Print End")]
     [InlineData("Print ")]
-    [InlineData("Print 2147483648")]
     [InlineData("Graphics3D 640,480")]
     [InlineData("Print 1,2")]
     [InlineData("Print \"a\" - 1")]
     public void UnsupportedSyntaxIsRejected(string source) =>
         Assert.Throws<BasicDiagnosticException>(() => BasicCompiler.Compile(source, "unsupported.bb"));
+
+    [Theory]
+    [InlineData("2147483647", 2147483647)]
+    [InlineData("2147483648", 2147483647)]
+    [InlineData("4294967295", 2147483647)]
+    [InlineData("99999999999999999999999999999999999999999999999999", 2147483647)]
+    [InlineData("-2147483648", -2147483647)]
+    [InlineData("-99999999999999999999999999999999999999999999999999", -2147483647)]
+    public void DecimalLiteralsSaturateLikeOriginalCompiler(string literal, int expected) =>
+        ArrayCompilerTests.WithAssembly($"Global result%={literal}", assembly =>
+            Assert.Equal(expected, assembly.GetType("BB")!.GetField("result")!.GetValue(null)));
 
     [Fact]
     public void ConstantDivisionByZeroIsRejectedDuringSemanticAnalysis() =>
@@ -69,6 +79,29 @@ public class BasicCompilerTests
 
     [Fact]
     public void EmptySourceIsValid() => Assert.Contains("static void Main()", BasicCompiler.Compile("; empty\n", "empty.bb"));
+
+    [Theory]
+    [InlineData("%110001", 49)]
+    [InlineData("%11111111111111111111111111111111", -1)]
+    [InlineData("%100000000000000000000000000000000", 0)]
+    [InlineData("%100000000000000000000000000000001", 1)]
+    public void BinaryLiteralsUseHistoricalBitAccumulation(string literal, int expected) =>
+        ArrayCompilerTests.WithAssembly($"Global result%={literal}", assembly =>
+            Assert.Equal(expected, assembly.GetType("BB")!.GetField("result")!.GetValue(null)));
+
+    [Fact]
+    public void ValidateSyntaxAcceptsParsedSourceWithoutSemanticAnalysis()
+    {
+        BasicCompiler.ValidateSyntax("Print missingFunction(1)", "syntax.bb");
+    }
+
+    [Fact]
+    public void ValidateSyntaxReportsParserErrors()
+    {
+        var error = Assert.Throws<BasicDiagnosticException>(() => BasicCompiler.ValidateSyntax("Print (1+)", "broken.bb"));
+
+        Assert.Contains("Expected an expression", error.Message);
+    }
 
     [Fact]
     public void SourcePathAndBackslashesAreEscaped()

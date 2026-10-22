@@ -5,6 +5,15 @@ public static class BasicCompiler
 {
     public static string Compile(string source, string sourcePath) => Compile(source, sourcePath, null);
 
+    /// <summary>Checks lexical and parser syntax only; successful validation does not imply semantic validity.</summary>
+    public static void ValidateSyntax(string source, string sourcePath)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        var tokens = new Lexer(source, sourcePath).Tokenize();
+        _ = new Parser(tokens, sourcePath, new IncludeResolver(sourcePath)).Parse();
+    }
+
     public static string Compile(string source, string sourcePath, ExternalFunctionRegistry? externals)
     {
         ArgumentNullException.ThrowIfNull(source);

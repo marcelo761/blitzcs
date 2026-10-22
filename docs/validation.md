@@ -659,3 +659,14 @@ terminou com **status0**, incluindo os79 locais, exemplos e medição de memóri
 foi registrado; a camada opcional de resumos deep não foi executada e a
 classificação de `.bb` pelo indexador não é prova da sintaxe da linguagem.
 Xvfb/processos nativos da tarefa foram encerrados.
+
+## Milestone 11 — checkpoint de estabilização
+
+Em 22/10/2026, `PATH=/var/home/marcelo/.local/share/causoryn-dotnet:$PATH bash scripts/verify.sh`:
+Release sem avisos/erros; 523 testes .NET, 37 Python e 81 fixtures locais aprovados.
+Captura original nova para todas as 81 fixtures: 80 coincidências, uma divergência
+conhecida de código de saída em upper-bound-error; zero erros de adaptador.
+[Evidências persistidas](evidence/m11-validation.json) e
+[relatório SCP](scp-milestone11.md) distinguem sintaxe, resolução e emissão.
+Um teste de coleta em Debug falha também na baseline M10; Release passa,
+sem alteração de runtime ou relaxamento da asserção. Consulte a limitação no relatório.

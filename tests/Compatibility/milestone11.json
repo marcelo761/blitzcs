@@ -1,0 +1,17 @@
+{
+  "description": "Binary literal values captured from genuine Blitz3D V1.118 via Proton; see docs/scp-milestone11.md.",
+  "fixtures": [
+    {
+      "name": "binary-values",
+      "source": "fixtures/m11/binary-values.bb",
+      "expected_phase": "run",
+      "expected_stdout": "49\n42\n0\n-1\n0\n1\n-5\n5.0\n5\n"
+    },
+    {
+      "name": "decimal-overflow",
+      "source": "fixtures/m11/decimal-overflow.bb",
+      "expected_phase": "run",
+      "expected_stdout": "2147483647\n2147483647\n2147483647\n2147483647\n-2147483647\n-2147483647\n"
+    }
+  ]
+}

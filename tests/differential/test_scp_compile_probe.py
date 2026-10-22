@@ -13,10 +13,94 @@ from tools.scp_compile_probe import (
     parse_diagnostic_location,
     probe,
     summarize_integrated,
+    syntax_probe,
 )
 
 
 class ScpCompileProbeClassificationTests(unittest.TestCase):
+    def test_syntax_probe_records_validation_without_claiming_semantic_binding(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "input.bb"
+            cli = root / "BlitzCS.CLI.dll"
+            source.write_text("Print MissingNative()\n", encoding="utf-8")
+            cli.touch()
+
+            with patch("tools.scp_compile_probe.subprocess.run", return_value=SimpleNamespace(
+                    returncode=0,
+                    stdout="Syntax validated; semantics, external binding and assembly emission were not checked.\n",
+                    stderr="")) as run:
+                result = syntax_probe(source, "dotnet", cli, 1)
+
+        self.assertEqual("syntax_validated", result["phase"])
+        self.assertTrue(result["syntax_validated"])
+        self.assertEqual("unresolved", result["semantics"])
+        self.assertEqual("unresolved", result["binding"])
+        self.assertEqual("unresolved", result["native_resolution"])
+        self.assertIsNone(result["first_diagnostic"])
+        self.assertEqual(["dotnet", str(cli), "check-syntax", str(source)], run.call_args.args[0])
+
+    def test_syntax_probe_keeps_syntax_diagnostic_separate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "input.bb"
+            cli = root / "BlitzCS.CLI.dll"
+            source.write_text("Print (\n", encoding="utf-8")
+            cli.touch()
+
+            with patch("tools.scp_compile_probe.subprocess.run", return_value=SimpleNamespace(
+                    returncode=1, stdout="", stderr="input.bb(1,7): Expected expression")):
+                result = syntax_probe(source, "dotnet", cli, 1)
+
+        self.assertEqual("syntax_error", result["phase"])
+        self.assertFalse(result["syntax_validated"])
+        self.assertEqual("not_assessed", result["semantics"])
+        self.assertEqual("input.bb(1,7): Expected expression", result["first_diagnostic"])
+
+    def test_syntax_probe_reports_timeouts_as_infrastructure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "input.bb"
+            cli = root / "BlitzCS.CLI.dll"
+            source.touch()
+            cli.touch()
+
+            with patch("tools.scp_compile_probe.subprocess.run", side_effect=__import__(
+                    "subprocess").TimeoutExpired("check-syntax", 1)):
+                result = syntax_probe(source, "dotnet", cli, 1)
+
+        self.assertEqual("infrastructure_timeout", result["phase"])
+        self.assertFalse(result["syntax_validated"])
+
+    def test_syntax_probe_keeps_host_failure_out_of_syntax_results(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "input.bb"
+            cli = root / "BlitzCS.CLI.dll"
+            source.touch()
+            cli.touch()
+
+            with patch("tools.scp_compile_probe.subprocess.run", return_value=SimpleNamespace(
+                    returncode=1, stdout="", stderr="hostfxr failed to start")):
+                result = syntax_probe(source, "dotnet", cli, 1)
+
+        self.assertEqual("infrastructure_error", result["phase"])
+        self.assertFalse(result["syntax_validated"])
+
+    def test_syntax_probe_keeps_missing_source_out_of_syntax_results(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "missing.bb"
+            cli = root / "BlitzCS.CLI.dll"
+            cli.touch()
+
+            with patch("tools.scp_compile_probe.subprocess.run", return_value=SimpleNamespace(
+                    returncode=1, stdout="", stderr="Could not find file 'missing.bb'.")):
+                result = syntax_probe(source, "dotnet", cli, 1)
+
+        self.assertEqual("infrastructure_error", result["phase"])
+        self.assertFalse(result["syntax_validated"])
+
     def test_extracts_first_diagnostic_file_and_line(self):
         self.assertEqual(
             {"file": "StrictLoads.bb", "line": 59, "column": 12},

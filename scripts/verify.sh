@@ -38,6 +38,7 @@ python3 tools/differential.py --manifest tests/Compatibility/handles.json --repo
 python3 tools/differential.py --manifest tests/Compatibility/numeric.json --report artifacts/m10-numeric-local.json
 python3 tools/differential.py --manifest tests/Compatibility/controls.json --report artifacts/m10-controls-local.json
 python3 tools/differential.py --manifest tests/Compatibility/data.json --report artifacts/m10-data-local.json
+python3 tools/differential.py --manifest tests/Compatibility/milestone11.json --report artifacts/m11-local-differential.json
 dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Hybrid/Handles/main.bb -o artifacts/hybrid-handles.dll
 dotnet artifacts/hybrid-handles.dll
 dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Diagnostics/handle-memory.bb -o artifacts/handle-memory.dll
