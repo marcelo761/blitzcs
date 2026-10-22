@@ -2,7 +2,9 @@
 
 BlitzCS is an experimental, general-purpose BlitzBasic language compiler and interoperability infrastructure for .NET 10. It compiles BASIC and embedded C# into one assembly through Roslyn, with typed calls and shared state in both directions.
 
-Created and led by **Marcelo Buratti de Freitas Filho**, the project explores how legacy BASIC programs can move to a managed runtime while integrating modern C# and native libraries. Compatibility research uses the original Blitz3D compiler and real legacy projects, including SCP: Containment Breach. These are reference targets, not a restriction on what BlitzCS can be used to build.
+AI coding agents are used to support implementation, research, testing, and code review. Architectural decisions, project direction, and technical priorities are established by the project creator.
+
+Created and led by **Marcelo Buratti de Freitas Filho**, BlitzCS explores how legacy BASIC programs can move to a managed runtime while integrating modern C# and native libraries. Compatibility research uses the original Blitz3D compiler and real legacy projects, including SCP: Containment Breach. These are reference targets, not a restriction on what BlitzCS can be used to build.
 
 BlitzCS is an independent project. It is not an official Blitz Research, Microsoft, FMOD, or SCP project.
 
