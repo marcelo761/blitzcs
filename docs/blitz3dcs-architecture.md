@@ -1,5 +1,10 @@
 # Blitz3DCS initial architecture
 
+> Sequencing update (M17): this is the historical M11 architecture proposal.
+> Current development prioritizes the original Blitz3D API and unchanged SCP
+> compilation/execution. Modern backends and rendering features are deferred
+> until that legacy baseline is demonstrated. See the [M17 report](legacy-compatibility-m17.md).
+
 **Status:** proposed architecture; renderer and graphics runtime are not implemented.
 
 M12 adds a real opt-in filesystem/system/string query module in

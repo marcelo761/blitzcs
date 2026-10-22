@@ -1,0 +1,57 @@
+{
+  "baseline_commit": "d5aee2c5701379a8ac5ef185acf58f8dd2c7042b",
+  "builds": {
+    "Release": {
+      "passed_tests": 662,
+      "failed": 0,
+      "skipped": 0,
+      "warnings": 0,
+      "errors": 0,
+      "log_sha256": "c13545f08e87acc89129ca0182fb264da7bf04fe716e60e57e0cd5bbbc499378"
+    },
+    "Debug": {
+      "passed_tests": 662,
+      "failed": 0,
+      "skipped": 0,
+      "warnings": 0,
+      "errors": 0,
+      "log_sha256": "3bb787e0266a87bfbe4e019089d03a44c8302ee4c0424fef6460cfd7313fbd27"
+    }
+  },
+  "python_tests": 53,
+  "local_fixtures": 89,
+  "previous_differential": {
+    "match": 85,
+    "known_divergence": 1,
+    "adapter_error": 0,
+    "new_original_runs": 0
+  },
+  "new_differential": {
+    "match": 3,
+    "mismatch": 0,
+    "comparison_scope": "two compile rejections plus release DebugLog output; no managed graphics lifecycle comparison"
+  },
+  "fresh_original_programs": 5,
+  "graphics_original_only_programs": 2,
+  "sources_unchanged": true,
+  "integrated_checks": {
+    "syntax": {
+      "exit_code": 0,
+      "diagnostic": "Syntax validated; semantics, external binding and assembly emission were not checked."
+    },
+    "semantics": {
+      "exit_code": 1,
+      "diagnostic": "fullscreen_window_fix.bb(70,2): Unknown BASIC function or external symbol 'api_getclientrect'."
+    },
+    "build": {
+      "exit_code": 1,
+      "diagnostic": "fullscreen_window_fix.bb(70,2): Unknown BASIC function or external symbol 'api_getclientrect'."
+    }
+  },
+  "integrated_assembly_emitted": false,
+  "game_executed": false,
+  "executable_graphics_backend": false,
+  "release_verification": "Full existing verify.sh pipeline plus M17 graphics/debuginfo checks ran successfully. Newly appended fixture/comparison commands were executed separately; unchanged full suite was not rerun.",
+  "syntax_include_targets": 23,
+  "python_log_sha256": "fd6365b0ac999e5dc9d70b942a611c3d7af14e9ff1e56165f8852cc999de6260"
+}

@@ -99,7 +99,7 @@ These are tested capabilities, not a claim of complete BlitzBasic compatibility.
 
 ## External and native libraries
 
-Typed catalogs separate three stages: **semantic declaration**, **binding to an implementation**, and **runtime execution**. A declaration can be checked before a library runs; emitting a used declaration without an implementation fails explicitly. Registered managed functions compile to direct static calls.
+Typed catalogs separate three stages: **semantic declaration**, **binding to an implementation**, and **runtime execution**. A declaration can be checked before a library runs; emitting a used declaration without an implementation fails explicitly. Registered managed functions compile to direct static calls. External commands may return `void`; typed trailing defaults can be declared without binding a method. `DebugLog` is implemented through host-provided .NET trace listeners. See the [external signature contract](docs/external-signatures-m14.md).
 
 C/C++ integration uses explicit bindings, ABI contracts and resource ownership. It does not make arbitrary BASIC integers into native pointers. The [native sample](samples/NativeInterop) and its [contract](docs/native-interop-m13.md) exercise integers, floats, UTF-8 strings, library errors and resource release. A Win32 FMOD DLL cannot be loaded into the verified Linux x64 .NET process; the original FMOD is used separately under Proton as a compatibility reference.
 
@@ -118,14 +118,14 @@ bash scripts/verify.sh
 
 The complete verification script additionally needs **Python 3**, a **C compiler available as `cc`**, **SDL3** and **libsndfile**. On the verified Linux host, the native libraries are `libSDL3.so.0` and `libsndfile.so.1`. Install equivalent runtime packages from your distribution. The script exercises default, dummy and disk audio paths; a headless machine may lack a usable default device. Basic compiler examples do not require these audio libraries.
 
-At the M16 checkpoint (`216c025`, `blitzcs-m16-checkpoint`):
+At the M17 validation checkpoint (see the [M17 report](docs/legacy-compatibility-m17.md)):
 
 | Verification | Recorded result |
 | --- | --- |
-| .NET tests, Release and Debug | 611 passing in each configuration |
-| Python harness tests | 40 passing |
-| Local language fixtures | 86 passing |
-| Differential language comparisons | 85 of 86 match captured original results |
+| .NET tests, Release and Debug | 662 passing in each configuration |
+| Python harness tests | 53 passing |
+| Local language fixtures | 89 passing |
+| Differential language comparisons | Previous 85/86 preserved; three new bounded cases match (88/89 combined) |
 
 The publication audit reruns the available suite; see [release validation and audit](docs/public-release-audit.md) for its actual results. Differential replay reuses recorded genuine original captures where stated; it is not a new run of the original compiler for every fixture. Local expectations alone do not prove equivalence. The known `upper-bound-error` difference retains useful nonzero error termination in BlitzCS. See [differential validation](docs/differential.md) and [M16 evidence](docs/evidence/m16-validation.json).
 
@@ -133,7 +133,7 @@ Audio evidence includes non-silent PCM measured after SDL's disk output and play
 
 ## Current limitations and SCP status
 
-SCP: Containment Breach is a real-world compatibility case study. Its original sources and assets are **not distributed here**. The M16 audit records integrated syntax validation of `Main.bb` and its Include tree, with **3 of 30 files compiling independently**. Integrated semantic compilation stops at **`fullscreen_window_fix.bb:47:8`, `Windowed3D`**. The game assembly has not been emitted and the game does not run on BlitzCS. See [latest SCP audit](docs/system-runtime-m16.md).
+SCP: Containment Breach is a real-world compatibility case study. Its original sources and assets are **not distributed here**. The M17 audit records integrated syntax validation of `Main.bb` and its Include tree, with **3 of 30 files compiling independently**. With the SCP contract catalog, integrated semantic compilation stops at **`fullscreen_window_fix.bb:70:2`, `api_GetClientRect`**, whose pointer argument needs an explicit bank/native bridge. Graphics signatures are declared but remain unbound. The game assembly has not been emitted and the game does not run on BlitzCS. See [latest SCP audit](docs/legacy-compatibility-m17.md).
 
 There is no renderer, Vulkan backend, physics implementation or editor. Some native commands and external dependencies remain unavailable. `SystemProperty("AppHWND")` reports an unsupported capability without a real window host. Direct array/object interoperability is outside the public primitive `BB.` bridge. Floating-point boundaries, encodings and other historical corner cases still need broader differential coverage. `Print` targets the console here, while original Blitz3D draws to a graphical surface.
 
@@ -141,8 +141,8 @@ There is no renderer, Vulkan backend, physics implementation or editor. Some nat
 
 1. Expand differential coverage and resolve remaining language and runtime gaps without changing original application sources.
 2. Continue real external runtime implementations, dependency packaging and platform validation.
-3. Develop Blitz3DCS independently, starting with a reviewed graphical vertical slice. Vulkan 1.4 is planned; Direct3D 12 and Metal are future possibilities.
-4. Evaluate modern graphics, physics and other engine facilities in Blitz3DCS, without making them compiler dependencies.
+3. Establish a faithful Blitz3DCS legacy runtime baseline: compile the unchanged SCP sources, then validate functional game execution.
+4. Consider graphics modernization only after that compatibility baseline is demonstrated. No modern renderer is part of the current milestone.
 
 These are future directions, not implemented features or delivery guarantees.
 

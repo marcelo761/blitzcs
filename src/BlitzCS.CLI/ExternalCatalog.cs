@@ -53,10 +53,22 @@ internal static class ExternalCatalog
                 ? returnTypeElement.GetString() switch
                 {
                     "Integer" => ExternalValueType.Integer, "Float" => ExternalValueType.Float, "String" => ExternalValueType.String,
-                    _ => throw new ArgumentException("External return types must be Integer, Float or String.")
+                    "Void" => ExternalValueType.Void,
+                    _ => throw new ArgumentException("External return types must be Integer, Float, String or Void.")
                 }
                 : function?.Signature.ReturnType ?? throw new ArgumentException("External declarations without a method require a returnType.");
-            var signature = new ExternalFunctionSignature(Read(item, "name"), returnType, parameters);
+            object[]? defaults = null;
+            if (item.TryGetProperty("defaults", out var defaultsElement))
+            {
+                if (defaultsElement.ValueKind != JsonValueKind.Array)
+                    throw new ArgumentException("External catalog 'defaults' must be an array of trailing typed constants.");
+                var values = defaultsElement.EnumerateArray().ToArray();
+                if (values.Length > parameters.Length)
+                    throw new ArgumentException("External catalog 'defaults' cannot exceed the parameter count.");
+                defaults = values.Select((value, index) => ReadDefault(value,
+                    parameters[parameters.Length - values.Length + index])).ToArray();
+            }
+            var signature = new ExternalFunctionSignature(Read(item, "name"), returnType, parameters, defaults);
             if (function is not null && (function.Signature.ReturnType != signature.ReturnType || !function.Signature.ParameterTypes.SequenceEqual(signature.ParameterTypes)))
                 throw new ArgumentException($"External method '{function.Name}' does not match its declared signature.");
             signatures.Add(signature);
@@ -66,6 +78,14 @@ internal static class ExternalCatalog
         }
         finally { context.Dispose(); }
     }
+
+    private static object ReadDefault(JsonElement value, ExternalValueType type) => type switch
+    {
+        ExternalValueType.Integer when value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var integer) => integer,
+        ExternalValueType.Float when value.ValueKind == JsonValueKind.Number && value.TryGetSingle(out var single) && float.IsFinite(single) => single,
+        ExternalValueType.String when value.ValueKind == JsonValueKind.String => value.GetString()!,
+        _ => throw new ArgumentException("External catalog 'defaults' must match trailing parameter types: Int32, finite Single or String.")
+    };
 
     private static Type ToSystemType(ExternalValueType type) => type switch
     {

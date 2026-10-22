@@ -1,0 +1,44 @@
+{
+  "runtime": "original Blitz3D Win32 under Wine/Proton with Xvfb",
+  "source_sha256": "841fc6e13f5cff39eaf4fd6ab48192d765db963b40663bb41ceb4c1cb31a4d8e",
+  "capture": {
+    "phase": "run",
+    "stdout": "windowed3d=1\nwindowed3d-repeat=1\ngraphics3d-size=160x120\ngraphics3d-backbuffer=1\nflip-zero-completed=1\nflip-default-completed=1\nendgraphics-size=400x300\nendgraphics-frontbuffer=1\nwindowed3d-after=1\n",
+    "exit_code": 0
+  },
+  "reference_source_commit": "6beb288cb5962393684a59a4a44ac11524894939",
+  "compiler_sha256": "bb9ec2c0f8311f82a76b424bdf03cf1d736911d2083d2a575d6b7ad0311f063a",
+  "runtime_sha256": "ba120a4a0f15f2ac48e1e86f6465137bd480d0b4a288cae2534a6fe0ecad1a4e",
+  "coverage_limits": [
+    "Capability and mode 2 lifecycle only; other modes source-inspected.",
+    "Flip completion observed; pixel presentation and vsync timing not measured.",
+    "Capability value is specific to the observed Wine/Xvfb environment."
+  ],
+  "cases": {
+    "windowed3d-argument": {
+      "phase": "compile_error",
+      "diagnostic": "Too many parameters",
+      "exit_code": 255,
+      "source_sha256": "8ddc17e38552d6ea17dcd0d752fb381750b94eb4567c823397e961f4cf6fbdd5"
+    },
+    "debuglog-expression": {
+      "phase": "compile_error",
+      "diagnostic": "Illegal type conversion",
+      "exit_code": 255,
+      "source_sha256": "1146a53be010557184413b48560ff37073451cefe20e354bc56ff664198714eb"
+    },
+    "graphics3d-invalid-mode": {
+      "phase": "runtime_error",
+      "diagnostic": "Illegal Graphics3D mode",
+      "exit_code": 0,
+      "stdout": "before-invalid-mode\n",
+      "source_sha256": "f7eddcec287d9d18479805a5100e6698c8f48e13c7b0c1c18b2b09bceffc98af"
+    },
+    "debuglog-release": {
+      "phase": "run",
+      "exit_code": 0,
+      "stdout": "before-debuglog\nafter-debuglog\n",
+      "source_sha256": "2a3b80a1f43ae95f796a1fc934e62b9a6700555b9bde7ff12d875872a6f9e65c"
+    }
+  }
+}

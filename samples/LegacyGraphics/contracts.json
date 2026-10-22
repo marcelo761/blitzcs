@@ -1,0 +1,76 @@
+{
+  "functions": [
+    {
+      "name": "Windowed3D",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "CountGfxModes3D",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "Graphics3D",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "EndGraphics",
+      "returnType": "Void",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "Flip",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [
+        1
+      ]
+    },
+    {
+      "name": "GraphicsWidth",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "GraphicsHeight",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "GraphicsBuffer",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "BackBuffer",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "FrontBuffer",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    }
+  ]
+}

@@ -1,0 +1,795 @@
+{
+  "declarations": [
+    {
+      "name": "Windowed3D",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "CountGfxModes3D",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "api_SetWindowLong",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "SCP .decls (no ABI binding)"
+    },
+    {
+      "name": "api_SetWindowPos",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "SCP .decls (no ABI binding)"
+    },
+    {
+      "name": "GfxModeWidth",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "GfxModeHeight",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "BackBuffer",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "SetBuffer",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "MilliSecs",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "SeedRnd",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "AppTitle",
+      "returnType": "Void",
+      "parameters": [
+        "String",
+        "String"
+      ],
+      "defaults": [
+        ""
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "GraphicsWidth",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "GraphicsHeight",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "ImageWidth",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "ImageHeight",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "LoadAnimImage",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "MaskImage",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "CreateImage",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        1
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "Collisions",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "ResizeImage",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "RotateImage",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "HandleImage",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "FlushKeys",
+      "returnType": "Void",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "FlushMouse",
+      "returnType": "Void",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "Cls",
+      "returnType": "Void",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "Delay",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "MouseHit",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "MouseDown",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "Rand",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        1
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "EntityX",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "Rnd",
+      "returnType": "Float",
+      "parameters": [
+        "Float",
+        "Float"
+      ],
+      "defaults": [
+        0.0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "EntityZ",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "PositionEntity",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float",
+        "Float",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "CameraFogRange",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "CameraFogColor",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float",
+        "Float"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "CameraFogMode",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "CameraRange",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "CameraClsColor",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float",
+        "Float"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "AmbientLight",
+      "returnType": "Void",
+      "parameters": [
+        "Float",
+        "Float",
+        "Float"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "EntityY",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "UpdateWorld",
+      "returnType": "Void",
+      "parameters": [
+        "Float"
+      ],
+      "defaults": [
+        1.0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "Sin",
+      "returnType": "Float",
+      "parameters": [
+        "Float"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "Instr",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "String",
+        "Integer"
+      ],
+      "defaults": [
+        1
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "EntityAlpha",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "ShowEntity",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "HideEntity",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "EntityColor",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float",
+        "Float"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "KeyHit",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "MouseXSpeed",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "MouseYSpeed",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "MouseZSpeed",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "Color",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "Left",
+      "returnType": "String",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "TextureBuffer",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "ClsColor",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "CopyRect",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0,
+        0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "EntityBlend",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "EntityFX",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "Flip",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [
+        1
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "LoadImage",
+      "returnType": "Integer",
+      "parameters": [
+        "String"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "EntityDistance",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "DeltaYaw",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "LoadMesh",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "LoadAnimMesh",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "LoadTexture",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "defaults": [
+        1
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "LoadBrush",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer",
+        "Float",
+        "Float"
+      ],
+      "defaults": [
+        1,
+        1.0,
+        1.0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "LoadFont",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        12,
+        0,
+        0,
+        0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "CreateBank",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ],
+      "status": "declaration_only",
+      "contract_origin": "original Blitz3D rtSym"
+    },
+    {
+      "name": "api_GetDesktopWindow",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": [],
+      "status": "declaration_only",
+      "contract_origin": "SCP .decls (no ABI binding)"
+    }
+  ],
+  "executable_graphics_bindings": 0,
+  "explicitly_missing_pointer_bridge": "api_GetClientRect(hwnd%, lpRect*)"
+}

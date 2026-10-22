@@ -86,3 +86,22 @@ if dotnet artifacts/system-property-unsupported.dll > artifacts/system-property-
 fi
 rg -q 'PlatformNotSupportedException.*AppHWND' artifacts/system-property-unsupported.stderr
 rg -q 'system-property-unsupported.bb:line 1' artifacts/system-property-unsupported.stderr
+mkdir -p artifacts/m17
+# M17: typed graphics contracts are declarations, not executable engine bindings.
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- check-semantics samples/LegacyGraphics/declared-only.bb --externals samples/LegacyGraphics/contracts.json
+if dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/LegacyGraphics/declared-only.bb -o artifacts/m17/graphics-unbound.dll --externals samples/LegacyGraphics/contracts.json > artifacts/m17/graphics-unbound.stdout 2> artifacts/m17/graphics-unbound.stderr; then
+  echo "Graphics declarations unexpectedly emitted an assembly without a runtime" >&2
+  exit 1
+fi
+rg -q 'declared-only.bb\(3,7\).*no implementation' artifacts/m17/graphics-unbound.stderr
+test ! -f artifacts/m17/graphics-unbound.dll
+# DebugLog is a real void command, with an explicitly attached diagnostic sink.
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Native/debug-log.bb -o artifacts/m17/debug-log.dll --externals samples/Native/blitz3dcs.json
+dotnet artifacts/m17/debug-log.dll > artifacts/m17/debug-log.stdout 2> artifacts/m17/debug-log.stderr
+python3 - <<'PY'
+from pathlib import Path
+assert Path('artifacts/m17/debug-log.stdout').read_text().splitlines() == ['2']
+assert Path('artifacts/m17/debug-log.stderr').read_text().splitlines() == ['from C#', '[from BASIC]']
+PY
+python3 tools/differential.py --manifest tests/Compatibility/milestone17.json --externals samples/Audio/scp.json --report artifacts/m17/local-differential.json
+python3 tools/compare_m17_evidence.py

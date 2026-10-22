@@ -485,6 +485,16 @@
         "String"
       ],
       "returnType": "String"
+    },
+    {
+      "name": "DebugLog",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyDiagnostics",
+      "method": "DebugLog",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Void"
     }
   ]
 }

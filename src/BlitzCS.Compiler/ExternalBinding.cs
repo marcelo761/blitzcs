@@ -14,10 +14,20 @@ internal sealed partial class SemanticAnalysis
         for (var i = 0; i < converted.Length; i++)
         {
             var parameterType = ExternalFunction.ToInternal(signature.ParameterTypes[i]);
-            var bindingHasDefault = externals.TryGetBinding(call.Name, out var binding) && i < binding.Parameters.Count
-                ? binding.Parameters[i].Default : null;
+            IrExpression? defaultValue = null;
+            var defaultIndex = i - (signature.ParameterTypes.Count - signature.DefaultValues.Count);
+            if (signature.HasDeclaredDefaults && defaultIndex >= 0)
+                defaultValue = signature.DefaultValues[defaultIndex] switch
+                {
+                    int value => new IrInteger(value),
+                    float value => new IrFloat(value),
+                    string value => new IrString(value),
+                    _ => throw new InvalidOperationException("Invalid external default.")
+                };
+            else if (!signature.HasDeclaredDefaults && externals.TryGetBinding(call.Name, out var binding))
+                defaultValue = binding.Parameters[i].Default;
             converted[i] = i < arguments.Count ? Convert(arguments[i], parameterType, call.Position)
-                : bindingHasDefault ?? throw Error(call.Position, $"External function '{call.Name}' requires argument {i + 1} ({parameterType}).");
+                : defaultValue ?? throw Error(call.Position, $"External function '{call.Name}' requires argument {i + 1} ({parameterType}).");
         }
         var target = externals.TryGetBinding(call.Name, out var implementation) ? implementation.Target : string.Empty;
         if (implementation is null)
