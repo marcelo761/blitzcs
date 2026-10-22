@@ -1,0 +1,66 @@
+{
+  "milestone": 16,
+  "baseline": "79c89ab",
+  "date": "2026-10-22",
+  "release": {
+    "passed": 611,
+    "failed": 0,
+    "skipped": 0,
+    "suites": {
+      "BlitzCS.NativeInterop.Tests.dll": 11,
+      "Blitz3DCS.Audio.Tests.dll": 44,
+      "BlitzCS.Compiler.Tests.dll": 284,
+      "BlitzCS.CLI.Tests.dll": 272
+    },
+    "warnings": 0,
+    "errors": 0,
+    "log_sha256": "69455f6b323b035c62e56e86039aa0ba026a512703628036cf5a3e4994187ac9"
+  },
+  "debug": {
+    "passed": 611,
+    "failed": 0,
+    "skipped": 0,
+    "suites": {
+      "Blitz3DCS.Audio.Tests.dll": 44,
+      "BlitzCS.NativeInterop.Tests.dll": 11,
+      "BlitzCS.Compiler.Tests.dll": 284,
+      "BlitzCS.CLI.Tests.dll": 272
+    },
+    "warnings": 0,
+    "errors": 0,
+    "log_sha256": "f574fb6387311bce4da458fe9e84727784ee682c2a6bbae25504cbde8f0f1fb0"
+  },
+  "python_passed": 40,
+  "local_fixtures_passed": 86,
+  "language_differential": {
+    "match": 85,
+    "mismatch": 1,
+    "fresh_original": 0,
+    "reused_original": 86,
+    "evidence": "m16-regression-differential.json"
+  },
+  "new_system_property_original": {
+    "genuine_Proton_capture": true,
+    "matched_shared_observations": 4,
+    "native_window_unavailable_in_dotnet": true,
+    "evidence": "m16-comparison.json"
+  },
+  "verification": {
+    "existing_verify_pipeline_exit": 0,
+    "new_M16_verify_fragment_exit": 0,
+    "note": "The M16 script section was added after the existing verify run finished, then its exact commands were executed separately."
+  },
+  "scp": {
+    "compiled_isolated": 3,
+    "total": 30,
+    "source_hashes_unchanged": 30,
+    "first_error": "fullscreen_window_fix.bb:47:8 Windowed3D",
+    "game_assembly_emitted": false,
+    "game_executed": false
+  },
+  "limits": [
+    "AppHWND and other native handles explicitly unsupported without engine host",
+    "Windows-only directory branches not executed on Linux",
+    "CPU/OS report actual host, intentionally differ from historical fixed/table values"
+  ]
+}

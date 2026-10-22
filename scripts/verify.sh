@@ -71,3 +71,18 @@ python3 tools/compare_audio_profile.py
 # The synthetic CC0 Vorbis asset keeps this reproducible without downloading game assets.
 python3 tools/probe_audio_playback.py --asset tests/Blitz3DCS.Audio.Tests/Fixtures/generated-tone.ogg --capture-disk --report artifacts/m15-playback.json
 python3 tools/compare_fmod_m15.py --report artifacts/m15-fmod-comparison.json
+# M16: actual host query and explicit missing-window capability, never a fabricated HWND.
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Native/system-property.bb -o artifacts/system-property.dll --externals samples/Native/blitz3dcs.json
+dotnet artifacts/system-property.dll > artifacts/system-property.stdout
+python3 - <<'PY'
+from pathlib import Path
+assert Path('artifacts/system-property.stdout').read_text().splitlines() == [
+    'unknown-empty=1', 'cpu-case-insensitive=1', 'tempdir-nonempty=1', 'tempdir-trailing-separator=1']
+PY
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Native/system-property-unsupported.bb -o artifacts/system-property-unsupported.dll --externals samples/Native/blitz3dcs.json
+if dotnet artifacts/system-property-unsupported.dll > artifacts/system-property-unsupported.stdout 2> artifacts/system-property-unsupported.stderr; then
+  echo "SystemProperty unexpectedly fabricated a native window handle" >&2
+  exit 1
+fi
+rg -q 'PlatformNotSupportedException.*AppHWND' artifacts/system-property-unsupported.stderr
+rg -q 'system-property-unsupported.bb:line 1' artifacts/system-property-unsupported.stderr

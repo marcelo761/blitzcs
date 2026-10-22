@@ -1,0 +1,48 @@
+{
+  "source": "docs/evidence/m16-original/probe.bb",
+  "source_sha256": "b03005d259c83308d80642bf9fdc8a2f78c62a02d50423cb49b6a70819c90938",
+  "project_sources_sha256": {
+    "probe.bb": "b03005d259c83308d80642bf9fdc8a2f78c62a02d50423cb49b6a70819c90938"
+  },
+  "processes": [
+    {
+      "stage": "compile",
+      "command": [
+        "/home/marcelo/.local/share/Steam/steamapps/common/Proton 11.0/files/bin/wine",
+        "/tmp/blitz-original/v1.118/Blitz3D-V1.118/bin/blitzcc.exe",
+        "+q",
+        "-d",
+        "-o",
+        "Z:\\tmp\\blitz-original-capture-rwsln70z\\program.exe",
+        "Z:\\tmp\\blitz-original-capture-rwsln70z\\input.bb"
+      ],
+      "cwd": "/run/media/system/SSD_SATA/BlitzCS/docs/evidence/m16-original",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "ntsync: up and running.\n"
+    },
+    {
+      "stage": "run",
+      "command": [
+        "/home/marcelo/.local/share/Steam/steamapps/common/Proton 11.0/files/bin/wine",
+        "/tmp/blitz-original-capture-rwsln70z/program.exe"
+      ],
+      "cwd": "/run/media/system/SSD_SATA/BlitzCS/docs/evidence/m16-original",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "ntsync: up and running.\n"
+    }
+  ],
+  "instrumented_stdout_file": {
+    "exists": true,
+    "size_bytes": 318,
+    "text": "unknown-empty=1\r\ncpu-case-insensitive=1\r\ntempdir-nonempty=1\r\ntempdir-trailing-separator=1\r\napphwnd-nonzero=1\r\ncpu=Intel\r\nos=\r\nappdir=Z:\\tmp\\blitz-original-capture-rwsln70z\\\r\napphwnd=131160\r\napphinstance=268435456\r\nwindowsdir=C:\\windows\\\r\nsystemdir=C:\\windows\\system32\\\r\ntempdir=C:\\users\\steamuser\\AppData\\Local\\Temp\\\r\n",
+    "hex": "756e6b6e6f776e2d656d7074793d310d0a6370752d636173652d696e73656e7369746976653d310d0a74656d706469722d6e6f6e656d7074793d310d0a74656d706469722d747261696c696e672d736570617261746f723d310d0a61707068776e642d6e6f6e7a65726f3d310d0a6370753d496e74656c0d0a6f733d0d0a6170706469723d5a3a5c746d705c626c69747a2d6f726967696e616c2d636170747572652d7277736c6e37307a5c0d0a61707068776e643d3133313136300d0a61707068696e7374616e63653d3236383433353435360d0a77696e646f77736469723d433a5c77696e646f77735c0d0a73797374656d6469723d433a5c77696e646f77735c73797374656d33325c0d0a74656d706469723d433a5c75736572735c737465616d757365725c417070446174615c4c6f63616c5c54656d705c0d0a"
+  },
+  "completion_marker_file": {
+    "exists": true,
+    "size_bytes": 10,
+    "text": "complete\r\n",
+    "hex": "636f6d706c6574650d0a"
+  }
+}

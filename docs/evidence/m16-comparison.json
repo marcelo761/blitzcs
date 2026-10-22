@@ -1,0 +1,12 @@
+{
+  "original_evidence_sha256": "fdb33ec945940075d254a9e1d8c9fdb0f970914218baae42f0e72b1815ad231e",
+  "local_stdout": "unknown-empty=1\ncpu-case-insensitive=1\ntempdir-nonempty=1\ntempdir-trailing-separator=1\n",
+  "normalized_observation_matches": 4,
+  "original_apphwnd": "nonzero real Win32 window",
+  "local_apphwnd": {
+    "exit_code": -6,
+    "stderr": "Unhandled exception. System.PlatformNotSupportedException: SystemProperty 'AppHWND' requires a native Windows engine host; no handle is available in this runtime.\n   at Blitz3DCS.Runtime.LegacySystem.SystemProperty(String property)\n   at BlitzProgram.Main() in /run/media/system/SSD_SATA/BlitzCS/artifacts/m16/unsupported.bb:line 1\n",
+    "behavior": "explicit unsupported host, no invented handle"
+  },
+  "scope": "Host-specific raw paths, CPU and OS are not equal-output comparisons."
+}

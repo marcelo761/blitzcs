@@ -1,0 +1,9 @@
+{
+  "runtime": "original Blitz3D Win32 under Proton/Wine",
+  "source_sha256": "b03005d259c83308d80642bf9fdc8a2f78c62a02d50423cb49b6a70819c90938",
+  "capture": {
+    "phase": "run",
+    "stdout": "unknown-empty=1\ncpu-case-insensitive=1\ntempdir-nonempty=1\ntempdir-trailing-separator=1\napphwnd-nonzero=1\ncpu=Intel\nos=\nappdir=Z:\\tmp\\blitz-original-capture-rwsln70z\\\napphwnd=131160\napphinstance=268435456\nwindowsdir=C:\\windows\\\nsystemdir=C:\\windows\\system32\\\ntempdir=C:\\users\\steamuser\\AppData\\Local\\Temp\\\n",
+    "exit_code": 0
+  }
+}
