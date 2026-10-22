@@ -1,0 +1,20 @@
+{
+  "description": "BlitzCS expectations are local assertions, not captured original results. Original comparison requires a genuine adapter.",
+  "fixtures": [
+    { "name": "precedence", "source": "fixtures/precedence.bb", "expected_phase": "run", "expected_stdout": "14\n4.0\n64.0\n0\n1\n" },
+    { "name": "rounding", "source": "fixtures/rounding.bb", "expected_phase": "run", "expected_stdout": "2\n4\n-2\n-4\n" },
+    { "name": "conversions", "source": "fixtures/conversions.bb", "expected_phase": "run", "expected_stdout": "-42\n3.5\nvalue=2.5\n2.0\n" },
+    { "name": "float-format", "source": "fixtures/float-format.bb", "expected_phase": "run", "expected_stdout": "0.001\n1.e-004\n1.23457\n" },
+    { "name": "conditions", "source": "fixtures/conditions.bb", "expected_phase": "run", "expected_stdout": "42\n" },
+    { "name": "loop-bound", "source": "fixtures/loop-bound.bb", "expected_phase": "run", "expected_stdout": "1\n2\n3\n" },
+    { "name": "eager", "source": "fixtures/eager.bb", "expected_phase": "run", "expected_stdout": "2\n" },
+    { "name": "nested-exit", "source": "fixtures/nested-exit.bb", "expected_phase": "run", "expected_stdout": "one\nother\n" },
+    { "name": "function-return", "source": "fixtures/function-return.bb", "expected_phase": "run", "expected_stdout": "42\n7\n" },
+    { "name": "arrays", "source": "fixtures/arrays.bb", "expected_phase": "run", "expected_stdout": "0\n42\n" },
+    { "name": "redim", "source": "fixtures/redim.bb", "expected_phase": "run", "expected_stdout": "[]\n" },
+    { "name": "invalid-exit", "source": "fixtures/invalid-exit.bb", "expected_phase": "compile_error" },
+    { "name": "invalid-rank", "source": "fixtures/invalid-rank.bb", "expected_phase": "compile_error" },
+    { "name": "upper-bound-error", "source": "fixtures/upper-bound-error.bb", "expected_phase": "runtime_error", "expected_stdout": "" },
+    { "name": "string-zero-divisor", "source": "fixtures/string-zero-divisor.bb", "expected_phase": "compile_error", "expected_stdout": "" }
+  ]
+}

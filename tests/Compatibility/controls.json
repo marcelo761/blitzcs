@@ -1,0 +1,11 @@
+{
+  "description": "Genuine Blitz3D V1.118 capture for Else If nested inside one While/End If block.",
+  "fixtures": [
+    {
+      "name": "controls-else-if-in-while",
+      "source": "fixtures/controls.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n2\n3\n"
+    }
+  ]
+}

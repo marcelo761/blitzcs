@@ -1,0 +1,47 @@
+{
+  "description": "Genuine Blitz3D handle probes captured from the official V1.118 distribution; expected values are stored only after original execution.",
+  "fixtures": [
+    {
+      "name": "handle-lifecycle",
+      "source": "fixtures/handles/lifecycle.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n2\n1\n1\n1\n1\n1\n"
+    },
+    {
+      "name": "handle-null-literal",
+      "source": "fixtures/handles/null-literal.bb",
+      "expected_phase": "run",
+      "expected_stdout": "0\n"
+    },
+    {
+      "name": "handle-type-conversions",
+      "source": "fixtures/handles/type-conversions.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n0\n1\n0\n0\n1\n"
+    },
+    {
+      "name": "handle-arrays",
+      "source": "fixtures/handles/arrays.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n1\n1\n1\n1\n"
+    },
+    {
+      "name": "handle-delete-each",
+      "source": "fixtures/handles/delete-each.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n1\n1\n1\n1\n1\n"
+    },
+    {
+      "name": "handle-delete-alias-neighbors",
+      "source": "fixtures/handles/delete-alias-neighbors.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n1\n10\n30\n1\n1\n"
+    },
+    {
+      "name": "handle-reuse-1000",
+      "source": "fixtures/handles/reuse-1000.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1000\n0\n"
+    }
+  ]
+}

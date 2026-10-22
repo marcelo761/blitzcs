@@ -1,0 +1,23 @@
+{
+  "description": "Genuine Blitz3D V1.118 numeric edge captures; values are not inferred from BlitzCS.",
+  "fixtures": [
+    {
+      "name": "numeric-int-min-abs-sgn",
+      "source": "fixtures/handles/math-int-min.bb",
+      "expected_phase": "run",
+      "expected_stdout": "-2147483648\n-2147483648\n-1\n"
+    },
+    {
+      "name": "numeric-abs-int-min-constant",
+      "source": "fixtures/handles/math-abs-const.bb",
+      "expected_phase": "run",
+      "expected_stdout": "-2147483648\n"
+    },
+    {
+      "name": "numeric-negative-zero",
+      "source": "fixtures/handles/math-negative-zero.bb",
+      "expected_phase": "run",
+      "expected_stdout": "-0.0\n-0.0\n0.0\n-0.0\n0.0\n0.0\n"
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+Const LIMIT%=6, HALF#=3.5, TITLE$="SCP"
+Print LIMIT
+Print HALF
+Print TITLE

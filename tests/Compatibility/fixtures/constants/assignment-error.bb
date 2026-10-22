@@ -1,0 +1,2 @@
+Const VALUE%=2
+VALUE%=3

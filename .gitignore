@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+artifacts/
+__pycache__/
+*.pyc
+.trail/cache/
+.trail/sessions/
+.env
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

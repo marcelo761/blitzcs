@@ -1,0 +1,33 @@
+{
+  "fixtures": [
+    {
+      "name": "include-main-directory-and-deduplication",
+      "source": "fixtures/multifile/nested/main.bb",
+      "expected_phase": "run",
+      "expected_stdout": "root-before\nchild\nnested-root-relative\nroot-after\n"
+    },
+    {
+      "name": "include-cycle-between-included-files",
+      "source": "fixtures/multifile/cycle/main.bb",
+      "expected_phase": "run",
+      "expected_stdout": "one-before\ntwo-before\ntwo-after\none-after\n"
+    },
+    {
+      "name": "include-cycle-through-main-file",
+      "source": "fixtures/multifile/main-cycle/main.bb",
+      "expected_phase": "run",
+      "expected_stdout": "main-before\nchild-before-cycle\nmain-before\nmain-after\nchild-after-cycle\nmain-after\n"
+    },
+    {
+      "name": "include-missing-nested-source-location",
+      "source": "fixtures/multifile/missing/main.bb",
+      "expected_phase": "compile_error"
+    },
+    {
+      "name": "include-inside-function-early-return",
+      "source": "fixtures/multifile/function-return/main.bb",
+      "expected_phase": "run",
+      "expected_stdout": "7\n42\n"
+    }
+  ]
+}

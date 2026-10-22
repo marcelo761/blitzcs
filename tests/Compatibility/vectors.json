@@ -1,0 +1,80 @@
+{
+  "fixtures": [
+    {
+      "name": "vector-global-float",
+      "source": "fixtures/vectors/global-float.bb",
+      "expected_phase": "run",
+      "expected_stdout": "0.0\n0.0\n1.25\n"
+    },
+    {
+      "name": "vector-global-mixed",
+      "source": "fixtures/vectors/global-mixed.bb",
+      "expected_phase": "run",
+      "expected_stdout": "0\n0\n\n42\nSCP\n"
+    },
+    {
+      "name": "vector-local-function",
+      "source": "fixtures/vectors/local-function.bb",
+      "expected_phase": "run",
+      "expected_stdout": "49\n"
+    },
+    {
+      "name": "vector-field-primitives",
+      "source": "fixtures/vectors/field-primitives.bb",
+      "expected_phase": "run",
+      "expected_stdout": "0.0\n0.0\n\n3.5\nfield\n"
+    },
+    {
+      "name": "vector-field-objects",
+      "source": "fixtures/vectors/field-objects.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n1\n42\n42\n42\n"
+    },
+    {
+      "name": "vector-field-delete-releases",
+      "source": "fixtures/vectors/field-delete-releases.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n2\n"
+    },
+    {
+      "name": "vector-local-zero-per-call",
+      "source": "fixtures/vectors/local-zero-per-call.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n1\n"
+    },
+    {
+      "name": "vector-field-per-instance",
+      "source": "fixtures/vectors/field-per-instance.bb",
+      "expected_phase": "run",
+      "expected_stdout": "0\n7\n0\n"
+    },
+    {
+      "name": "vector-invalid-constant-bound",
+      "source": "fixtures/vectors/invalid-constant-bound.bb",
+      "expected_phase": "compile_error"
+    },
+    {
+      "name": "vector-size-rounding",
+      "source": "fixtures/vectors/size-rounding.bb",
+      "expected_phase": "run",
+      "expected_stdout": "2\n3\n"
+    },
+    {
+      "name": "vector-size-rounding-bound-error",
+      "source": "fixtures/vectors/size-rounding-bound-error.bb",
+      "expected_phase": "compile_error"
+    },
+    {
+      "name": "vector-index-side-effects",
+      "source": "fixtures/vectors/index-side-effects.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n42\n"
+    },
+    {
+      "name": "const-scalar-baseline",
+      "source": "fixtures/vectors/const-baseline.bb",
+      "expected_phase": "run",
+      "expected_stdout": "6\n3.5\nSCP\n"
+    }
+  ]
+}

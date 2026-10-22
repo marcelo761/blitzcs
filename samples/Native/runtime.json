@@ -1,0 +1,11 @@
+{
+  "functions": [
+    {
+      "name": "RuntimeError",
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyErrors",
+      "method": "RuntimeError",
+      "parameters": ["String"]
+    }
+  ]
+}

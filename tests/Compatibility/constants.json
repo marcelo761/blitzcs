@@ -1,0 +1,17 @@
+{
+  "fixtures": [
+    {"name":"const-typed-expressions","source":"fixtures/constants/typed-expressions.bb","expected_phase":"run","expected_stdout":"6\n3.5\nSCP!\n"},
+    {"name":"const-earlier-references","source":"fixtures/constants/earlier-references.bb","expected_phase":"run","expected_stdout":"6\n1.5\n"},
+    {"name":"const-fixed-vector-bound","source":"fixtures/constants/fixed-vector-bound.bb","expected_phase":"run","expected_stdout":"42\n0\n"},
+    {"name":"const-function-use","source":"fixtures/constants/function-use.bb","expected_phase":"run","expected_stdout":"42\n"},
+    {"name":"const-parameter-shadow","source":"fixtures/constants/parameter-shadow.bb","expected_phase":"run","expected_stdout":"11\n4\n"},
+    {"name":"const-assignment-error","source":"fixtures/constants/assignment-error.bb","expected_phase":"compile_error"},
+    {"name":"const-forward-reference-error","source":"fixtures/constants/forward-reference-error.bb","expected_phase":"compile_error"},
+    {"name":"const-inside-function-error","source":"fixtures/constants/inside-function-error.bb","expected_phase":"compile_error"},
+    {"name":"const-inside-if-error","source":"fixtures/constants/inside-if-error.bb","expected_phase":"compile_error"},
+    {"name":"const-nonconstant-initializer-error","source":"fixtures/constants/nonconstant-initializer-error.bb","expected_phase":"compile_error"},
+    {"name":"const-duplicate-error","source":"fixtures/constants/duplicate-error.bb","expected_phase":"compile_error"},
+    {"name":"const-wrong-tag-error","source":"fixtures/constants/wrong-tag-error.bb","expected_phase":"compile_error"},
+    {"name":"const-vector-error","source":"fixtures/constants/vector-const-error.bb","expected_phase":"compile_error"}
+  ]
+}

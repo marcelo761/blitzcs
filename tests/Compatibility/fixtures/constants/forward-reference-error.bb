@@ -1,0 +1,3 @@
+Const FIRST%=LATER%+1
+Const LATER%=2
+Print FIRST

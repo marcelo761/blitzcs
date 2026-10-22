@@ -1,0 +1,8 @@
+{
+  "description": "Local expected values are not original captures. Use the genuine original adapter for differential evidence.",
+  "fixtures": [
+    { "name": "object-lifetime", "source": "fixtures/object-lifetime.bb", "expected_phase": "run", "expected_stdout": "1\n1\n42\n1\n1\n" },
+    { "name": "object-each", "source": "fixtures/object-each.bb", "expected_phase": "run", "expected_stdout": "1\n2\n3\n1\n" },
+    { "name": "object-order", "source": "fixtures/object-order.bb", "expected_phase": "run", "expected_stdout": "3\n2\n1\n" }
+  ]
+}

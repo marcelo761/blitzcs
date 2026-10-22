@@ -1,0 +1,4 @@
+Const COUNT%=2*3, RATIO#=1.25+2.25, TITLE$="SCP"+"!"
+Print COUNT
+Print RATIO
+Print TITLE

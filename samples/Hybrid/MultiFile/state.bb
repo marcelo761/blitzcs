@@ -1,0 +1,1 @@
+Global answer%=0

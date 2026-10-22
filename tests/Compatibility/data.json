@@ -1,0 +1,23 @@
+{
+  "description": "Genuine Blitz3D V1.118 Data/Read/Restore captures. Timed-out Out of data probe is retained as evidence but excluded from successful regression fixtures.",
+  "fixtures": [
+    {
+      "name": "data-read-coercions",
+      "source": "fixtures/data/coercions.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n-1\n12\n12.75\n12.75\n"
+    },
+    {
+      "name": "data-forward-restore-from-function-shared-cursor",
+      "source": "fixtures/data/forward-restore-function.bb",
+      "expected_phase": "run",
+      "expected_stdout": "30\n40\n"
+    },
+    {
+      "name": "data-include-label-cursor",
+      "source": "fixtures/data/include-rows.bb",
+      "expected_phase": "run",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

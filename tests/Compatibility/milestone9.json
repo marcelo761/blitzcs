@@ -1,0 +1,39 @@
+{
+  "fixtures": [
+    {
+      "name": "m9-functions-defaults",
+      "source": "fixtures/milestone9/functions.bb",
+      "expected_phase": "run",
+      "expected_stdout": "35\n75\n79\n"
+    },
+    {
+      "name": "m9-function-argument-conversions",
+      "source": "fixtures/milestone9/conversions.bb",
+      "expected_phase": "run",
+      "expected_stdout": "4\n4.0\n5tail\n1\n8\n9.0\nhello\n12\n2.5\n42\n1\n"
+    },
+    {
+      "name": "m9-fields-default-initialization",
+      "source": "fixtures/milestone9/fields.bb",
+      "expected_phase": "run",
+      "expected_stdout": "0\n[]\n1\n"
+    },
+    {
+      "name": "m9-hex-wrap-32bit",
+      "source": "fixtures/milestone9/hex32.bb",
+      "expected_phase": "run",
+      "expected_stdout": "2147483647\n-2147483648\n-1\n0\n0\n"
+    },
+    {
+      "name": "m9-omitted-middle-argument",
+      "source": "fixtures/milestone9/omitted_middle.bb",
+      "expected_phase": "compile_error"
+    },
+    {
+      "name": "m9-command-grouping",
+      "source": "fixtures/milestone9/command-grouping.bb",
+      "expected_phase": "run",
+      "expected_stdout": "3\n3\n3\n9\n9\n9\n"
+    }
+  ]
+}

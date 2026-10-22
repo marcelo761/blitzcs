@@ -1,0 +1,9 @@
+Function Show%(a%,b#,c$)
+Print a
+Print b
+Print c
+Return 1
+End Function
+Print Show(3.6,4,"5tail")
+Show 7.8,9,"hello"
+Print Show("12tail","2.5tail",42)

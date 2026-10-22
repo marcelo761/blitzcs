@@ -1,0 +1,51 @@
+// Historical object runtime from before the managed-lifetime change.
+internal abstract class __BlitzObject
+{
+    internal bool Alive = true;
+    internal __BlitzObject Previous, Next;
+    internal abstract void ClearFields();
+    internal static T RequireReference<T>(T value, string location) where T : __BlitzObject
+    {
+        if (value is null) throw new System.InvalidOperationException(location + ": Object does not exist.");
+        return value;
+    }
+    internal static T Require<T>(T value, string location) where T : __BlitzObject
+    {
+        if (value is null || !value.Alive) throw new System.InvalidOperationException(location + ": Object does not exist.");
+        return value;
+    }
+    internal static bool Equal(__BlitzObject left, __BlitzObject right) =>
+        System.Object.ReferenceEquals(left is { Alive: true } ? left : null, right is { Alive: true } ? right : null);
+}
+internal sealed class __BlitzObjectList<T> where T : __BlitzObject, new()
+{
+    private T head, tail;
+    internal T New()
+    {
+        var value = new T();
+        value.Previous = tail;
+        if (tail is null) head = value; else tail.Next = value;
+        tail = value;
+        return value;
+    }
+    internal T First() { var value = head; while (value is not null && !value.Alive) value = (T)value.Next; return value; }
+    internal T Last() { var value = tail; while (value is not null && !value.Alive) value = (T)value.Previous; return value; }
+    internal T Following(T value) { var next = (T)value.Next; while (next is not null && !next.Alive) next = (T)next.Next; return next; }
+    internal T Preceding(T value) { var previous = (T)value.Previous; while (previous is not null && !previous.Alive) previous = (T)previous.Previous; return previous; }
+    internal bool EachFirst(ref T value) { value = First(); return value is not null; }
+    internal bool EachNext(ref T value) { value = Following(value); return value is not null; }
+    internal void Delete(T value) { if (value is null || !value.Alive) return; value.Alive = false; value.ClearFields(); }
+    internal void DeleteEach() { for (var value = head; value is not null; value = (T)value.Next) Delete(value); }
+    internal void Insert(T value, T anchor, bool before, string location)
+    {
+        __BlitzObject.Require(value, location); __BlitzObject.Require(anchor, location);
+        if (System.Object.ReferenceEquals(value, anchor)) return;
+        if (value.Previous is null) head = (T)value.Next; else value.Previous.Next = value.Next;
+        if (value.Next is null) tail = (T)value.Previous; else value.Next.Previous = value.Previous;
+        var previous = before ? anchor.Previous : anchor;
+        var next = before ? anchor : anchor.Next;
+        value.Previous = previous; value.Next = next;
+        if (previous is null) head = value; else previous.Next = value;
+        if (next is null) tail = value; else next.Previous = value;
+    }
+}

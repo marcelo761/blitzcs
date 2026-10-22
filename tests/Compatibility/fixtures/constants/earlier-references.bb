@@ -1,0 +1,4 @@
+Const BASE%=3
+Const DOUBLE%=BASE%*2, QUARTER#=DOUBLE%/4.0
+Print DOUBLE
+Print QUARTER
