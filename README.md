@@ -188,12 +188,16 @@ Veja [arquitetura](docs/architecture.md), [pesquisa](docs/research.md) e
 
 ## SCP e próximo runtime
 
-A [auditoria M11](docs/scp-milestone11.md) distingue análise sintática,
+A [auditoria M12](docs/scp-milestone12.md) distingue análise sintática,
 resolução de símbolos e emissão. A árvore integrada de Main passa na sintaxe,
-mas a compilação para em `FileSize` não registrado; o assembly do jogo não foi emitido.
+mas a compilação para em `FSOUND_Init` não registrado em FMod.bb:15; o assembly do jogo não foi emitido.
 `blitzcs check-syntax projeto.bb` valida somente sintaxe e Includes.
 A [arquitetura proposta do Blitz3DCS](docs/blitz3dcs-architecture.md) mantém
 o compilador independente e planeja Vulkan 1.4, sem renderer implementado.
+O [runtime inicial](docs/native-runtime-m12.md) implementa consultas reais de arquivos,
+sistema e duas funções de strings através de um catálogo opt-in, com publicação
+de dependências gerenciadas transitivas. O [catálogo de APIs SCP](docs/scp-native-catalog-m12.md)
+separa frequências candidatas de chamadas semanticamente resolvidas.
 
 ## Trail-Code
 

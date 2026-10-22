@@ -1,0 +1,7 @@
+root$=GetEnv("BLITZCS_M12_ROOT")
+Print FileSize(root$+"\Data.bin\")
+Print FileType(root$+"\Data.bin\")
+Print FileSize(root$+"\subdir\")
+Print FileType(root$+"\subdir\")
+Print FileType(root$+"/Data.bin")
+Print FileSize(root$+"/Data.bin")

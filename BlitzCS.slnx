@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Blitz3DCS.Runtime/Blitz3DCS.Runtime.csproj" />
     <Project Path="src/BlitzCS.LegacyRuntime/BlitzCS.LegacyRuntime.csproj" />
     <Project Path="src/BlitzCS.CLI/BlitzCS.CLI.csproj" />
     <Project Path="src/BlitzCS.Compiler/BlitzCS.Compiler.csproj" />

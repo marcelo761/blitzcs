@@ -670,3 +670,21 @@ conhecida de código de saída em upper-bound-error; zero erros de adaptador.
 [relatório SCP](scp-milestone11.md) distinguem sintaxe, resolução e emissão.
 Um teste de coleta em Debug falha também na baseline M10; Release passa,
 sem alteração de runtime ou relaxamento da asserção. Consulte a limitação no relatório.
+
+## Milestone 12 — runtime externo e Debug estabilizado
+
+Em 22/10/2026, `scripts/verify.sh` terminou com status 0: Release sem erros/avisos,
+537 testes .NET (281 compilador + 256 CLI), 40 Python e 86 fixtures locais aprovados.
+A solução inteira também passou em Debug: 537 testes. O teste de coleta conserva
+as mesmas verificações de GC, após remover uma raiz criada pela própria asserção.
+
+Cinco fixtures novas foram comparadas novamente com Blitz3D original via Proton:
+5/5 coincidentes. Os 81 casos anteriores foram executados localmente e comparados
+com capturas originais M11 preservadas de fontes idênticos: 80 coincidentes e a
+divergência conhecida upper-bound-error. Total 85/86; não se afirma que as 86
+capturas originais foram refeitas neste milestone.
+
+Demonstração multifile C#→BASIC→runtime externo executada: 42, 1, 42. Publicação
+transitiva A→B→C e casos negativos passaram. O stress de 2×100.000 operações
+manteve zero handles vivos/posições após coleta e manutenção. Relatório e
+[evidência](evidence/m12-validation.json) preservam os resultados e limites.

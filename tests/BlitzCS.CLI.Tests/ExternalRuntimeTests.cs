@@ -64,6 +64,59 @@ public sealed class ExternalRuntimeTests : IDisposable
     }
 
     [Fact]
+    public async Task CatalogPublishesAndRunsTransitiveSameDirectoryDependencies()
+    {
+        var dependencies = Path.Combine(directory, "dependencies");
+        Directory.CreateDirectory(dependencies);
+        var leaf = Path.Combine(dependencies, "Leaf.dll");
+        var middle = Path.Combine(dependencies, "Middle.dll");
+        var root = Path.Combine(dependencies, "Root.dll");
+        DotNetEmitter.Emit("public static class Leaf { public static int Value() => 5; public static void Main() {} }", leaf, "Leaf");
+        DotNetEmitter.Emit("public static class Middle { public static int Value() => Leaf.Value() + 7; public static void Main() {} }", middle, "Middle",
+            referencePaths: [leaf]);
+        DotNetEmitter.Emit("public static class Root { public static int Add(int value) => Middle.Value() + value; public static void Main() {} }", root, "Root",
+            referencePaths: [middle]);
+        var catalog = Catalog(root, "Root", ("NativeAdd", "Add", ["Integer"]));
+
+        var result = await BuildAndRun("Print NativeAdd(30)", catalog, runInIsolatedDirectory: true);
+
+        Assert.True(File.Exists(Path.Combine(directory, "out", "Root.dll")));
+        Assert.True(File.Exists(Path.Combine(directory, "out", "Middle.dll")));
+        Assert.True(File.Exists(Path.Combine(directory, "out", "Leaf.dll")));
+        Assert.False(File.Exists(Path.Combine(directory, "out", "System.Runtime.dll")));
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(Lines("42"), result.Stdout);
+        Assert.Equal("", result.Stderr);
+    }
+
+    [Fact]
+    public void CatalogWithMissingTransitiveDependencyPreservesExistingOutputFiles()
+    {
+        var dependencies = Path.Combine(directory, "dependencies");
+        Directory.CreateDirectory(dependencies);
+        var leaf = Path.Combine(dependencies, "Leaf.dll");
+        var root = Path.Combine(dependencies, "Root.dll");
+        DotNetEmitter.Emit("public static class Leaf { public static int Value() => 5; public static void Main() {} }", leaf, "Leaf");
+        DotNetEmitter.Emit("public static class Root { public static int Add(int value) => Leaf.Value() + value; public static void Main() {} }", root, "Root",
+            referencePaths: [leaf]);
+        File.Delete(leaf);
+        var catalog = Catalog(root, "Root", ("NativeAdd", "Add", ["Integer"]));
+        var source = Path.Combine(directory, "main.bb");
+        var output = Path.Combine(directory, "out", "program.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        File.WriteAllText(source, "Print NativeAdd(30)");
+        File.WriteAllText(output, "keep assembly");
+        File.WriteAllText(Path.ChangeExtension(output, ".generated.cs"), "keep source");
+        using var error = new StringWriter();
+
+        Assert.Equal(1, CliApplication.Run(["build", source, "-o", output, "--externals", catalog], TextWriter.Null, error));
+
+        Assert.Contains("Leaf", error.ToString());
+        Assert.Equal("keep assembly", File.ReadAllText(output));
+        Assert.Equal("keep source", File.ReadAllText(Path.ChangeExtension(output, ".generated.cs")));
+    }
+
+    [Fact]
     public async Task RuntimeErrorIsImplementedInSeparateLibraryAndStopsWithMessage()
     {
         var catalog = Catalog(typeof(BlitzCS.LegacyRuntime.LegacyErrors).Assembly.Location,
@@ -124,13 +177,49 @@ public sealed class ExternalRuntimeTests : IDisposable
         Assert.False(Directory.Exists(Path.GetDirectoryName(output)));
     }
 
-    private async Task<(int ExitCode, string Stdout, string Stderr)> BuildAndRun(string source, string catalog)
+    [Fact]
+    public void FilenameCollisionPreservesExistingOutputFiles()
+    {
+        var firstDirectory = Path.Combine(directory, "first");
+        var secondDirectory = Path.Combine(directory, "second");
+        Directory.CreateDirectory(firstDirectory);
+        Directory.CreateDirectory(secondDirectory);
+        var first = Path.Combine(firstDirectory, "Shared.dll");
+        var second = Path.Combine(secondDirectory, "Shared.dll");
+        DotNetEmitter.Emit("public static class First { public static int Value() => 1; public static void Main() {} }", first, "First");
+        DotNetEmitter.Emit("public static class Second { public static int Value() => 2; public static void Main() {} }", second, "Second");
+        var outputDirectory = Path.Combine(directory, "collision-output");
+        Directory.CreateDirectory(outputDirectory);
+        var output = Path.Combine(outputDirectory, "program.dll");
+        File.WriteAllText(output, "keep assembly");
+        File.WriteAllText(Path.ChangeExtension(output, ".generated.cs"), "keep source");
+        File.WriteAllText(Path.ChangeExtension(output, ".pdb"), "keep symbols");
+
+        var error = Assert.Throws<ArgumentException>(() => DotNetEmitter.Emit(
+            "internal static class App { public static void Main() {} }", output, "App", [first, second]));
+
+        Assert.Contains("same output filename", error.Message);
+        Assert.Equal("keep assembly", File.ReadAllText(output));
+        Assert.Equal("keep source", File.ReadAllText(Path.ChangeExtension(output, ".generated.cs")));
+        Assert.Equal("keep symbols", File.ReadAllText(Path.ChangeExtension(output, ".pdb")));
+    }
+
+    private async Task<(int ExitCode, string Stdout, string Stderr)> BuildAndRun(
+        string source, string catalog, bool runInIsolatedDirectory = false)
     {
         var input = Path.Combine(directory, "main.bb");
         var output = Path.Combine(directory, "out", "program.dll");
         File.WriteAllText(input, source);
         using var errors = new StringWriter();
         Assert.True(CliApplication.Run(["build", input, "-o", output, "--externals", catalog], TextWriter.Null, errors) == 0, errors.ToString());
+        if (runInIsolatedDirectory)
+        {
+            var isolated = Path.Combine(directory, "isolated-run");
+            Directory.CreateDirectory(isolated);
+            foreach (var path in Directory.GetFiles(Path.GetDirectoryName(output)!))
+                File.Copy(path, Path.Combine(isolated, Path.GetFileName(path)));
+            output = Path.Combine(isolated, Path.GetFileName(output));
+        }
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
             RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false

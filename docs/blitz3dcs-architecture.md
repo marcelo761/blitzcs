@@ -2,6 +2,11 @@
 
 **Status:** proposed architecture; renderer and graphics runtime are not implemented.
 
+M12 adds a real opt-in filesystem/system/string query module in
+`Blitz3DCS.Runtime`, described in [native-runtime-m12.md](native-runtime-m12.md).
+This establishes the generic static binding and managed publication path;
+it does not implement any graphics backend or engine services proposed below.
+
 Blitz3DCS is planned as a compatibility layer that preserves the historical public
 Blitz3D programming API while supplying a modern managed runtime. Its first graphics
 backend is planned for Vulkan 1.4, called from C#/.NET through native bindings where

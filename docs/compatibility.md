@@ -158,3 +158,14 @@ standalone array diagnostics, missing Includes and native metadata from actual
 assembly emission. No full semantic resolution, game assembly or functional
 SCP runtime is claimed. [Blitz3DCS architecture](blitz3dcs-architecture.md) is a
 proposal, with no graphics dependencies added to BlitzCS.
+
+## Milestone 12: real native module and managed dependencies
+
+[Blitz3DCS.Runtime](native-runtime-m12.md) implements FileSize/FileType/CurrentDir,
+GetEnv and Chr/Len outside the compiler. Typed direct binding now publishes the
+managed transitive assembly closure. Five new genuine differential cases cover
+large files, case/separators, NUL, wildcard and CP1252 behavior; host/codepage limits
+remain explicit. [Debug lifetime investigation](debug-lifetime-m12.md) identifies
+and removes a test-induced strong root without changing object runtime code.
+[The SCP report](scp-milestone12.md) reaches FSOUND_Init in FMod.bb:15 and does not
+claim full semantic compilation or a game assembly.

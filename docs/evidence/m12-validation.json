@@ -1,0 +1,2282 @@
+{
+  "milestone": 12,
+  "date": "2026-10-22",
+  "release": {
+    "build_errors": 0,
+    "build_warnings": 0,
+    "compiler_tests_pass": 281,
+    "cli_tests_pass": 256,
+    "python_tests_pass": 40,
+    "verify_exit_code": 0,
+    "local_fixtures_pass": 86
+  },
+  "debug": {
+    "compiler_tests_pass": 281,
+    "cli_tests_pass": 256,
+    "exit_code": 0,
+    "runtime_lifetime_code_changed": false
+  },
+  "differential_totals": {
+    "fixtures": 86,
+    "match": 85,
+    "mismatch": 1,
+    "fresh_original_cases": 5,
+    "reused_M11_original_cases": 81
+  },
+  "differential": [
+    {
+      "name": "const-typed-expressions",
+      "source": "tests/Compatibility/fixtures/constants/typed-expressions.bb",
+      "source_sha256": "2fe59ec96ef94a8884f729ea7115623df90c479b8013ee6b6c75a50eb510a3d7",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "6\n3.5\nSCP!\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "6\n3.5\nSCP!\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "const-earlier-references",
+      "source": "tests/Compatibility/fixtures/constants/earlier-references.bb",
+      "source_sha256": "42c895f4cb5cbdacfe6d43b42af0ff6f55e6aea2c3fa482ae30c76912bd82606",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "6\n1.5\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "6\n1.5\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "const-fixed-vector-bound",
+      "source": "tests/Compatibility/fixtures/constants/fixed-vector-bound.bb",
+      "source_sha256": "79b4f38462574a4564d95cd86e9f4a40e6c3896a3d35a33cd2a19f7b6dbd5fc3",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "42\n0\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "42\n0\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "const-function-use",
+      "source": "tests/Compatibility/fixtures/constants/function-use.bb",
+      "source_sha256": "8c354530eea5fc8d420fa87dbe9e3569cf514b53cf3ef3ad2a556e05765879b2",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "42\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "42\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "const-parameter-shadow",
+      "source": "tests/Compatibility/fixtures/constants/parameter-shadow.bb",
+      "source_sha256": "94dec3988d1c5ecebf45068639e1c83bc017612ec94288071ab417f2ada119fb",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "11\n4\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "11\n4\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "const-assignment-error",
+      "source": "tests/Compatibility/fixtures/constants/assignment-error.bb",
+      "source_sha256": "cdf44fbbfe3f67ad5426377ec1727d213e5ece4d066fadbaf2b618fe9fc860cf",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "const-forward-reference-error",
+      "source": "tests/Compatibility/fixtures/constants/forward-reference-error.bb",
+      "source_sha256": "d409b6029ad3e9fceff4979e427dd848e0b1491bf6e1d13ab310f559d7531a56",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "const-inside-function-error",
+      "source": "tests/Compatibility/fixtures/constants/inside-function-error.bb",
+      "source_sha256": "27fd5eb5985e8bd52923200301d926c49175a2f2704ab71104d3f44401314232",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "const-inside-if-error",
+      "source": "tests/Compatibility/fixtures/constants/inside-if-error.bb",
+      "source_sha256": "0b37a6ee69a09786311aad973673f24763cfc842c30993d1dda0c445f046be20",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "const-nonconstant-initializer-error",
+      "source": "tests/Compatibility/fixtures/constants/nonconstant-initializer-error.bb",
+      "source_sha256": "ced7099960c26f4a4e1ae79c3b64319941c7a677415c2ae9b8618eea0dd819bb",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "const-duplicate-error",
+      "source": "tests/Compatibility/fixtures/constants/duplicate-error.bb",
+      "source_sha256": "b19e5edb1c5afa9a796767c9f044a14d375f63c98dc44d5f9539cfac2fc38e82",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "const-wrong-tag-error",
+      "source": "tests/Compatibility/fixtures/constants/wrong-tag-error.bb",
+      "source_sha256": "b82a366e0b3fcc281f1ae7cf2b112fd25aa2919fc2f7c2fff23be1da7c8cb56d",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "const-vector-error",
+      "source": "tests/Compatibility/fixtures/constants/vector-const-error.bb",
+      "source_sha256": "d68c89f5bb33a21602d4b86872ba260f3f44fe9f0382f8715be43fce9091c92e",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "controls-else-if-in-while",
+      "source": "tests/Compatibility/fixtures/controls.bb",
+      "source_sha256": "aa823f0d6fbd7b87ceacfb7d65971a15b491e20bb510578a66f1d91afebf18e3",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n3\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n3\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "data-read-coercions",
+      "source": "tests/Compatibility/fixtures/data/coercions.bb",
+      "source_sha256": "dabe8514d2fd4ba8d9c28e827b6c1dc81601d667ae810f52f842db35e8af9f9d",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n-1\n12\n12.75\n12.75\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n-1\n12\n12.75\n12.75\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "data-forward-restore-from-function-shared-cursor",
+      "source": "tests/Compatibility/fixtures/data/forward-restore-function.bb",
+      "source_sha256": "3cc9f37b458f5ecfd1d0e8b265f0a7f8fd4c982f71929fc3f117b74500beceae",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "30\n40\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "30\n40\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "data-include-label-cursor",
+      "source": "tests/Compatibility/fixtures/data/include-rows.bb",
+      "source_sha256": "a918c2f41ebc4b6ae68b5b33fb8c568032c4efff60abc0750ef5ddfbf51a68fd",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "42\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "42\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "precedence",
+      "source": "tests/Compatibility/fixtures/precedence.bb",
+      "source_sha256": "8edfb0450a743bb872a9541638f292ad7e2c62b7c0416b1c637a64a4768c6c1a",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "14\n4.0\n64.0\n0\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "14\n4.0\n64.0\n0\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "rounding",
+      "source": "tests/Compatibility/fixtures/rounding.bb",
+      "source_sha256": "df59003c98ee9c798575127fd8cd8dde17796e4d589128002fb3802a4ca8de22",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "2\n4\n-2\n-4\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "2\n4\n-2\n-4\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "conversions",
+      "source": "tests/Compatibility/fixtures/conversions.bb",
+      "source_sha256": "c5dde49ea3d7f3b35e002621e4c7a477c3d97649490f921f2df60faf8592c7c0",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "-42\n3.5\nvalue=2.5\n2.0\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "-42\n3.5\nvalue=2.5\n2.0\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "float-format",
+      "source": "tests/Compatibility/fixtures/float-format.bb",
+      "source_sha256": "b76f72c931190e0967c4b80a628048ff220356b094c869c55d6c932a818ea872",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "0.001\n1.e-004\n1.23457\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "0.001\n1.e-004\n1.23457\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "conditions",
+      "source": "tests/Compatibility/fixtures/conditions.bb",
+      "source_sha256": "89d5ac659cafaf19fb53d870f4dbe2cc2b752dd4a0de6bf68fe7ce4a0fe700da",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "42\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "42\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "loop-bound",
+      "source": "tests/Compatibility/fixtures/loop-bound.bb",
+      "source_sha256": "c00daa3fc89375833a187945d65dcc92a7e917095922dd472c06b9cf7337cffe",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n3\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n3\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "eager",
+      "source": "tests/Compatibility/fixtures/eager.bb",
+      "source_sha256": "44e24284c37d7c6da0dedf72f7f8d36f71ec4cc5db2f0bd31f8e2d60f2dfa27f",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "2\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "2\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "nested-exit",
+      "source": "tests/Compatibility/fixtures/nested-exit.bb",
+      "source_sha256": "117c3814cfbad6d204b291566595fd4af26d42fca15381fbb7869df49483ff83",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "one\nother\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "one\nother\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "function-return",
+      "source": "tests/Compatibility/fixtures/function-return.bb",
+      "source_sha256": "74a3ce6117b9941b3e16ed74b5d055df8cbfdc14dcec6887e8384845f813ffae",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "42\n7\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "42\n7\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "arrays",
+      "source": "tests/Compatibility/fixtures/arrays.bb",
+      "source_sha256": "4cd36f27e5051a434d56ee0b6083d2998b1b09140b57c8d347c34d5a1c46f5c0",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "0\n42\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "0\n42\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "redim",
+      "source": "tests/Compatibility/fixtures/redim.bb",
+      "source_sha256": "6ecce5b4106e634a3631c3c965a95bcff1b7dbeecc9a3e8f11d237915400c47c",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "[]\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "[]\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "invalid-exit",
+      "source": "tests/Compatibility/fixtures/invalid-exit.bb",
+      "source_sha256": "489c8eaa778c971ecf75b3b2acf97afa44cbb7f708c4abdc51ddbe2e2d222c01",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "invalid-rank",
+      "source": "tests/Compatibility/fixtures/invalid-rank.bb",
+      "source_sha256": "83254b66a6cf78724732d1a6d45b7ecd574971d722e9c8b4c4cbabb21b95fbc7",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "upper-bound-error",
+      "source": "tests/Compatibility/fixtures/upper-bound-error.bb",
+      "source_sha256": "9df7926067008242fe173f97c397a0917041661be307a23a7cdcfdb694bf7f24",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "mismatch",
+      "comparison_reason": "success/failure exit status differs",
+      "local_capture": {
+        "phase": "runtime_error",
+        "stdout": "",
+        "exit_code": -6
+      },
+      "original_capture": {
+        "phase": "runtime_error",
+        "stdout": "",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "string-zero-divisor",
+      "source": "tests/Compatibility/fixtures/string-zero-divisor.bb",
+      "source_sha256": "834559db6146fadf24ffb911f8572337d417d75d5895f35ac86af33431bf0a1d",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "handle-lifecycle",
+      "source": "tests/Compatibility/fixtures/handles/lifecycle.bb",
+      "source_sha256": "db14d2bc8e043dea44a59878153adef7640446f7da11cec5e5fb087a5388b21a",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n2\n1\n1\n1\n1\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n2\n1\n1\n1\n1\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "handle-null-literal",
+      "source": "tests/Compatibility/fixtures/handles/null-literal.bb",
+      "source_sha256": "b1a7d2c1eec74719377e55e7552d92c05fbc49b0bdefba1687c7722879acd6da",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "0\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "0\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "handle-type-conversions",
+      "source": "tests/Compatibility/fixtures/handles/type-conversions.bb",
+      "source_sha256": "8c2eea41d445419f3762c2583039bfd0f6d0f76c682034400c10fac97fc4ede5",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n0\n1\n0\n0\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n0\n1\n0\n0\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "handle-arrays",
+      "source": "tests/Compatibility/fixtures/handles/arrays.bb",
+      "source_sha256": "e2d770241d6008ffa8ace1d40fdd07505087416bbc610c0cc8e66e0be4cfafb8",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n1\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n1\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "handle-delete-each",
+      "source": "tests/Compatibility/fixtures/handles/delete-each.bb",
+      "source_sha256": "adf36e6df9ae36e920fe00a0c8a7638c403dc3251ae406bb5877da4cb5f5b3b8",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n1\n1\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n1\n1\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "handle-delete-alias-neighbors",
+      "source": "tests/Compatibility/fixtures/handles/delete-alias-neighbors.bb",
+      "source_sha256": "d828d5133dffeefc1b1448a04472d9c47f633dacff63e59cea6e5963953d2c26",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n10\n30\n1\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n10\n30\n1\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "handle-reuse-1000",
+      "source": "tests/Compatibility/fixtures/handles/reuse-1000.bb",
+      "source_sha256": "a1cb67b22801693245be41e8b0a809a6413a41dd7e24ba787e6258e4004e3972",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1000\n0\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1000\n0\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "lifetime-mass",
+      "source": "tests/Compatibility/fixtures/lifetime-mass.bb",
+      "source_sha256": "3e054636af2ec528be66afcdbf8ca46e5ad1d5825a539fae24dcd2337977f498",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "100000\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "100000\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "lifetime-aliases",
+      "source": "tests/Compatibility/fixtures/lifetime-aliases.bb",
+      "source_sha256": "8940e442724a7398f54c61c461a64fd66d7d1744f694e024d3ac9414725130c9",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n30\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n30\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "lifetime-deleteforeach",
+      "source": "tests/Compatibility/fixtures/lifetime-deleteforeach.bb",
+      "source_sha256": "703dd53e4203430dd02239e9ad22682dcddfdf07e16cf94a1efb4679550777ab",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n3\n4\n1\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n3\n4\n1\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "lifetime-reorder",
+      "source": "tests/Compatibility/fixtures/lifetime-reorder.bb",
+      "source_sha256": "92ed6a368dd34f4cbbdb231784e2607317e4aad5efdc8b64cc96cac0accf76f0",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "4\n2\n3\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "4\n2\n3\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "lifetime-circular",
+      "source": "tests/Compatibility/fixtures/lifetime-circular.bb",
+      "source_sha256": "815ce4c011f282d3800eabfc84b38f8e55ca7932a75775f57107ca7d4ee3feeb",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n1\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n1\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "lifetime-multiple-deleted-navigation",
+      "source": "tests/Compatibility/fixtures/lifetime-multiple-deleted-navigation.bb",
+      "source_sha256": "af807524588e9706ba3abf2fd2e1aa1d8bef77e7448223934bd4a21590cbc2c9",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n4\n1\n5\n5\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n4\n1\n5\n5\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "lifetime-mutating-iteration",
+      "source": "tests/Compatibility/fixtures/lifetime-mutating-iteration.bb",
+      "source_sha256": "5f18b4a6e565adf7a38db9b87be779b0a39aa44b7aa65cde1f4e7ac7089148f0",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n3\n11\n13\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n3\n11\n13\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "lifetime-arrays-fields",
+      "source": "tests/Compatibility/fixtures/lifetime-arrays-fields.bb",
+      "source_sha256": "609f597f91ce360b709af64e534d87f1b054eee35e3be0ecdbb0a75aa936037b",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "41\n42\n1\n1\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "41\n42\n1\n1\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "lifetime-release-alias",
+      "source": "tests/Compatibility/fixtures/lifetime-release-alias.bb",
+      "source_sha256": "22691f0dddf688349e51c731eca4f4daed70e77d68e55ea79054415d77092392",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n9\n9\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n9\n9\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "lifetime-deleted-neighbor-reorder",
+      "source": "tests/Compatibility/fixtures/lifetime-deleted-neighbor-reorder.bb",
+      "source_sha256": "3c74bf9612e083abf31378d0ab3a1b78368190babf70964bf43c3a4cbfcdacfc",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n3\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\n3\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "binary-values",
+      "source": "tests/Compatibility/fixtures/m11/binary-values.bb",
+      "source_sha256": "91ebf8f9254a3eb9322c4582fc2af8e2330e452f6c3ef5a803bda5d699608ae3",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "49\n42\n0\n-1\n0\n1\n-5\n5.0\n5\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "49\n42\n0\n-1\n0\n1\n-5\n5.0\n5\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "decimal-overflow",
+      "source": "tests/Compatibility/fixtures/m11/decimal-overflow.bb",
+      "source_sha256": "4b492ed7a18d29a702ba1932127d1068b0679d071773c2617449d5dd39ba1dcd",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "2147483647\n2147483647\n2147483647\n2147483647\n-2147483647\n-2147483647\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "2147483647\n2147483647\n2147483647\n2147483647\n-2147483647\n-2147483647\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "m9-functions-defaults",
+      "source": "tests/Compatibility/fixtures/milestone9/functions.bb",
+      "source_sha256": "d73253b88c86324dcca61bee7bc6580066b9ff8dc7b9f701a327001d4cfe5c73",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "35\n75\n79\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "35\n75\n79\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "m9-function-argument-conversions",
+      "source": "tests/Compatibility/fixtures/milestone9/conversions.bb",
+      "source_sha256": "edf6d6534ff5391cc9b08d54882692a1a71cc70df0cfc44174a28b3e810cc356",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "4\n4.0\n5tail\n1\n8\n9.0\nhello\n12\n2.5\n42\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "4\n4.0\n5tail\n1\n8\n9.0\nhello\n12\n2.5\n42\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "m9-fields-default-initialization",
+      "source": "tests/Compatibility/fixtures/milestone9/fields.bb",
+      "source_sha256": "3d9c835108b1fe32446797eadff1ed4101df50dc253c8f04f19db01878aee9c6",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "0\n[]\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "0\n[]\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "m9-hex-wrap-32bit",
+      "source": "tests/Compatibility/fixtures/milestone9/hex32.bb",
+      "source_sha256": "59a19561357efd7dc4565324ce048d3344642f26b4ec002de43204c6ee046fd1",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "2147483647\n-2147483648\n-1\n0\n0\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "2147483647\n-2147483648\n-1\n0\n0\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "m9-omitted-middle-argument",
+      "source": "tests/Compatibility/fixtures/milestone9/omitted_middle.bb",
+      "source_sha256": "f2064349f436e11ef5231af537938fe9e28130a627aef16aa178f0eb102a3840",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "m9-command-grouping",
+      "source": "tests/Compatibility/fixtures/milestone9/command-grouping.bb",
+      "source_sha256": "210a8f9f2eee5b0d20bd5364bd6a3e3541916c9696b1b4ff0d5f60667a4082ac",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "3\n3\n3\n9\n9\n9\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "3\n3\n3\n9\n9\n9\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "include-main-directory-and-deduplication",
+      "source": "tests/Compatibility/fixtures/multifile/nested/main.bb",
+      "source_sha256": "1dd9ee7e937495ee77f91cecb71377a2f97b8ae2731249fa15ac7736c25d6b01",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "root-before\nchild\nnested-root-relative\nroot-after\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "root-before\nchild\nnested-root-relative\nroot-after\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "include-cycle-between-included-files",
+      "source": "tests/Compatibility/fixtures/multifile/cycle/main.bb",
+      "source_sha256": "6ac1f720c4ac4456ee836c4ab5811e975af519b265d6ab14edb902c7e5947de9",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "one-before\ntwo-before\ntwo-after\none-after\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "one-before\ntwo-before\ntwo-after\none-after\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "include-cycle-through-main-file",
+      "source": "tests/Compatibility/fixtures/multifile/main-cycle/main.bb",
+      "source_sha256": "3f65a145114c0d258f6af5f8d09ca344eddc30c1f0bfc06566988ab202f3a7a7",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "main-before\nchild-before-cycle\nmain-before\nmain-after\nchild-after-cycle\nmain-after\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "main-before\nchild-before-cycle\nmain-before\nmain-after\nchild-after-cycle\nmain-after\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "include-missing-nested-source-location",
+      "source": "tests/Compatibility/fixtures/multifile/missing/main.bb",
+      "source_sha256": "6ac1f720c4ac4456ee836c4ab5811e975af519b265d6ab14edb902c7e5947de9",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "include-inside-function-early-return",
+      "source": "tests/Compatibility/fixtures/multifile/function-return/main.bb",
+      "source_sha256": "78edbea9591c92120e29fcb16dd37076996666e972da7bbc51cf2166fa3f3e22",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "7\n42\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "7\n42\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "numeric-int-min-abs-sgn",
+      "source": "tests/Compatibility/fixtures/handles/math-int-min.bb",
+      "source_sha256": "99b1a7ff77086256d0d2b7c079fdddfd96a8563faab1de101ef25b3b8ae2a0cb",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "-2147483648\n-2147483648\n-1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "-2147483648\n-2147483648\n-1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "numeric-abs-int-min-constant",
+      "source": "tests/Compatibility/fixtures/handles/math-abs-const.bb",
+      "source_sha256": "0a96ca134c02b10d57e0d0cf2c6cc8ebc3da056e4cf4643e78689701ec243c5e",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "-2147483648\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "-2147483648\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "numeric-negative-zero",
+      "source": "tests/Compatibility/fixtures/handles/math-negative-zero.bb",
+      "source_sha256": "2436e175a8788bd57c3cb2a9234ac0b79d6df010a39d649e7540c2e1b77df89c",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "-0.0\n-0.0\n0.0\n-0.0\n0.0\n0.0\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "-0.0\n-0.0\n0.0\n-0.0\n0.0\n0.0\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "object-lifetime",
+      "source": "tests/Compatibility/fixtures/object-lifetime.bb",
+      "source_sha256": "341ca8493d067a254aff629655a863f1729fcfb634910015cca9a5fb2321ea44",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n42\n1\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n42\n1\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "object-each",
+      "source": "tests/Compatibility/fixtures/object-each.bb",
+      "source_sha256": "d82584e17698c5d0c2b6415e469f903bc6aec5c5fc532f57a1489c6ced728eca",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n3\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n3\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "object-order",
+      "source": "tests/Compatibility/fixtures/object-order.bb",
+      "source_sha256": "daa08e4cb8d65afd463abffc51a5e5d84396158584dccdef0a50f2dd04409367",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "3\n2\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "3\n2\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "vector-global-float",
+      "source": "tests/Compatibility/fixtures/vectors/global-float.bb",
+      "source_sha256": "4a840defd9a3ab073f084448434a8c2da275157208664ac608fafc2c899ffd91",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "0.0\n0.0\n1.25\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "0.0\n0.0\n1.25\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "vector-global-mixed",
+      "source": "tests/Compatibility/fixtures/vectors/global-mixed.bb",
+      "source_sha256": "6bd7504066f49be54545406bdd8ef3085e760378c93df2084a483987b701877c",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "0\n0\n\n42\nSCP\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "0\n0\n\n42\nSCP\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "vector-local-function",
+      "source": "tests/Compatibility/fixtures/vectors/local-function.bb",
+      "source_sha256": "4e8f0af7233a92ed063bf9885b58689d1ecc074e503008947264715884f6841b",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "49\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "49\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "vector-field-primitives",
+      "source": "tests/Compatibility/fixtures/vectors/field-primitives.bb",
+      "source_sha256": "95e6ef9a346aff2cb169c8fecaf843d799004f30ccdb28e27b5d4c4ddef1b73d",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "0.0\n0.0\n\n3.5\nfield\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "0.0\n0.0\n\n3.5\nfield\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "vector-field-objects",
+      "source": "tests/Compatibility/fixtures/vectors/field-objects.bb",
+      "source_sha256": "531fe3eba51061653e62738ee9b21e600dac25d3f3cf6f0a5cae87cca6f44e86",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n42\n42\n42\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n42\n42\n42\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "vector-field-delete-releases",
+      "source": "tests/Compatibility/fixtures/vectors/field-delete-releases.bb",
+      "source_sha256": "dcb52610f1335bd411c9559989f6ecfe50abcd3bb9dc23319509bcbd97e0e53e",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n2\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "vector-local-zero-per-call",
+      "source": "tests/Compatibility/fixtures/vectors/local-zero-per-call.bb",
+      "source_sha256": "73a06227a41ca14aa38436408b62a504fee4cbdcf60d51ef6fcb170c4326e39d",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "vector-field-per-instance",
+      "source": "tests/Compatibility/fixtures/vectors/field-per-instance.bb",
+      "source_sha256": "a33f0ff38f6498707b107b82b817678ea395e7803cdf8be5aee88e97284bce75",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "0\n7\n0\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "0\n7\n0\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "vector-invalid-constant-bound",
+      "source": "tests/Compatibility/fixtures/vectors/invalid-constant-bound.bb",
+      "source_sha256": "477511d1f10ebd0f16d38a67caadcfb3d63817afc48e34ad0beb1a069a55ca6c",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "vector-size-rounding",
+      "source": "tests/Compatibility/fixtures/vectors/size-rounding.bb",
+      "source_sha256": "793d4e0ab30a4753eaf60f95bb740d5afe000f9fff5a1736cce3703cb8da10a7",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "2\n3\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "2\n3\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "vector-size-rounding-bound-error",
+      "source": "tests/Compatibility/fixtures/vectors/size-rounding-bound-error.bb",
+      "source_sha256": "ac72f85166fd3e538b52197b3c343b91f5a6156d1f0ef98b101d1f44fdcd0ee2",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 1
+      },
+      "original_capture": {
+        "phase": "compile_error",
+        "stdout": "",
+        "exit_code": 255
+      }
+    },
+    {
+      "name": "vector-index-side-effects",
+      "source": "tests/Compatibility/fixtures/vectors/index-side-effects.bb",
+      "source_sha256": "572a4621da292933b622ac0989874c1cfa9cd5618b0b80a2fac1d45738cc6744",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n42\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n42\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "const-scalar-baseline",
+      "source": "tests/Compatibility/fixtures/vectors/const-baseline.bb",
+      "source_sha256": "eee7d9bbdd7de73596bad20937c9894df5d03456cf73a089ddc15af45977fdd6",
+      "oracle": "M11 checked-in capture, reused; not freshly rerun",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "6\n3.5\nSCP\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "6\n3.5\nSCP\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "native-files",
+      "source": "tests/Compatibility/fixtures/m12/native-files.bb",
+      "source_sha256": "1e910a44da1eddc6993cf2b7fe037492c10ccde7dd5fa4ae5aa78ecbc8afbe2e",
+      "oracle": "Fresh M12 Blitz3D V1.118 capture via Proton",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "7\n7\n0\n-2147483645\n-2147483645\n0\n1\n1\n1\n2\n0\n2\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "7\n7\n0\n-2147483645\n-2147483645\n0\n1\n1\n1\n2\n0\n2\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "native-files-patterns",
+      "source": "tests/Compatibility/fixtures/m12/native-files-patterns.bb",
+      "source_sha256": "0510845782ab8e41ed9dce14d67aca13e93210a826e3bb971db10186ce215712",
+      "oracle": "Fresh M12 Blitz3D V1.118 capture via Proton",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "0\n7\n0\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "0\n7\n0\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "native-strings",
+      "source": "tests/Compatibility/fixtures/m12/native-strings.bb",
+      "source_sha256": "e959169f485d7f6e66bc8d7556792155dffc36207c5cf03c2e4891dc9f29d405",
+      "oracle": "Fresh M12 Blitz3D V1.118 capture via Proton",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\nA\nA\n€\n1\n5\n2\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "1\n1\n1\nA\nA\n€\n1\n5\n2\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "native-files-nul",
+      "source": "tests/Compatibility/fixtures/m12/native-files-nul.bb",
+      "source_sha256": "6a991d0be302fca043205bc6dc5b66887e31bd5293fd890cfcf5d1bbb5be9ddb",
+      "oracle": "Fresh M12 Blitz3D V1.118 capture via Proton",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "7\n1\n1\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "7\n1\n1\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "native-files-separators",
+      "source": "tests/Compatibility/fixtures/m12/native-files-separators.bb",
+      "source_sha256": "a5bdbf1b8fad36fb9011dc0e0fcf91e9ef378d59bc5613a5fda27cd3b01e08ed",
+      "oracle": "Fresh M12 Blitz3D V1.118 capture via Proton",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null,
+      "local_capture": {
+        "phase": "run",
+        "stdout": "0\n0\n0\n2\n1\n7\n",
+        "exit_code": 0
+      },
+      "original_capture": {
+        "phase": "run",
+        "stdout": "0\n0\n0\n2\n1\n7\n",
+        "exit_code": 0
+      }
+    }
+  ],
+  "scp": {
+    "source_hashes_match_m11": true,
+    "declared_repository": "Regalis11/scpcb",
+    "declared_commit": "edb8fe0840b78f14d1aef3a0bf6174630e7be296",
+    "provenance_verified_by_probe": false,
+    "categories": {
+      "compiled": 2,
+      "lexical": 0,
+      "syntactic": 2,
+      "semantic_type": 9,
+      "native_unregistered": 14,
+      "external_missing": 3,
+      "infrastructure": 0,
+      "unclassified_compiler_error": 0
+    },
+    "integrated": {
+      "phase": "compiler_error",
+      "first_error": {
+        "file": "FMod.bb",
+        "line": 15,
+        "column": 1,
+        "category": "external_missing",
+        "diagnostic": "/tmp/scpcb-audit-source/FMod.bb(15,1): Unknown BASIC function or external symbol 'fsound_init'."
+      },
+      "observed_errors_lower_bound": 1,
+      "additional_errors": null,
+      "diagnostic_include_depth": 1,
+      "diagnostic_include_paths": [
+        [
+          "Main.bb",
+          "FMod.bb"
+        ]
+      ],
+      "syntax_check": {
+        "phase": "syntax_validated",
+        "syntax_validated": true,
+        "semantics": "unresolved",
+        "binding": "unresolved",
+        "native_resolution": "unresolved",
+        "returncode": 0,
+        "first_diagnostic": null,
+        "duration_ms": 311
+      },
+      "entry": "Main.bb",
+      "static_include_closure": {
+        "files": [
+          "FMod.bb",
+          "StrictLoads.bb",
+          "fullscreen_window_fix.bb",
+          "KeyName.bb",
+          "Blitz_Basic_Bank.bb",
+          "Blitz_File_FileName.bb",
+          "Blitz_File_ZipApi.bb",
+          "Update.bb",
+          "DevilParticleSystem.bb",
+          "AAText.bb",
+          "Achievements.bb",
+          "Difficulty.bb",
+          "Dreamfilter.bb",
+          "Items.bb",
+          "Particles.bb",
+          "MapSystem.bb",
+          "DrawPortals.bb",
+          "Skybox.bb",
+          "NPCs.bb",
+          "UpdateEvents.bb",
+          "Menu.bb",
+          "LoadAllSounds.bb",
+          "Save.bb"
+        ],
+        "file_count": 23,
+        "missing": [],
+        "max_depth": 2
+      }
+    },
+    "files": [
+      {
+        "source": "AAText.bb",
+        "sha256": "2c3941a9ee03d0a46ec2f8fed2b17ef5bc7f651e5539c161b38c1866e141678e",
+        "category": "semantic_type",
+        "first_diagnostic": "/tmp/scpcb-audit-source/AAText.bb(1,24): Unknown BASIC function or external symbol 'getiniint'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 42
+        }
+      },
+      {
+        "source": "Achievements.bb",
+        "sha256": "5a7233c39af9614cdefbf16b6e59c8ebe5576e7d11c921bacfc5319cfb918d9e",
+        "category": "semantic_type",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Achievements.bb(19,26): Unknown BASIC function or external symbol 'getiniint'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 41
+        }
+      },
+      {
+        "source": "Blitz_Basic_Bank.bb",
+        "sha256": "af74ae4fcb6c90b83bdd433ea288dc80c1867c59f4bf8c3153837f0060c24f06",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Blitz_Basic_Bank.bb(21,21): Unknown BASIC function or external symbol 'banksize'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 40
+        }
+      },
+      {
+        "source": "Blitz_File_FileName.bb",
+        "sha256": "66f3af39c2637b65b86f513e7789f41a83e5ea4ad8847def7119e68fa5c99fbb",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Blitz_File_FileName.bb(28,5): Unknown BASIC function or external symbol 'right'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 41
+        }
+      },
+      {
+        "source": "Blitz_File_ZipApi.bb",
+        "sha256": "30117ad9e79b71df38f7aa7414b95b5c7e417da341149b74acef53a1b4dec505",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Blitz_File_ZipApi.bb(247,29): Unknown BASIC function or external symbol 'banksize'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 56
+        }
+      },
+      {
+        "source": "Converter.bb",
+        "sha256": "3e35ad5289c30599b85792a19c427e854080d38ca6c9d48e75eda16583a1f61f",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Converter.bb(1,1): Unknown BASIC function or external symbol 'graphics3d'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 55
+        }
+      },
+      {
+        "source": "CPU_Details.bb",
+        "sha256": "9ce0ec968c6b6bc89698ba801240955694ba148bb7be03f2729a9e7e33cf747a",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/CPU_Details.bb(1,1): Unknown BASIC function or external symbol 'graphics'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 40
+        }
+      },
+      {
+        "source": "DevilParticleSystem.bb",
+        "sha256": "6a9789e3c06bccfb4d036f80f34daf7a13e2b4747c4996e3b0aaa19b7f64ab1c",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/DevilParticleSystem.bb(50,15): Unknown BASIC function or external symbol 'createpivot'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 59
+        }
+      },
+      {
+        "source": "Difficulty.bb",
+        "sha256": "83556dab02c307bd6f5478aded9a523086518fe25989e1bd2bf510aed7ec7853",
+        "category": "compiled",
+        "first_diagnostic": null,
+        "assembly_emitted": true,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 40
+        }
+      },
+      {
+        "source": "DrawPortals – Kopio.bb",
+        "sha256": "a8f89d5e895222b84621064eb5988d2f174222f81eb83d17198a88a6d548685c",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/DrawPortals – Kopio.bb(25,12): Unknown BASIC function or external symbol 'createtexture'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 42
+        }
+      },
+      {
+        "source": "DrawPortals.bb",
+        "sha256": "faa0441f5a2a332c95fa35ea595841a99a47f03772443937df12e19aed69cee8",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/DrawPortals.bb(21,12): Unknown BASIC function or external symbol 'createtexture'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 41
+        }
+      },
+      {
+        "source": "Dreamfilter.bb",
+        "sha256": "0faafc5432585a5782db8f4b4cc49db58b59ddfb5695e7966a9552594ab8e720",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Dreamfilter.bb(6,15): Unknown BASIC function or external symbol 'createcamera'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 40
+        }
+      },
+      {
+        "source": "FMod.bb",
+        "sha256": "6e6bfa5ccb0abf4bf1ab57de657f0b1bb1e641d68e34d0d6dcf1bfed0e05e9f4",
+        "category": "external_missing",
+        "first_diagnostic": "/tmp/scpcb-audit-source/FMod.bb(15,1): Unknown BASIC function or external symbol 'fsound_init'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 40
+        }
+      },
+      {
+        "source": "fullscreen_window_fix.bb",
+        "sha256": "c31d1f86d070a57602806e885ed8e16fcda310bcdf9179ab92cf5b0896824505",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/fullscreen_window_fix.bb(45,23): Unknown BASIC function or external symbol 'systemproperty'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 40
+        }
+      },
+      {
+        "source": "Items.bb",
+        "sha256": "92958954d19c65a6139d9bb89a7eff808ac521fbad0034b175062845236dd325",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Items.bb(37,59): Unknown BASIC function or external symbol 'copyentity'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 58
+        }
+      },
+      {
+        "source": "KeyName.bb",
+        "sha256": "0759530b7a56de5f424e1aeebf4929107a7e6c6b7130975e1bd16ef97afbc0a2",
+        "category": "compiled",
+        "first_diagnostic": null,
+        "assembly_emitted": true,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 40
+        }
+      },
+      {
+        "source": "LightMapPNG.bb",
+        "sha256": "56b3f49cd83c0baffca8398625e4d755265b115aeded4c0d1fbef42217ab136a",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/LightMapPNG.bb(1,1): Unknown BASIC function or external symbol 'graphics3d'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 43
+        }
+      },
+      {
+        "source": "LoadAllSounds.bb",
+        "sha256": "367da63ef43730f5e31a4f1e78bd13f1ebdc91ffeccb64b3769fc5b6c3c15971",
+        "category": "syntactic",
+        "first_diagnostic": "/tmp/scpcb-audit-source/LoadAllSounds.bb(4,15): Expected Close; found ','.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_error",
+          "syntax_validated": false,
+          "semantics": "not_assessed",
+          "binding": "not_assessed",
+          "native_resolution": "not_assessed",
+          "returncode": 1,
+          "first_diagnostic": "/tmp/scpcb-audit-source/LoadAllSounds.bb(4,15): Expected Close; found ','.",
+          "duration_ms": 44
+        }
+      },
+      {
+        "source": "Main.bb",
+        "sha256": "fcc2c1504e35b6fbb09947ec1835932054c5d18c6e105a4ebf4bcb23ca249db5",
+        "category": "external_missing",
+        "first_diagnostic": "/tmp/scpcb-audit-source/FMod.bb(15,1): Unknown BASIC function or external symbol 'fsound_init'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 313
+        }
+      },
+      {
+        "source": "MapSystem.bb",
+        "sha256": "72a4123fa648387d458efd79c4310070a5eb9e87c7c563b85d39dcf2cd8dd3bd",
+        "category": "semantic_type",
+        "first_diagnostic": "/tmp/scpcb-audit-source/MapSystem.bb(1793,8): Unknown Type 'doors'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 103
+        }
+      },
+      {
+        "source": "Menu.bb",
+        "sha256": "efc3523b8fd2883139e2fb85918e44cad78d826bccb8672b4c8543ef400e9698",
+        "category": "semantic_type",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Menu.bb(1,20): Unknown BASIC function or external symbol 'loadimage_strict'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 63
+        }
+      },
+      {
+        "source": "MusicPlayer.bb",
+        "sha256": "701c0bb0a57f767346aef0a1711da031674c72a0bb247967b3d0c9ec345e9aa5",
+        "category": "external_missing",
+        "first_diagnostic": "/tmp/scpcb-audit-source/MusicPlayer.bb(1,1): Unable to open include file 'BlitzAL.bb': File or directory not found.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_error",
+          "syntax_validated": false,
+          "semantics": "not_assessed",
+          "binding": "not_assessed",
+          "native_resolution": "not_assessed",
+          "returncode": 1,
+          "first_diagnostic": "/tmp/scpcb-audit-source/MusicPlayer.bb(1,1): Unable to open include file 'BlitzAL.bb': File or directory not found.",
+          "duration_ms": 47
+        }
+      },
+      {
+        "source": "NPCs.bb",
+        "sha256": "0ddc21639f55034ed13d40e9cd755a384a9891080c66eda1d638f4e1705ded2c",
+        "category": "semantic_type",
+        "first_diagnostic": "/tmp/scpcb-audit-source/NPCs.bb(38,8): Unknown Type 'waypoints'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 80
+        }
+      },
+      {
+        "source": "Particles.bb",
+        "sha256": "872e7eed4895a660f720e2fb87d98928cd5664fc1a4aa70c31f2731b0703a1f1",
+        "category": "semantic_type",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Particles.bb(95,8): Unknown Type 'rooms'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 42
+        }
+      },
+      {
+        "source": "RMesh_Model_Viewer.bb",
+        "sha256": "265158bfee234ead24455c51b75a3eca5212dae2d217ea0ee48cf8f6999a66ad",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/RMesh_Model_Viewer.bb(714,16): Unknown BASIC function or external symbol 'input'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 58
+        }
+      },
+      {
+        "source": "Save.bb",
+        "sha256": "60e742fcaef01539582ef6f4b0b601747cbc86d6e128b21f63be05c3af69d5d3",
+        "category": "syntactic",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Save.bb(594,14): Expected Close; found ','.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_error",
+          "syntax_validated": false,
+          "semantics": "not_assessed",
+          "binding": "not_assessed",
+          "native_resolution": "not_assessed",
+          "returncode": 1,
+          "first_diagnostic": "/tmp/scpcb-audit-source/Save.bb(594,14): Expected Close; found ','.",
+          "duration_ms": 59
+        }
+      },
+      {
+        "source": "Skybox.bb",
+        "sha256": "ca8708421c62bd589930e9b9b74f4472eefa656ea899b5efd643f10d16c78d76",
+        "category": "native_unregistered",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Skybox.bb(6,8): Unknown BASIC function or external symbol 'createmesh'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 41
+        }
+      },
+      {
+        "source": "StrictLoads.bb",
+        "sha256": "984359249f5354a42540daf568e6a7ac8e1cffd91bb0d4d3a479b2e1637927b6",
+        "category": "semantic_type",
+        "first_diagnostic": "/tmp/scpcb-audit-source/StrictLoads.bb(153,58): Const initializer must use previously declared constants.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 42
+        }
+      },
+      {
+        "source": "Update.bb",
+        "sha256": "68f4c24b42d958152f0afa9754be398eb6e8330abaffc01484a7b86f57e1fb94",
+        "category": "semantic_type",
+        "first_diagnostic": "/tmp/scpcb-audit-source/Update.bb(12,30): Unknown BASIC function or external symbol 'getiniint'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 58
+        }
+      },
+      {
+        "source": "UpdateEvents.bb",
+        "sha256": "f76e5612ee5fd6730252d2546dc0524d243e6314829aef75b61ff832d10e1a5d",
+        "category": "semantic_type",
+        "first_diagnostic": "/tmp/scpcb-audit-source/UpdateEvents.bb(2,2): Unknown BASIC function or external symbol 'catcherrors'.",
+        "assembly_emitted": false,
+        "syntax_check": {
+          "phase": "syntax_validated",
+          "syntax_validated": true,
+          "semantics": "unresolved",
+          "binding": "unresolved",
+          "native_resolution": "unresolved",
+          "returncode": 0,
+          "first_diagnostic": null,
+          "duration_ms": 97
+        }
+      }
+    ]
+  },
+  "memory_stress": [
+    {
+      "batch": 1,
+      "operations": 100000,
+      "liveBefore": 60336,
+      "allocatedBytes": 11200448,
+      "beforeCollection": 9034864,
+      "liveAfter": 59936,
+      "estimatedReclaimedBytes": 8974928,
+      "committedBytes": 10575872,
+      "handleEntries": 0,
+      "handleCapacity": 3,
+      "positions": 0,
+      "lastHandle": 101000,
+      "failures": 0
+    },
+    {
+      "batch": 2,
+      "operations": 100000,
+      "liveBefore": 68592,
+      "allocatedBytes": 11200448,
+      "beforeCollection": 9042800,
+      "liveAfter": 61544,
+      "estimatedReclaimedBytes": 8981256,
+      "committedBytes": 10571776,
+      "handleEntries": 0,
+      "handleCapacity": 3,
+      "positions": 0,
+      "lastHandle": 201000,
+      "failures": 0
+    }
+  ]
+}

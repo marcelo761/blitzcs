@@ -25,7 +25,9 @@ public static class DotNetEmitter
             new CSharpParseOptions(LanguageVersion.CSharp14), generatedPath);
         var platformAssemblies = (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")
             ?? throw new InvalidOperationException("The host runtime does not expose platform references.");
-        var externalPaths = (referencePaths ?? []).Select(Path.GetFullPath).Distinct(StringComparer.Ordinal).ToArray();
+        string[] externalPaths;
+        using (var context = new ExternalAssemblyLoadContext())
+            externalPaths = context.Discover(referencePaths ?? []).ToArray();
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var targets = new Dictionary<string, string>(comparer);
         foreach (var path in externalPaths)

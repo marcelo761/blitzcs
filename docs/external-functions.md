@@ -49,12 +49,19 @@ A CLI usa contexto de carga coletável para inspeção, permitindo compilações
 independentes com assemblies de mesmo nome simples. Solicita unload após criar
 o registro; os metadados permanecem disponíveis enquanto o registro é observado.
 
-O emissor copia as assemblies diretamente registradas ao diretório de saída.
-Rejeita saída igual a uma referência externa e colisões entre nomes de arquivos
-antes de copiar. Dependências transitivas e arquivos auxiliares não são resolvidos
-nem publicados automaticamente: cabe ao host disponibilizá-los. Para uma API de
-plugin com dependências próprias, essa publicação/resolução precisa ser tratada
-explicitamente antes do uso. Os testes desta fatia usam módulos standalone.
+O carregador e o emissor percorrem as referências de assembly gravadas nos
+metadados .NET. Cada dependência que não pertence ao runtime é procurada como
+`<AssemblyName>.dll` ao lado do assembly que a referencia; o mesmo processo
+continua pelas dependências transitivas. O build falha com o nome da dependência
+se ela não estiver nessa pasta. O emissor compila contra essa cadeia e copia os
+assemblies ao diretório de saída para que o programa rode sem acesso à pasta
+original dos módulos.
+
+As referências do runtime .NET não são copiadas. Colisões de nome no diretório
+de saída e uma saída que sobrescreveria uma referência são rejeitadas antes de
+alterar arquivos do programa. A resolução usa referências de assembly, não varre
+a pasta por arquivos arbitrários; arquivos auxiliares como assemblies de recursos
+satélite precisam ser disponibilizados separadamente.
 
 ## RuntimeError real, opt-in
 
@@ -68,3 +75,12 @@ o status zero de determinadas falhas do runtime original.
 Essa biblioteca opcional não implementa gráficos, áudio ou física e não é
 referenciada por BlitzCS.Compiler nem pela CLI. Não há implementações vazias de
 comandos de engine. A integração futura continua na direção Blitz3DCS → BlitzCS.
+
+## Módulo Blitz3DCS inicial
+
+[samples/Native/blitz3dcs.json](../samples/Native/blitz3dcs.json) registra somente
+métodos reais do [runtime M12](native-runtime-m12.md). A biblioteca permanece
+independente do núcleo. O fechamento gerenciado de publicação não inclui DLLs
+nativas, assets ou cargas dinâmicas sem referência em metadados. As referências
+adicionais descobertas pelo emissor também não ampliam automaticamente a superfície
+de símbolos `CS::` do probe semântico, que usa as referências explícitas do registro.

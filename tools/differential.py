@@ -75,7 +75,8 @@ def _capture_process(command: list[str], timeout: float, runner: Callable[..., A
 
 def run_harness(dotnet: str, blitz_cli: str, manifest: Path, report_path: Path,
                 original_runner: str | None = None, timeout: float = 20,
-                require_original: bool = False, runner: Callable[..., Any] = subprocess.run) -> dict[str, Any]:
+                require_original: bool = False, runner: Callable[..., Any] = subprocess.run,
+                externals: Path | None = None) -> dict[str, Any]:
     entries = load_manifest(Path(manifest))
     rows: list[dict[str, Any]] = []
     manifest_dir = Path(manifest).resolve().parent
@@ -87,6 +88,8 @@ def run_harness(dotnet: str, blitz_cli: str, manifest: Path, report_path: Path,
         with tempfile.TemporaryDirectory(prefix="blitzcs-diff-") as temp:
             output = Path(temp) / f"{entry['name']}.dll"
             build_command = [dotnet, blitz_cli, "build", str(source), "-o", str(output)]
+            if externals is not None:
+                build_command.extend(["--externals", str(Path(externals).resolve())])
             stage = "compile"
             try:
                 built = _capture_process(build_command, timeout, runner)
@@ -173,10 +176,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--original-runner", help="optional executable implementing the JSON capture protocol")
     parser.add_argument("--timeout", type=float, default=20)
     parser.add_argument("--require-original", action="store_true")
+    parser.add_argument("--externals", type=Path, help="optional typed external catalog for the BlitzCS build")
     args = parser.parse_args(argv)
     try:
         report = run_harness(args.dotnet, args.blitz_cli, Path(args.manifest), Path(args.report),
-                             args.original_runner, args.timeout, args.require_original)
+                             args.original_runner, args.timeout, args.require_original, externals=args.externals)
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         print(f"differential harness error: {exc}", file=sys.stderr)
         return 2

@@ -60,7 +60,7 @@ public sealed class HandleLifetimeTests
             """, assembly =>
         {
             var bb = assembly.GetType("BB")!;
-            Assert.Single(Table(assembly));
+            Assert.Single(Table(assembly).Keys);
             var weak = DeleteAndReleaseWitness(assembly);
             Assert.Empty(Table(assembly));
             Collect();

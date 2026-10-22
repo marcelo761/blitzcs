@@ -112,3 +112,10 @@ históricos acima: 27/30 arquivos passam na verificação sintática isolada e a
 isolados e Main para em FileSize não registrado na linha 12. Sem resolução
 semântica completa ou assembly do jogo emitido. O inventário de nomes nativos
 é metadado para planejar implementações reais, não um runtime simulado.
+
+## Atualização Milestone 12
+
+O [relatório M12](scp-milestone12.md) registra a integração real de arquivos,
+sistema e Chr/Len. Main ultrapassa FileSize e para em FSOUND_Init de FMod.bb:15,
+declaração externa para fmod.dll ainda não vinculada. Sintaxe integrada preservada,
+2/30 assemblies isolados, sem assembly integrado ou execução funcional do jogo.

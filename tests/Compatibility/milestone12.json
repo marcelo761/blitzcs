@@ -1,0 +1,35 @@
+{
+  "description": "Native file and string runtime expectations captured from genuine Blitz3D V1.118 via Proton; raw attempt evidence is in artifacts/m12-original/.",
+  "fixtures": [
+    {
+      "name": "native-files",
+      "source": "fixtures/m12/native-files.bb",
+      "expected_phase": "run",
+      "expected_stdout": "7\n7\n0\n-2147483645\n-2147483645\n0\n1\n1\n1\n2\n0\n2\n1\n"
+    },
+    {
+      "name": "native-files-patterns",
+      "source": "fixtures/m12/native-files-patterns.bb",
+      "expected_phase": "run",
+      "expected_stdout": "0\n7\n0\n"
+    },
+    {
+      "name": "native-strings",
+      "source": "fixtures/m12/native-strings.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n1\n1\nA\nA\n€\n1\n5\n2\n"
+    },
+    {
+      "name": "native-files-nul",
+      "source": "fixtures/m12/native-files-nul.bb",
+      "expected_phase": "run",
+      "expected_stdout": "7\n1\n1\n"
+    },
+    {
+      "name": "native-files-separators",
+      "source": "fixtures/m12/native-files-separators.bb",
+      "expected_phase": "run",
+      "expected_stdout": "0\n0\n0\n2\n1\n7\n"
+    }
+  ]
+}

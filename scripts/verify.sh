@@ -43,3 +43,7 @@ dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build
 dotnet artifacts/hybrid-handles.dll
 dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Diagnostics/handle-memory.bb -o artifacts/handle-memory.dll
 dotnet artifacts/handle-memory.dll > artifacts/handle-memory.json
+python3 tools/prepare_native_fixtures.py artifacts/m12-assets
+env -u BLITZCS_M12_MISSING BLITZCS_M12_ROOT="$PWD/artifacts/m12-assets" python3 tools/differential.py --manifest tests/Compatibility/milestone12.json --externals samples/Native/blitz3dcs.json --report artifacts/m12-native-local.json
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Hybrid/NativeFiles/main.bb -o artifacts/native-files-hybrid.dll --externals samples/Native/blitz3dcs.json
+dotnet artifacts/native-files-hybrid.dll
