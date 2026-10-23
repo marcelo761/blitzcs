@@ -1,0 +1,75 @@
+{
+  "runtime": ".NET 10.0.12",
+  "architecture": "X64",
+  "iterations": 500000,
+  "rounds": 5,
+  "note": "Same delegate/loop baseline; median wall time, allocation counter for calling thread; no timing assertions or native-original speed claim.",
+  "results": [
+    {
+      "name": "ordinal-instr-64",
+      "median_nanoseconds_per_call": 15.629082,
+      "median_allocated_bytes_per_call": 0,
+      "checksum": 161280000
+    },
+    {
+      "name": "scalar-validated-instr-64",
+      "median_nanoseconds_per_call": 124.332734,
+      "median_allocated_bytes_per_call": 0,
+      "checksum": 161280000
+    },
+    {
+      "name": "legacy-instr-64",
+      "median_nanoseconds_per_call": 29.408622,
+      "median_allocated_bytes_per_call": 0,
+      "checksum": 161280000
+    },
+    {
+      "name": "ordinal-instr-4096",
+      "median_nanoseconds_per_call": 110.75233,
+      "median_allocated_bytes_per_call": 0,
+      "checksum": 10321920000
+    },
+    {
+      "name": "scalar-validated-instr-4096",
+      "median_nanoseconds_per_call": 7280.95543,
+      "median_allocated_bytes_per_call": 0,
+      "checksum": 10321920000
+    },
+    {
+      "name": "legacy-instr-4096",
+      "median_nanoseconds_per_call": 159.74493,
+      "median_allocated_bytes_per_call": 0,
+      "checksum": 10321920000
+    },
+    {
+      "name": "ordinal-left-64",
+      "median_nanoseconds_per_call": 17.464952,
+      "median_allocated_bytes_per_call": 40,
+      "checksum": 20160000
+    },
+    {
+      "name": "scalar-validated-left-64",
+      "median_nanoseconds_per_call": 124.456152,
+      "median_allocated_bytes_per_call": 40,
+      "checksum": 20160000
+    },
+    {
+      "name": "legacy-left-64",
+      "median_nanoseconds_per_call": 22.738406,
+      "median_allocated_bytes_per_call": 40,
+      "checksum": 20160000
+    },
+    {
+      "name": "legacy-upper-unchanged-64",
+      "median_nanoseconds_per_call": 29.247058,
+      "median_allocated_bytes_per_call": 0,
+      "checksum": 161280000
+    },
+    {
+      "name": "legacy-replace-no-match-64",
+      "median_nanoseconds_per_call": 35.828572,
+      "median_allocated_bytes_per_call": 0,
+      "checksum": 161280000
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "baseline_commit": "2557ba346e9955d0d030e2e45f94355e95ac2431",
+  "builds": {
+    "Release": {
+      "passed_tests": 784,
+      "failed": 0,
+      "skipped": 0,
+      "warnings": 0,
+      "errors": 0,
+      "log_sha256": "6e8cab2aa16775a2234a7cdc56584bc51e5194b24f4a7fe3ef38178d69ed0e7e"
+    },
+    "Debug": {
+      "passed_tests": 784,
+      "failed": 0,
+      "skipped": 0,
+      "warnings": 0,
+      "errors": 0,
+      "log_sha256": "f4128e6149c70af8b0c8baad31c5e6d791f3c08df883a2d65886ee178ca1a3a5"
+    }
+  },
+  "python_tests": 76,
+  "python_log_sha256": "17c19193198946adad4d6163d31f8bb1aeb8f3753d1a9657e751589a56aa84e9",
+  "full_release_pipeline_passed": true,
+  "full_release_pipeline_log_sha256": "dfc6fa9871addafc3d1cc8263550df39174762ce08d109d95f2f3ad8bf55c3e1",
+  "verification_scope": "Full verify.sh pipeline passed; after ASCII optimization and seven additional boundary cases Release .NET tests were rerun. Debug built/tested final code. Final full Python suite ran separately. Benchmark built/executed in Release.",
+  "new_string_tests": 71,
+  "preserved_native_concurrency_scenarios": 3,
+  "local_fixtures": 97,
+  "historical_differential": {
+    "match": 85,
+    "known_termination_divergence": 1,
+    "adapter_error": 0,
+    "fresh_original_runs": 0
+  },
+  "m17_preserved_matches": 3,
+  "m18_preserved_matches": 1,
+  "m19_differential": {
+    "strict_match": 1,
+    "known_termination_divergence": 6,
+    "phase_diagnostic_agreement": 6,
+    "unexpected_mismatch": 0,
+    "fresh_original_programs": 7
+  },
+  "combined_bounded_differential": {
+    "strict_match": 90,
+    "known_termination_divergence": 7,
+    "cases": 97
+  },
+  "inventory": {
+    "registrations": 593,
+    "public_signatures": 536,
+    "internal_symbols": 57,
+    "typed_declarations": 115,
+    "source_backed_managed_bindings": 52,
+    "scoped_historically_validated_apis": 30,
+    "scope": "literal rtSym registrations, not compiler intrinsics or third-party userlib APIs"
+  },
+  "runtime_family": {
+    "total_functions": 18,
+    "new_implementations": 16,
+    "deterministic_functions_compared": 16,
+    "clock_functions_managed_tests_only": 2
+  },
+  "compiler_core_changed": false,
+  "scp": {
+    "before_compiled": 3,
+    "after_compiled": 5,
+    "total_files": 30,
+    "unchanged_hashes": 30,
+    "syntax_validated": true,
+    "semantic_validated": false,
+    "first_error": "fullscreen_window_fix.bb:84:2 MoveMouse",
+    "integrated_assembly_emitted": false,
+    "game_executed": false,
+    "original_game_build_executed": false
+  },
+  "benchmarks": "docs/evidence/m19-string-benchmark.json"
+}

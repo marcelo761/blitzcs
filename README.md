@@ -103,6 +103,8 @@ Typed catalogs separate three stages: **semantic declaration**, **binding to an 
 
 C/C++ integration uses explicit bindings, ABI contracts and resource ownership. It does not make arbitrary BASIC integers into native pointers. [Checked memory banks and synchronous native buffer borrowing](docs/legacy-memory-m18.md) preserve this boundary. The [native sample](samples/NativeInterop) and its [contract](docs/native-interop-m13.md) exercise integers, floats, UTF-8 strings, library errors and resource release. A Win32 FMOD DLL cannot be loaded into the verified Linux x64 .NET process; the original FMOD is used separately under Proton as a compatibility reference.
 
+The [historical API inventory](docs/blitz3d-api-inventory.md) separates signatures, declarations, bindings and scoped validation. The complete 18-function [legacy string family](docs/historical-api-m19.md) is implemented with an explicit CP1252 boundary, historical byte casing/trimming and real local clock formatting.
+
 The optional audio layer supports sample and stream playback, managed channel handles, volume, pan, frequency, looping, pause, stop and cleanup. SDL3 provides output and system libsndfile decodes supported assets. Streams currently decode into memory, with a 256 MiB decoded-file limit. See [audio implementation and differences](docs/audio-milestone15.md) and [audio requirements](src/Blitz3DCS.Audio/README.md). This is not complete binary or behavioral equivalence with FMOD 3.75.
 
 ## Build and validation
@@ -118,14 +120,14 @@ bash scripts/verify.sh
 
 The complete verification script additionally needs **Python 3**, a **C compiler available as `cc`**, **SDL3** and **libsndfile**. On the verified Linux host, the native libraries are `libSDL3.so.0` and `libsndfile.so.1`. Install equivalent runtime packages from your distribution. The script exercises default, dummy and disk audio paths; a headless machine may lack a usable default device. Basic compiler examples do not require these audio libraries.
 
-At the M18 validation checkpoint (see the [M18 report](docs/legacy-memory-m18.md)):
+At the M19 validation checkpoint (see the [M19 report](docs/historical-api-m19.md)):
 
 | Verification | Recorded result |
 | --- | --- |
-| .NET tests, Release and Debug | 710 passing in each configuration |
-| Python harness tests | 59 passing |
-| Local language fixtures | 90 passing |
-| Differential language comparisons | Previous 85/86 and M17 three matches preserved; one new bank program matches (89/90 combined) |
+| .NET tests, Release and Debug | 784 passing in each configuration |
+| Python harness tests | 76 passing |
+| Local language fixtures | 97 passing |
+| Differential language comparisons | 90/97 strict matches; seven explicit error-termination differences; prior results preserved |
 
 The publication audit reruns the available suite; see [release validation and audit](docs/public-release-audit.md) for its actual results. Differential replay reuses recorded genuine original captures where stated; it is not a new run of the original compiler for every fixture. Local expectations alone do not prove equivalence. The known `upper-bound-error` difference retains useful nonzero error termination in BlitzCS. See [differential validation](docs/differential.md) and [M16 evidence](docs/evidence/m16-validation.json).
 
@@ -133,7 +135,7 @@ Audio evidence includes non-silent PCM measured after SDL's disk output and play
 
 ## Current limitations and SCP status
 
-SCP: Containment Breach is a real-world compatibility case study. Its original sources and assets are **not distributed here**. The M18 audit records integrated syntax validation of `Main.bb` and its Include tree, with **3 of 30 files compiling independently**. With the SCP contract catalog, integrated semantic compilation stops at **`fullscreen_window_fix.bb:84:2`, `MoveMouse`**. Checked banks and a real C buffer bridge work; `api_GetClientRect` has only a declared adapter contract and still requires an executable Win32 host binding. Graphics signatures remain unbound. The game assembly has not been emitted and the game does not run on BlitzCS. See [latest SCP audit and memory implementation](docs/legacy-memory-m18.md).
+SCP: Containment Breach is a real-world compatibility case study. Its original sources and assets are **not distributed here**. The M19 audit records integrated syntax validation of `Main.bb` and its Include tree, with **5 of 30 files compiling independently**, up from 3/30. With the SCP contract catalog, integrated semantic compilation stops at **`fullscreen_window_fix.bb:84:2`, `MoveMouse`**. Checked banks and a real C buffer bridge work; `api_GetClientRect` has only a declared adapter contract and still requires an executable Win32 host binding. Graphics signatures remain unbound. The game assembly has not been emitted and the game does not run on BlitzCS. See [latest SCP audit and API coverage](docs/historical-api-m19.md).
 
 There is no renderer, Vulkan backend, physics implementation or editor. Some native commands and external dependencies remain unavailable. `SystemProperty("AppHWND")` reports an unsupported capability without a real window host. Direct array/object interoperability is outside the public primitive `BB.` bridge. Floating-point boundaries, encodings and other historical corner cases still need broader differential coverage. `Print` targets the console here, while original Blitz3D draws to a graphical surface.
 
