@@ -16,6 +16,8 @@ public static class LegacyMemoryBindings
 
     public static int WriteNativeRect(int bank)
     {
+        // Lock order: bank store/buffer -> Gate -> library lifetime. A host bank callback
+        // can call CloseNativeMemory while another writer is waiting for the bank store.
         return LegacyBanks.WithPointer(bank, 0, 16, (pointer, length) =>
         {
             lock (Gate)
@@ -30,6 +32,7 @@ public static class LegacyMemoryBindings
 
     public static int CloseNativeMemory()
     {
+        // Keep this path independent of the bank store while holding Gate.
         lock (Gate)
         {
             if (library is null) return 0;

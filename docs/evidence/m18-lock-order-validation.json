@@ -1,0 +1,49 @@
+{
+  "checkpoint_preserved": "db2a114f33bc0c4bbdd8630113ab0de47cfe72ce",
+  "finding": "M18 already uses bank store/buffer -> library gate -> library lifetime. Earlier gate -> bank order is reproducibly unsafe.",
+  "behavioral_implementation_changed": false,
+  "regression_scenarios": [
+    "close from pointer bank callback while competing native writer waits",
+    "close from Span bank callback while competing native writer waits",
+    "two native writers racing 200 closes with actual C writes and cleanup"
+  ],
+  "negative_control": {
+    "change": "temporarily restore gate-before-bank order, then restore M18 source",
+    "failed": 2,
+    "passed": 1,
+    "diagnostic": "CloseNativeMemory deadlocked with a writer waiting for the bank store.",
+    "log_sha256": "3cad49c0dc34a05435b86cae26778da7f6229e78ea37bee6bf947287e6563361"
+  },
+  "builds": {
+    "Release": {
+      "passed_tests": 713,
+      "failed": 0,
+      "skipped": 0,
+      "warnings": 0,
+      "errors": 0,
+      "log_sha256": "eddc6f68780513d26fa19426dd9a5063353879a83dcd15f9032ec4dc93333a5d"
+    },
+    "Debug": {
+      "passed_tests": 713,
+      "failed": 0,
+      "skipped": 0,
+      "warnings": 0,
+      "errors": 0,
+      "log_sha256": "9916452d22e958a7ebfeaaec086533aa45888a1ea89aed18d5fd809689521711"
+    }
+  },
+  "python_tests": 59,
+  "hybrid_native_stdout": [
+    "42",
+    "1",
+    "16909060",
+    "-2",
+    "300",
+    "-400",
+    "64",
+    "1",
+    "0"
+  ],
+  "new_original_differential_runs": 0,
+  "scope": "Lock-order regression only; no language, ABI or public API changes. Existing full .NET suites and Python suite rerun; real hybrid/native dependency publication executed. No new SCP compile progress claimed."
+}

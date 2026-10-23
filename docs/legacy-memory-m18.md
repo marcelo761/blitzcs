@@ -106,3 +106,19 @@ Actual resolved include inputs include empty and comment-only files. Semantic-pr
 - The full 30-file SCP audit has no infrastructure failures; all source hashes match M17. Syntax passes for Main and 23 include targets. Semantic analysis and build stop at MoveMouse; no integrated assembly or game execution is claimed.
 
 See [validation evidence](evidence/m18-validation.json), [SCP matrix](evidence/m18-scp.json), [bank comparison](evidence/m18-new-comparison.json) and [historical replay](evidence/m18-regression-differential.json). Next work requires a genuine input/window host and explicit OS-handle ownership; stream-bank I/O remains a separate runtime dependency.
+
+## Post-checkpoint lock-order regression investigation
+
+The `blitzcs-m18-checkpoint` implementation already acquires the bank store/buffer before the binding's library gate. `CloseNativeMemory` acquires only the library gate and native library lifetime lock; it does not acquire a bank lock. The executable implementation was retained and this ordering is now explicitly documented beside both methods.
+
+The reviewed earlier ordering was reproduced by temporarily moving the library gate outside `LegacyBanks.WithPointer`. With that mutation:
+
+- A host callback owns the bank store/buffer.
+- A second thread enters `WriteNativeRect`, owns the library gate and waits for the bank store.
+- The callback calls `CloseNativeMemory` and waits for the library gate, completing the lock cycle.
+
+New process-isolated regression tests establish actual writer lock contention before allowing the callback to close, using events and thread wait state rather than sleep-based scheduling. Both pointer and Span callbacks detect the mutated order's deadlock; both pass with the unchanged M18 ordering. A third scenario races two native writers against repeated closes, validates actual C-produced rectangle bytes, and verifies cleanup. Close/reload/reinitialization is checked as well. Child watchdogs and parent process-tree cleanup keep a regression from hanging the test runner.
+
+The mutation produced **two failed tests and one passing test**; after restoration all three pass. The M18 commit and annotated tag remain unchanged. No public API, engine dependency or locking primitive was added. See [post-checkpoint validation](evidence/m18-lock-order-validation.json) for the final regression results.
+
+Post-checkpoint validation: **713 .NET tests** pass in each of Release and Debug, with zero build warnings/errors or skipped tests; **59 Python tests** pass. The real hybrid/native example retains its expected output and dependency publication. These numbers include the three new concurrency scenarios; the original M18 validation record remains unchanged.
