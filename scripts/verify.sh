@@ -132,3 +132,18 @@ if dotnet artifacts/m18/bounds.dll > artifacts/m18/bounds.stdout 2> artifacts/m1
 fi
 rg -q 'ArgumentOutOfRangeException' artifacts/m18/bounds.stderr
 rg -q 'bounds-error.bb:line 2' artifacts/m18/bounds.stderr
+# M19: a complete scalar string family, with explicit native error-exit differences.
+mkdir -p artifacts/m19
+python3 tools/differential.py --manifest tests/Compatibility/milestone19.json --externals samples/LegacyStrings/runtime.json --report artifacts/m19/local-differential.json
+python3 tools/compare_m19_evidence.py
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/LegacyStrings/Hybrid/main.bb -o artifacts/m19/hybrid/main.dll --externals samples/LegacyStrings/runtime.json
+dotnet artifacts/m19/hybrid/main.dll > artifacts/m19/hybrid.stdout
+python3 - <<'PY'
+import json
+from pathlib import Path
+assert Path('artifacts/m19/hybrid.stdout').read_text().splitlines() == [
+    'door', 'Door', '  0000002A', 'a\\b\\c', 'x  :  x', '===']
+for row in json.loads(Path('artifacts/m19/local-differential.json').read_text())['fixtures']:
+    if row['name'] != 'm19-strings':
+        assert Path(row['source']).name + ':line 1' in row['actual']['stderr']
+PY

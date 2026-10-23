@@ -1,0 +1,64 @@
+{
+  "runtime": "genuine Blitz3D Win32 under Wine with owned Xvfb",
+  "cases": {
+    "left-negative": {
+      "phase": "runtime_error",
+      "exit_code": 0,
+      "stdout": "",
+      "diagnostic": "parameter must be positive",
+      "source_sha256": "42d1e32e0c6c4947ed468c88ed8b5b8220a1f427117937bb51b6fa8d3e3e532e"
+    },
+    "right-negative": {
+      "phase": "runtime_error",
+      "exit_code": 0,
+      "stdout": "",
+      "diagnostic": "parameter must be positive",
+      "source_sha256": "a36569621f9f0b997ea6a1249f5f5f65438cc69e61ac9b4e95df1c52f1fd5f1b"
+    },
+    "lset-negative": {
+      "phase": "runtime_error",
+      "exit_code": 0,
+      "stdout": "",
+      "diagnostic": "parameter must be positive",
+      "source_sha256": "1b42eff401e1cbb080676371cdee9d7a26cca45f86d25a2ffbbb19eafd31e6a4"
+    },
+    "rset-negative": {
+      "phase": "runtime_error",
+      "exit_code": 0,
+      "stdout": "",
+      "diagnostic": "parameter must be positive",
+      "source_sha256": "3a7bf4e36caa2a5b275a2917baa8d24d5d5757cb4f462f4a155d54c25be03125"
+    },
+    "mid-zero": {
+      "phase": "runtime_error",
+      "exit_code": 0,
+      "stdout": "",
+      "diagnostic": "parameter must be greater than 0",
+      "source_sha256": "69d6d0a31d14819d31a009b7a3f7d087e2aabc3360c2357155f5375ac85e95cb"
+    },
+    "instr-zero": {
+      "phase": "runtime_error",
+      "exit_code": 0,
+      "stdout": "",
+      "diagnostic": "parameter must be greater than 0",
+      "source_sha256": "92a6b6af11366003bf4f84469c52da3723a038e725d800f587c55c193c933c8c"
+    }
+  },
+  "sdk_sha256": {
+    "blitzcc.exe": "bb9ec2c0f8311f82a76b424bdf03cf1d736911d2083d2a575d6b7ad0311f063a",
+    "runtime.dll": "ba120a4a0f15f2ac48e1e86f6465137bd480d0b4a288cae2534a6fe0ecad1a4e",
+    "linker.dll": "2608b431226d170269e4ec9bc9c6215980f392f80199bc644a7001a44c378752"
+  },
+  "limitations": [
+    "One deterministic program, not one independent comparison per output row.",
+    "CurrentDate and CurrentTime are excluded from deterministic capture.",
+    "Empty Replace search excluded because native source does not terminate.",
+    "Byte ctype observations apply to the captured SDK runtime locale."
+  ],
+  "source_sha256": "6c327d9f44665e999e796ecff69b6c7516ea51ce4cc421ec15d1b8d060130a2b",
+  "capture": {
+    "phase": "run",
+    "stdout": "repeat=ababab::\nleft=ab:abcd:\nright=cd:abcd:\nmid=bcd:bc::bcd:\ninstr=2,4,0,4,0\nreplace=bba:aabaa::\ncase=AZ09!? :az09!? \ntrim=abc:0\nlset=ab:ab  :\nrset=cd:  ab:\nasc=-1,0,255,0,255\nformat=00000000:FFFFFFFF:89ABCDEF:00000000000000000000000000000000:11111111111111111111111111111111\nnul=3,0,2,4\nbyte=0,0,0,0\nbyte=1,1,1,0\nbyte=2,2,2,0\nbyte=3,3,3,0\nbyte=4,4,4,0\nbyte=5,5,5,0\nbyte=6,6,6,0\nbyte=7,7,7,0\nbyte=8,8,8,0\nbyte=9,9,9,0\nbyte=10,10,10,0\nbyte=11,11,11,0\nbyte=12,12,12,0\nbyte=13,13,13,0\nbyte=14,14,14,0\nbyte=15,15,15,0\nbyte=16,16,16,0\nbyte=17,17,17,0\nbyte=18,18,18,0\nbyte=19,19,19,0\nbyte=20,20,20,0\nbyte=21,21,21,0\nbyte=22,22,22,0\nbyte=23,23,23,0\nbyte=24,24,24,0\nbyte=25,25,25,0\nbyte=26,26,26,0\nbyte=27,27,27,0\nbyte=28,28,28,0\nbyte=29,29,29,0\nbyte=30,30,30,0\nbyte=31,31,31,0\nbyte=32,32,32,0\nbyte=33,33,33,1\nbyte=34,34,34,1\nbyte=35,35,35,1\nbyte=36,36,36,1\nbyte=37,37,37,1\nbyte=38,38,38,1\nbyte=39,39,39,1\nbyte=40,40,40,1\nbyte=41,41,41,1\nbyte=42,42,42,1\nbyte=43,43,43,1\nbyte=44,44,44,1\nbyte=45,45,45,1\nbyte=46,46,46,1\nbyte=47,47,47,1\nbyte=48,48,48,1\nbyte=49,49,49,1\nbyte=50,50,50,1\nbyte=51,51,51,1\nbyte=52,52,52,1\nbyte=53,53,53,1\nbyte=54,54,54,1\nbyte=55,55,55,1\nbyte=56,56,56,1\nbyte=57,57,57,1\nbyte=58,58,58,1\nbyte=59,59,59,1\nbyte=60,60,60,1\nbyte=61,61,61,1\nbyte=62,62,62,1\nbyte=63,63,63,1\nbyte=64,64,64,1\nbyte=65,65,97,1\nbyte=66,66,98,1\nbyte=67,67,99,1\nbyte=68,68,100,1\nbyte=69,69,101,1\nbyte=70,70,102,1\nbyte=71,71,103,1\nbyte=72,72,104,1\nbyte=73,73,105,1\nbyte=74,74,106,1\nbyte=75,75,107,1\nbyte=76,76,108,1\nbyte=77,77,109,1\nbyte=78,78,110,1\nbyte=79,79,111,1\nbyte=80,80,112,1\nbyte=81,81,113,1\nbyte=82,82,114,1\nbyte=83,83,115,1\nbyte=84,84,116,1\nbyte=85,85,117,1\nbyte=86,86,118,1\nbyte=87,87,119,1\nbyte=88,88,120,1\nbyte=89,89,121,1\nbyte=90,90,122,1\nbyte=91,91,91,1\nbyte=92,92,92,1\nbyte=93,93,93,1\nbyte=94,94,94,1\nbyte=95,95,95,1\nbyte=96,96,96,1\nbyte=97,65,97,1\nbyte=98,66,98,1\nbyte=99,67,99,1\nbyte=100,68,100,1\nbyte=101,69,101,1\nbyte=102,70,102,1\nbyte=103,71,103,1\nbyte=104,72,104,1\nbyte=105,73,105,1\nbyte=106,74,106,1\nbyte=107,75,107,1\nbyte=108,76,108,1\nbyte=109,77,109,1\nbyte=110,78,110,1\nbyte=111,79,111,1\nbyte=112,80,112,1\nbyte=113,81,113,1\nbyte=114,82,114,1\nbyte=115,83,115,1\nbyte=116,84,116,1\nbyte=117,85,117,1\nbyte=118,86,118,1\nbyte=119,87,119,1\nbyte=120,88,120,1\nbyte=121,89,121,1\nbyte=122,90,122,1\nbyte=123,123,123,1\nbyte=124,124,124,1\nbyte=125,125,125,1\nbyte=126,126,126,1\nbyte=127,127,127,0\nbyte=128,128,128,0\nbyte=129,129,129,0\nbyte=130,130,130,0\nbyte=131,131,131,0\nbyte=132,132,132,0\nbyte=133,133,133,0\nbyte=134,134,134,0\nbyte=135,135,135,0\nbyte=136,136,136,0\nbyte=137,137,137,0\nbyte=138,138,138,0\nbyte=139,139,139,0\nbyte=140,140,140,0\nbyte=141,141,141,0\nbyte=142,142,142,0\nbyte=143,143,143,0\nbyte=144,144,144,0\nbyte=145,145,145,0\nbyte=146,146,146,0\nbyte=147,147,147,0\nbyte=148,148,148,0\nbyte=149,149,149,0\nbyte=150,150,150,0\nbyte=151,151,151,0\nbyte=152,152,152,0\nbyte=153,153,153,0\nbyte=154,154,154,0\nbyte=155,155,155,0\nbyte=156,156,156,0\nbyte=157,157,157,0\nbyte=158,158,158,0\nbyte=159,159,159,0\nbyte=160,160,160,0\nbyte=161,161,161,0\nbyte=162,162,162,0\nbyte=163,163,163,0\nbyte=164,164,164,0\nbyte=165,165,165,0\nbyte=166,166,166,0\nbyte=167,167,167,0\nbyte=168,168,168,0\nbyte=169,169,169,0\nbyte=170,170,170,0\nbyte=171,171,171,0\nbyte=172,172,172,0\nbyte=173,173,173,0\nbyte=174,174,174,0\nbyte=175,175,175,0\nbyte=176,176,176,0\nbyte=177,177,177,0\nbyte=178,178,178,0\nbyte=179,179,179,0\nbyte=180,180,180,0\nbyte=181,181,181,0\nbyte=182,182,182,0\nbyte=183,183,183,0\nbyte=184,184,184,0\nbyte=185,185,185,0\nbyte=186,186,186,0\nbyte=187,187,187,0\nbyte=188,188,188,0\nbyte=189,189,189,0\nbyte=190,190,190,0\nbyte=191,191,191,0\nbyte=192,192,192,0\nbyte=193,193,193,0\nbyte=194,194,194,0\nbyte=195,195,195,0\nbyte=196,196,196,0\nbyte=197,197,197,0\nbyte=198,198,198,0\nbyte=199,199,199,0\nbyte=200,200,200,0\nbyte=201,201,201,0\nbyte=202,202,202,0\nbyte=203,203,203,0\nbyte=204,204,204,0\nbyte=205,205,205,0\nbyte=206,206,206,0\nbyte=207,207,207,0\nbyte=208,208,208,0\nbyte=209,209,209,0\nbyte=210,210,210,0\nbyte=211,211,211,0\nbyte=212,212,212,0\nbyte=213,213,213,0\nbyte=214,214,214,0\nbyte=215,215,215,0\nbyte=216,216,216,0\nbyte=217,217,217,0\nbyte=218,218,218,0\nbyte=219,219,219,0\nbyte=220,220,220,0\nbyte=221,221,221,0\nbyte=222,222,222,0\nbyte=223,223,223,0\nbyte=224,224,224,0\nbyte=225,225,225,0\nbyte=226,226,226,0\nbyte=227,227,227,0\nbyte=228,228,228,0\nbyte=229,229,229,0\nbyte=230,230,230,0\nbyte=231,231,231,0\nbyte=232,232,232,0\nbyte=233,233,233,0\nbyte=234,234,234,0\nbyte=235,235,235,0\nbyte=236,236,236,0\nbyte=237,237,237,0\nbyte=238,238,238,0\nbyte=239,239,239,0\nbyte=240,240,240,0\nbyte=241,241,241,0\nbyte=242,242,242,0\nbyte=243,243,243,0\nbyte=244,244,244,0\nbyte=245,245,245,0\nbyte=246,246,246,0\nbyte=247,247,247,0\nbyte=248,248,248,0\nbyte=249,249,249,0\nbyte=250,250,250,0\nbyte=251,251,251,0\nbyte=252,252,252,0\nbyte=253,253,253,0\nbyte=254,254,254,0\nbyte=255,255,255,0\n",
+    "exit_code": 0
+  }
+}
