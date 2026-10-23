@@ -1,0 +1,787 @@
+{
+  "oracle": "docs/evidence/m13-validation.json",
+  "oracle_sha256": "bc974a413e7cf375dff58913347de0e9e29dca702a4a1c7f7bb3706d11f6ea0b",
+  "fresh_original_captures": 0,
+  "reused_original_captures": 86,
+  "totals": {
+    "match": 85,
+    "mismatch": 1,
+    "adapter_error": 0
+  },
+  "fixtures": [
+    {
+      "name": "precedence",
+      "source": "tests/Compatibility/fixtures/precedence.bb",
+      "source_sha256": "8edfb0450a743bb872a9541638f292ad7e2c62b7c0416b1c637a64a4768c6c1a",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "rounding",
+      "source": "tests/Compatibility/fixtures/rounding.bb",
+      "source_sha256": "df59003c98ee9c798575127fd8cd8dde17796e4d589128002fb3802a4ca8de22",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "conversions",
+      "source": "tests/Compatibility/fixtures/conversions.bb",
+      "source_sha256": "c5dde49ea3d7f3b35e002621e4c7a477c3d97649490f921f2df60faf8592c7c0",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "float-format",
+      "source": "tests/Compatibility/fixtures/float-format.bb",
+      "source_sha256": "b76f72c931190e0967c4b80a628048ff220356b094c869c55d6c932a818ea872",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "conditions",
+      "source": "tests/Compatibility/fixtures/conditions.bb",
+      "source_sha256": "89d5ac659cafaf19fb53d870f4dbe2cc2b752dd4a0de6bf68fe7ce4a0fe700da",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "loop-bound",
+      "source": "tests/Compatibility/fixtures/loop-bound.bb",
+      "source_sha256": "c00daa3fc89375833a187945d65dcc92a7e917095922dd472c06b9cf7337cffe",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "eager",
+      "source": "tests/Compatibility/fixtures/eager.bb",
+      "source_sha256": "44e24284c37d7c6da0dedf72f7f8d36f71ec4cc5db2f0bd31f8e2d60f2dfa27f",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "nested-exit",
+      "source": "tests/Compatibility/fixtures/nested-exit.bb",
+      "source_sha256": "117c3814cfbad6d204b291566595fd4af26d42fca15381fbb7869df49483ff83",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "function-return",
+      "source": "tests/Compatibility/fixtures/function-return.bb",
+      "source_sha256": "74a3ce6117b9941b3e16ed74b5d055df8cbfdc14dcec6887e8384845f813ffae",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "arrays",
+      "source": "tests/Compatibility/fixtures/arrays.bb",
+      "source_sha256": "4cd36f27e5051a434d56ee0b6083d2998b1b09140b57c8d347c34d5a1c46f5c0",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "redim",
+      "source": "tests/Compatibility/fixtures/redim.bb",
+      "source_sha256": "6ecce5b4106e634a3631c3c965a95bcff1b7dbeecc9a3e8f11d237915400c47c",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "invalid-exit",
+      "source": "tests/Compatibility/fixtures/invalid-exit.bb",
+      "source_sha256": "489c8eaa778c971ecf75b3b2acf97afa44cbb7f708c4abdc51ddbe2e2d222c01",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "invalid-rank",
+      "source": "tests/Compatibility/fixtures/invalid-rank.bb",
+      "source_sha256": "83254b66a6cf78724732d1a6d45b7ecd574971d722e9c8b4c4cbabb21b95fbc7",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "upper-bound-error",
+      "source": "tests/Compatibility/fixtures/upper-bound-error.bb",
+      "source_sha256": "9df7926067008242fe173f97c397a0917041661be307a23a7cdcfdb694bf7f24",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "mismatch",
+      "comparison_reason": "success/failure exit status differs"
+    },
+    {
+      "name": "string-zero-divisor",
+      "source": "tests/Compatibility/fixtures/string-zero-divisor.bb",
+      "source_sha256": "834559db6146fadf24ffb911f8572337d417d75d5895f35ac86af33431bf0a1d",
+      "local_report": "artifacts/differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "object-lifetime",
+      "source": "tests/Compatibility/fixtures/object-lifetime.bb",
+      "source_sha256": "341ca8493d067a254aff629655a863f1729fcfb634910015cca9a5fb2321ea44",
+      "local_report": "artifacts/object-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "object-each",
+      "source": "tests/Compatibility/fixtures/object-each.bb",
+      "source_sha256": "d82584e17698c5d0c2b6415e469f903bc6aec5c5fc532f57a1489c6ced728eca",
+      "local_report": "artifacts/object-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "object-order",
+      "source": "tests/Compatibility/fixtures/object-order.bb",
+      "source_sha256": "daa08e4cb8d65afd463abffc51a5e5d84396158584dccdef0a50f2dd04409367",
+      "local_report": "artifacts/object-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "lifetime-mass",
+      "source": "tests/Compatibility/fixtures/lifetime-mass.bb",
+      "source_sha256": "3e054636af2ec528be66afcdbf8ca46e5ad1d5825a539fae24dcd2337977f498",
+      "local_report": "artifacts/lifetime-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "lifetime-aliases",
+      "source": "tests/Compatibility/fixtures/lifetime-aliases.bb",
+      "source_sha256": "8940e442724a7398f54c61c461a64fd66d7d1744f694e024d3ac9414725130c9",
+      "local_report": "artifacts/lifetime-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "lifetime-deleteforeach",
+      "source": "tests/Compatibility/fixtures/lifetime-deleteforeach.bb",
+      "source_sha256": "703dd53e4203430dd02239e9ad22682dcddfdf07e16cf94a1efb4679550777ab",
+      "local_report": "artifacts/lifetime-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "lifetime-reorder",
+      "source": "tests/Compatibility/fixtures/lifetime-reorder.bb",
+      "source_sha256": "92ed6a368dd34f4cbbdb231784e2607317e4aad5efdc8b64cc96cac0accf76f0",
+      "local_report": "artifacts/lifetime-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "lifetime-circular",
+      "source": "tests/Compatibility/fixtures/lifetime-circular.bb",
+      "source_sha256": "815ce4c011f282d3800eabfc84b38f8e55ca7932a75775f57107ca7d4ee3feeb",
+      "local_report": "artifacts/lifetime-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "lifetime-multiple-deleted-navigation",
+      "source": "tests/Compatibility/fixtures/lifetime-multiple-deleted-navigation.bb",
+      "source_sha256": "af807524588e9706ba3abf2fd2e1aa1d8bef77e7448223934bd4a21590cbc2c9",
+      "local_report": "artifacts/lifetime-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "lifetime-mutating-iteration",
+      "source": "tests/Compatibility/fixtures/lifetime-mutating-iteration.bb",
+      "source_sha256": "5f18b4a6e565adf7a38db9b87be779b0a39aa44b7aa65cde1f4e7ac7089148f0",
+      "local_report": "artifacts/lifetime-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "lifetime-arrays-fields",
+      "source": "tests/Compatibility/fixtures/lifetime-arrays-fields.bb",
+      "source_sha256": "609f597f91ce360b709af64e534d87f1b054eee35e3be0ecdbb0a75aa936037b",
+      "local_report": "artifacts/lifetime-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "lifetime-release-alias",
+      "source": "tests/Compatibility/fixtures/lifetime-release-alias.bb",
+      "source_sha256": "22691f0dddf688349e51c731eca4f4daed70e77d68e55ea79054415d77092392",
+      "local_report": "artifacts/lifetime-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "lifetime-deleted-neighbor-reorder",
+      "source": "tests/Compatibility/fixtures/lifetime-deleted-neighbor-reorder.bb",
+      "source_sha256": "3c74bf9612e083abf31378d0ab3a1b78368190babf70964bf43c3a4cbfcdacfc",
+      "local_report": "artifacts/lifetime-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "include-main-directory-and-deduplication",
+      "source": "tests/Compatibility/fixtures/multifile/nested/main.bb",
+      "source_sha256": "1dd9ee7e937495ee77f91cecb71377a2f97b8ae2731249fa15ac7736c25d6b01",
+      "local_report": "artifacts/multifile-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "include-cycle-between-included-files",
+      "source": "tests/Compatibility/fixtures/multifile/cycle/main.bb",
+      "source_sha256": "6ac1f720c4ac4456ee836c4ab5811e975af519b265d6ab14edb902c7e5947de9",
+      "local_report": "artifacts/multifile-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "include-cycle-through-main-file",
+      "source": "tests/Compatibility/fixtures/multifile/main-cycle/main.bb",
+      "source_sha256": "3f65a145114c0d258f6af5f8d09ca344eddc30c1f0bfc06566988ab202f3a7a7",
+      "local_report": "artifacts/multifile-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "include-missing-nested-source-location",
+      "source": "tests/Compatibility/fixtures/multifile/missing/main.bb",
+      "source_sha256": "6ac1f720c4ac4456ee836c4ab5811e975af519b265d6ab14edb902c7e5947de9",
+      "local_report": "artifacts/multifile-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "include-inside-function-early-return",
+      "source": "tests/Compatibility/fixtures/multifile/function-return/main.bb",
+      "source_sha256": "78edbea9591c92120e29fcb16dd37076996666e972da7bbc51cf2166fa3f3e22",
+      "local_report": "artifacts/multifile-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-global-float",
+      "source": "tests/Compatibility/fixtures/vectors/global-float.bb",
+      "source_sha256": "4a840defd9a3ab073f084448434a8c2da275157208664ac608fafc2c899ffd91",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-global-mixed",
+      "source": "tests/Compatibility/fixtures/vectors/global-mixed.bb",
+      "source_sha256": "6bd7504066f49be54545406bdd8ef3085e760378c93df2084a483987b701877c",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-local-function",
+      "source": "tests/Compatibility/fixtures/vectors/local-function.bb",
+      "source_sha256": "4e8f0af7233a92ed063bf9885b58689d1ecc074e503008947264715884f6841b",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-field-primitives",
+      "source": "tests/Compatibility/fixtures/vectors/field-primitives.bb",
+      "source_sha256": "95e6ef9a346aff2cb169c8fecaf843d799004f30ccdb28e27b5d4c4ddef1b73d",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-field-objects",
+      "source": "tests/Compatibility/fixtures/vectors/field-objects.bb",
+      "source_sha256": "531fe3eba51061653e62738ee9b21e600dac25d3f3cf6f0a5cae87cca6f44e86",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-field-delete-releases",
+      "source": "tests/Compatibility/fixtures/vectors/field-delete-releases.bb",
+      "source_sha256": "dcb52610f1335bd411c9559989f6ecfe50abcd3bb9dc23319509bcbd97e0e53e",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-local-zero-per-call",
+      "source": "tests/Compatibility/fixtures/vectors/local-zero-per-call.bb",
+      "source_sha256": "73a06227a41ca14aa38436408b62a504fee4cbdcf60d51ef6fcb170c4326e39d",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-field-per-instance",
+      "source": "tests/Compatibility/fixtures/vectors/field-per-instance.bb",
+      "source_sha256": "a33f0ff38f6498707b107b82b817678ea395e7803cdf8be5aee88e97284bce75",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-invalid-constant-bound",
+      "source": "tests/Compatibility/fixtures/vectors/invalid-constant-bound.bb",
+      "source_sha256": "477511d1f10ebd0f16d38a67caadcfb3d63817afc48e34ad0beb1a069a55ca6c",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-size-rounding",
+      "source": "tests/Compatibility/fixtures/vectors/size-rounding.bb",
+      "source_sha256": "793d4e0ab30a4753eaf60f95bb740d5afe000f9fff5a1736cce3703cb8da10a7",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-size-rounding-bound-error",
+      "source": "tests/Compatibility/fixtures/vectors/size-rounding-bound-error.bb",
+      "source_sha256": "ac72f85166fd3e538b52197b3c343b91f5a6156d1f0ef98b101d1f44fdcd0ee2",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "vector-index-side-effects",
+      "source": "tests/Compatibility/fixtures/vectors/index-side-effects.bb",
+      "source_sha256": "572a4621da292933b622ac0989874c1cfa9cd5618b0b80a2fac1d45738cc6744",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-scalar-baseline",
+      "source": "tests/Compatibility/fixtures/vectors/const-baseline.bb",
+      "source_sha256": "eee7d9bbdd7de73596bad20937c9894df5d03456cf73a089ddc15af45977fdd6",
+      "local_report": "artifacts/vector-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-typed-expressions",
+      "source": "tests/Compatibility/fixtures/constants/typed-expressions.bb",
+      "source_sha256": "2fe59ec96ef94a8884f729ea7115623df90c479b8013ee6b6c75a50eb510a3d7",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-earlier-references",
+      "source": "tests/Compatibility/fixtures/constants/earlier-references.bb",
+      "source_sha256": "42c895f4cb5cbdacfe6d43b42af0ff6f55e6aea2c3fa482ae30c76912bd82606",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-fixed-vector-bound",
+      "source": "tests/Compatibility/fixtures/constants/fixed-vector-bound.bb",
+      "source_sha256": "79b4f38462574a4564d95cd86e9f4a40e6c3896a3d35a33cd2a19f7b6dbd5fc3",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-function-use",
+      "source": "tests/Compatibility/fixtures/constants/function-use.bb",
+      "source_sha256": "8c354530eea5fc8d420fa87dbe9e3569cf514b53cf3ef3ad2a556e05765879b2",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-parameter-shadow",
+      "source": "tests/Compatibility/fixtures/constants/parameter-shadow.bb",
+      "source_sha256": "94dec3988d1c5ecebf45068639e1c83bc017612ec94288071ab417f2ada119fb",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-assignment-error",
+      "source": "tests/Compatibility/fixtures/constants/assignment-error.bb",
+      "source_sha256": "cdf44fbbfe3f67ad5426377ec1727d213e5ece4d066fadbaf2b618fe9fc860cf",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-forward-reference-error",
+      "source": "tests/Compatibility/fixtures/constants/forward-reference-error.bb",
+      "source_sha256": "d409b6029ad3e9fceff4979e427dd848e0b1491bf6e1d13ab310f559d7531a56",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-inside-function-error",
+      "source": "tests/Compatibility/fixtures/constants/inside-function-error.bb",
+      "source_sha256": "27fd5eb5985e8bd52923200301d926c49175a2f2704ab71104d3f44401314232",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-inside-if-error",
+      "source": "tests/Compatibility/fixtures/constants/inside-if-error.bb",
+      "source_sha256": "0b37a6ee69a09786311aad973673f24763cfc842c30993d1dda0c445f046be20",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-nonconstant-initializer-error",
+      "source": "tests/Compatibility/fixtures/constants/nonconstant-initializer-error.bb",
+      "source_sha256": "ced7099960c26f4a4e1ae79c3b64319941c7a677415c2ae9b8618eea0dd819bb",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-duplicate-error",
+      "source": "tests/Compatibility/fixtures/constants/duplicate-error.bb",
+      "source_sha256": "b19e5edb1c5afa9a796767c9f044a14d375f63c98dc44d5f9539cfac2fc38e82",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-wrong-tag-error",
+      "source": "tests/Compatibility/fixtures/constants/wrong-tag-error.bb",
+      "source_sha256": "b82a366e0b3fcc281f1ae7cf2b112fd25aa2919fc2f7c2fff23be1da7c8cb56d",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "const-vector-error",
+      "source": "tests/Compatibility/fixtures/constants/vector-const-error.bb",
+      "source_sha256": "d68c89f5bb33a21602d4b86872ba260f3f44fe9f0382f8715be43fce9091c92e",
+      "local_report": "artifacts/constant-differential-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "m9-functions-defaults",
+      "source": "tests/Compatibility/fixtures/milestone9/functions.bb",
+      "source_sha256": "d73253b88c86324dcca61bee7bc6580066b9ff8dc7b9f701a327001d4cfe5c73",
+      "local_report": "artifacts/m9-local-differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "m9-function-argument-conversions",
+      "source": "tests/Compatibility/fixtures/milestone9/conversions.bb",
+      "source_sha256": "edf6d6534ff5391cc9b08d54882692a1a71cc70df0cfc44174a28b3e810cc356",
+      "local_report": "artifacts/m9-local-differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "m9-fields-default-initialization",
+      "source": "tests/Compatibility/fixtures/milestone9/fields.bb",
+      "source_sha256": "3d9c835108b1fe32446797eadff1ed4101df50dc253c8f04f19db01878aee9c6",
+      "local_report": "artifacts/m9-local-differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "m9-hex-wrap-32bit",
+      "source": "tests/Compatibility/fixtures/milestone9/hex32.bb",
+      "source_sha256": "59a19561357efd7dc4565324ce048d3344642f26b4ec002de43204c6ee046fd1",
+      "local_report": "artifacts/m9-local-differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "m9-omitted-middle-argument",
+      "source": "tests/Compatibility/fixtures/milestone9/omitted_middle.bb",
+      "source_sha256": "f2064349f436e11ef5231af537938fe9e28130a627aef16aa178f0eb102a3840",
+      "local_report": "artifacts/m9-local-differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "m9-command-grouping",
+      "source": "tests/Compatibility/fixtures/milestone9/command-grouping.bb",
+      "source_sha256": "210a8f9f2eee5b0d20bd5364bd6a3e3541916c9696b1b4ff0d5f60667a4082ac",
+      "local_report": "artifacts/m9-local-differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "handle-lifecycle",
+      "source": "tests/Compatibility/fixtures/handles/lifecycle.bb",
+      "source_sha256": "db14d2bc8e043dea44a59878153adef7640446f7da11cec5e5fb087a5388b21a",
+      "local_report": "artifacts/m10-handles-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "handle-null-literal",
+      "source": "tests/Compatibility/fixtures/handles/null-literal.bb",
+      "source_sha256": "b1a7d2c1eec74719377e55e7552d92c05fbc49b0bdefba1687c7722879acd6da",
+      "local_report": "artifacts/m10-handles-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "handle-type-conversions",
+      "source": "tests/Compatibility/fixtures/handles/type-conversions.bb",
+      "source_sha256": "8c2eea41d445419f3762c2583039bfd0f6d0f76c682034400c10fac97fc4ede5",
+      "local_report": "artifacts/m10-handles-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "handle-arrays",
+      "source": "tests/Compatibility/fixtures/handles/arrays.bb",
+      "source_sha256": "e2d770241d6008ffa8ace1d40fdd07505087416bbc610c0cc8e66e0be4cfafb8",
+      "local_report": "artifacts/m10-handles-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "handle-delete-each",
+      "source": "tests/Compatibility/fixtures/handles/delete-each.bb",
+      "source_sha256": "adf36e6df9ae36e920fe00a0c8a7638c403dc3251ae406bb5877da4cb5f5b3b8",
+      "local_report": "artifacts/m10-handles-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "handle-delete-alias-neighbors",
+      "source": "tests/Compatibility/fixtures/handles/delete-alias-neighbors.bb",
+      "source_sha256": "d828d5133dffeefc1b1448a04472d9c47f633dacff63e59cea6e5963953d2c26",
+      "local_report": "artifacts/m10-handles-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "handle-reuse-1000",
+      "source": "tests/Compatibility/fixtures/handles/reuse-1000.bb",
+      "source_sha256": "a1cb67b22801693245be41e8b0a809a6413a41dd7e24ba787e6258e4004e3972",
+      "local_report": "artifacts/m10-handles-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "numeric-int-min-abs-sgn",
+      "source": "tests/Compatibility/fixtures/handles/math-int-min.bb",
+      "source_sha256": "99b1a7ff77086256d0d2b7c079fdddfd96a8563faab1de101ef25b3b8ae2a0cb",
+      "local_report": "artifacts/m10-numeric-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "numeric-abs-int-min-constant",
+      "source": "tests/Compatibility/fixtures/handles/math-abs-const.bb",
+      "source_sha256": "0a96ca134c02b10d57e0d0cf2c6cc8ebc3da056e4cf4643e78689701ec243c5e",
+      "local_report": "artifacts/m10-numeric-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "numeric-negative-zero",
+      "source": "tests/Compatibility/fixtures/handles/math-negative-zero.bb",
+      "source_sha256": "2436e175a8788bd57c3cb2a9234ac0b79d6df010a39d649e7540c2e1b77df89c",
+      "local_report": "artifacts/m10-numeric-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "controls-else-if-in-while",
+      "source": "tests/Compatibility/fixtures/controls.bb",
+      "source_sha256": "aa823f0d6fbd7b87ceacfb7d65971a15b491e20bb510578a66f1d91afebf18e3",
+      "local_report": "artifacts/m10-controls-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "data-read-coercions",
+      "source": "tests/Compatibility/fixtures/data/coercions.bb",
+      "source_sha256": "dabe8514d2fd4ba8d9c28e827b6c1dc81601d667ae810f52f842db35e8af9f9d",
+      "local_report": "artifacts/m10-data-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "data-forward-restore-from-function-shared-cursor",
+      "source": "tests/Compatibility/fixtures/data/forward-restore-function.bb",
+      "source_sha256": "3cc9f37b458f5ecfd1d0e8b265f0a7f8fd4c982f71929fc3f117b74500beceae",
+      "local_report": "artifacts/m10-data-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "data-include-label-cursor",
+      "source": "tests/Compatibility/fixtures/data/include-rows.bb",
+      "source_sha256": "a918c2f41ebc4b6ae68b5b33fb8c568032c4efff60abc0750ef5ddfbf51a68fd",
+      "local_report": "artifacts/m10-data-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "binary-values",
+      "source": "tests/Compatibility/fixtures/m11/binary-values.bb",
+      "source_sha256": "91ebf8f9254a3eb9322c4582fc2af8e2330e452f6c3ef5a803bda5d699608ae3",
+      "local_report": "artifacts/m11-local-differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "decimal-overflow",
+      "source": "tests/Compatibility/fixtures/m11/decimal-overflow.bb",
+      "source_sha256": "4b492ed7a18d29a702ba1932127d1068b0679d071773c2617449d5dd39ba1dcd",
+      "local_report": "artifacts/m11-local-differential.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "native-files",
+      "source": "tests/Compatibility/fixtures/m12/native-files.bb",
+      "source_sha256": "1e910a44da1eddc6993cf2b7fe037492c10ccde7dd5fa4ae5aa78ecbc8afbe2e",
+      "local_report": "artifacts/m12-native-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "native-files-patterns",
+      "source": "tests/Compatibility/fixtures/m12/native-files-patterns.bb",
+      "source_sha256": "0510845782ab8e41ed9dce14d67aca13e93210a826e3bb971db10186ce215712",
+      "local_report": "artifacts/m12-native-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "native-strings",
+      "source": "tests/Compatibility/fixtures/m12/native-strings.bb",
+      "source_sha256": "e959169f485d7f6e66bc8d7556792155dffc36207c5cf03c2e4891dc9f29d405",
+      "local_report": "artifacts/m12-native-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "native-files-nul",
+      "source": "tests/Compatibility/fixtures/m12/native-files-nul.bb",
+      "source_sha256": "6a991d0be302fca043205bc6dc5b66887e31bd5293fd890cfcf5d1bbb5be9ddb",
+      "local_report": "artifacts/m12-native-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    },
+    {
+      "name": "native-files-separators",
+      "source": "tests/Compatibility/fixtures/m12/native-files-separators.bb",
+      "source_sha256": "a5bdbf1b8fad36fb9011dc0e0fcf91e9ef378d59bc5613a5fda27cd3b01e08ed",
+      "local_report": "artifacts/m12-native-local.json",
+      "local_status": "pass",
+      "comparison_status": "match",
+      "comparison_reason": null
+    }
+  ]
+}

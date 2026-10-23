@@ -7,7 +7,7 @@ from unittest.mock import patch
 import subprocess
 from pathlib import Path
 
-from tools.scp_semantic_progress import extract_signatures, external_signatures, advance, default_value
+from tools.scp_semantic_progress import extract_signatures, external_signatures, advance, default_value, main
 
 
 class SemanticProgressContractTests(unittest.TestCase):
@@ -120,6 +120,111 @@ class SemanticProgressContractTests(unittest.TestCase):
         bindings.write_text('{"functions": []}')
         return [entry, 'not-executed', root / 'cli.dll', bindings, native, runtime, root / 'generated.json']
 
+    def test_output_cannot_overwrite_cli_runtime_assets(self):
+        for asset in ['cli.deps.json', 'cli.runtimeconfig.json', 'compiler.deps.json']:
+            with self.subTest(asset=asset), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                args = self.setup_advance(root)
+                host = root / 'host'
+                host.mkdir()
+                args[2] = host / 'cli.dll'
+                args[2].write_bytes(b'cli')
+                output = host / asset
+                output.write_text('preserve host asset')
+                args[6] = output
+                with patch('tools.scp_semantic_progress.subprocess.run', return_value=SimpleNamespace(returncode=0, stderr='', stdout='')) as run:
+                    with self.assertRaisesRegex(ValueError, 'output'):
+                        advance(*args, 0, 1)
+                    run.assert_not_called()
+                self.assertEqual('preserve host asset', output.read_text())
+
+    def test_cli_report_cannot_overwrite_cli_configuration_through_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            args = self.setup_advance(root)
+            configuration = args[2].with_suffix('.runtimeconfig.json')
+            configuration.write_text('preserve CLI configuration')
+            report = root / 'report.json'
+            report.symlink_to(configuration)
+            argv = ['scp_semantic_progress', '--entry', str(args[0]), '--cli', str(args[2]),
+                    '--bindings', str(args[3]), '--native-catalog', str(args[4]),
+                    '--runtime-source-dir', str(args[5]), '--catalog-output', str(args[6]),
+                    '--report', str(report)]
+            with patch('sys.argv', argv), patch('builtins.print'), patch('tools.scp_semantic_progress.subprocess.run') as run:
+                self.assertEqual(2, main())
+                run.assert_not_called()
+            self.assertEqual('preserve CLI configuration', configuration.read_text())
+            self.assertFalse(args[6].exists())
+
+    def test_output_cannot_overwrite_symlinked_managed_dependency_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            args = self.setup_advance(root)
+            libraries = root / 'libraries'
+            libraries.mkdir()
+            library = libraries / 'binding.dll'
+            library.write_bytes(b'managed input')
+            args[3].write_text(json.dumps({'functions': [{'name': 'Bound', 'assembly': str(library)}]}))
+            args[6].write_text('preserve managed configuration')
+            library.with_suffix('.deps.json').symlink_to(args[6])
+            with patch('tools.scp_semantic_progress.subprocess.run', return_value=SimpleNamespace(returncode=0, stderr='', stdout='')) as run:
+                with self.assertRaisesRegex(ValueError, 'output'):
+                    advance(*args, 0, 1)
+                run.assert_not_called()
+            self.assertEqual('preserve managed configuration', args[6].read_text())
+
+    def test_cli_rejects_catalog_and_report_hardlinked_to_each_other(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            args = self.setup_advance(root)
+            args[6].write_text('preserve prior output')
+            report = root / 'report.json'
+            report.hardlink_to(args[6])
+            argv = ['scp_semantic_progress', '--entry', str(args[0]), '--cli', str(args[2]),
+                    '--bindings', str(args[3]), '--native-catalog', str(args[4]),
+                    '--runtime-source-dir', str(args[5]), '--catalog-output', str(args[6]),
+                    '--report', str(report)]
+            with patch('sys.argv', argv), patch('builtins.print'), patch('tools.scp_semantic_progress.subprocess.run') as run:
+                self.assertEqual(2, main())
+                run.assert_not_called()
+            self.assertEqual('preserve prior output', args[6].read_text())
+            self.assertEqual('preserve prior output', report.read_text())
+
+    def test_output_cannot_overwrite_cli_through_hardlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            args = self.setup_advance(root)
+            args[2].write_bytes(b'preserve CLI assembly')
+            args[6].hardlink_to(args[2])
+            with patch('tools.scp_semantic_progress.subprocess.run', return_value=SimpleNamespace(returncode=0, stderr='', stdout='')) as run:
+                with self.assertRaisesRegex(ValueError, 'output'):
+                    advance(*args, 0, 1)
+                run.assert_not_called()
+            self.assertEqual(b'preserve CLI assembly', args[2].read_bytes())
+
+    def test_output_hardlink_cannot_overwrite_secondary_source_inputs(self):
+        for kind in ['included_basic', 'declarations', 'runtime_cpp']:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                args = self.setup_advance(root)
+                if kind == 'runtime_cpp':
+                    original = args[5] / 'bbgraphics.cpp'
+                elif kind == 'declarations':
+                    original = args[0].parent / 'api.decls'
+                    original.write_text('Bound%(value%):"Bound"')
+                else:
+                    original = args[0].parent / 'nested' / 'secondary.bb'
+                    original.parent.mkdir()
+                    original.write_text('; included source')
+                    args[0].write_text('Include "nested/secondary.bb"\nPrint Windowed3D()')
+                original_bytes = original.read_bytes()
+                args[6].hardlink_to(original)
+                with patch('tools.scp_semantic_progress.subprocess.run', return_value=SimpleNamespace(returncode=0, stderr='', stdout='')) as run:
+                    with self.assertRaisesRegex(ValueError, 'output'):
+                        advance(*args, 0, 1)
+                    run.assert_not_called()
+                self.assertEqual(original_bytes, original.read_bytes())
+
     def test_zero_budget_checks_once_without_adding_any_declaration(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -150,9 +255,11 @@ class SemanticProgressContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             args = self.setup_advance(root)
+            args[6].write_text('preserve prior catalog')
             with patch('tools.scp_semantic_progress.subprocess.run', side_effect=subprocess.TimeoutExpired('cli', 1)):
                 with self.assertRaises(subprocess.TimeoutExpired):
                     advance(*args, 1, 1)
+            self.assertEqual('preserve prior catalog', args[6].read_text())
 
     def test_invalid_iteration_and_timeout_budgets_are_rejected_before_execution(self):
         with tempfile.TemporaryDirectory() as tmp:

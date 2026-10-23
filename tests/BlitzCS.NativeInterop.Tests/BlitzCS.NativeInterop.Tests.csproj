@@ -15,5 +15,6 @@
   <Target Name="BuildNativeInteropFixture" BeforeTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
     <MakeDir Directories="$(OutDir)native" />
     <Exec Command="cc -std=c11 -Wall -Wextra -Werror -fPIC -shared &quot;$(MSBuildProjectDirectory)/native/demo.c&quot; -o &quot;$(OutDir)native/libblitzcs_native_demo.so&quot;" />
+    <Exec Command="cc -std=c11 -Wall -Wextra -Werror -fPIC -shared &quot;$(MSBuildProjectDirectory)/native/buffer.c&quot; -o &quot;$(OutDir)native/libblitzcs_native_buffer.so&quot;" />
   </Target>
 </Project>

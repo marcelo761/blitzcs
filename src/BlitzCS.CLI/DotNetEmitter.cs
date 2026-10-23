@@ -8,6 +8,8 @@ using Microsoft.CodeAnalysis.Text;
 namespace BlitzCS.CLI;
 
 /// <summary>Emits a framework-dependent .NET 10 console assembly and portable symbols.</summary>
+/// <remarks>Artifacts are replaced individually, preserving other hard links to existing files.
+/// Preflight assumes stable filesystem paths and does not defend against concurrent hostile changes.</remarks>
 public static class DotNetEmitter
 {
     public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName = null) =>
@@ -17,7 +19,11 @@ public static class DotNetEmitter
         Emit(generatedCode, outputPath, entryPointTypeName, referencePaths, null);
 
     public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName,
-        IEnumerable<string>? referencePaths, IEnumerable<string>? nativeLibraryPaths)
+        IEnumerable<string>? referencePaths, IEnumerable<string>? nativeLibraryPaths) =>
+        Emit(generatedCode, outputPath, entryPointTypeName, referencePaths, nativeLibraryPaths, null);
+
+    internal static void Emit(string generatedCode, string outputPath, string? entryPointTypeName,
+        IEnumerable<string>? referencePaths, IEnumerable<string>? nativeLibraryPaths, IEnumerable<string>? inputPaths)
     {
         if (!string.Equals(Path.GetExtension(outputPath), ".dll", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Output must have the .dll extension.", nameof(outputPath));
@@ -46,11 +52,33 @@ public static class DotNetEmitter
             Path.ChangeExtension(outputPath, ".pdb"),
             Path.ChangeExtension(outputPath, ".runtimeconfig.json")
         };
+        var protectedPaths = new HashSet<string>((inputPaths ?? [])
+            .Concat(syntax.GetLineMappings().Select(mapping => mapping.MappedSpan.Path)
+                .Where(path => !string.IsNullOrEmpty(path) && File.Exists(path)))
+            .Select(CanonicalPath), comparer);
+        foreach (var path in platformAssemblies.Split(Path.PathSeparator)
+                     .Concat(externalPaths).Concat(nativePaths))
+            protectedPaths.Add(CanonicalPath(path));
+        // The host also needs its app configuration and native/managed dependencies.
+        foreach (var path in externalPaths)
+            foreach (var extension in new[] { ".pdb", ".deps.json", ".runtimeconfig.json", ".generated.cs" })
+                protectedPaths.Add(CanonicalPath(Path.ChangeExtension(path, extension)));
+        foreach (var directory in new[] { AppContext.BaseDirectory, Path.GetDirectoryName(typeof(DotNetEmitter).Assembly.Location)! }
+                     .Distinct(comparer))
+            foreach (var path in Directory.EnumerateFiles(directory))
+                protectedPaths.Add(CanonicalPath(path));
+        var artifactPaths = reservedTargets.Select(CanonicalPath).ToArray();
+        if (artifactPaths.Distinct(comparer).Count() != artifactPaths.Length || artifactPaths.Any(protectedPaths.Contains))
+            throw new ArgumentException("Cannot overwrite compiler or external input files with an output file.");
+        foreach (var target in reservedTargets)
+            if (Directory.Exists(target))
+                throw new ArgumentException("Output file cannot overwrite a directory.");
+        reservedTargets = new HashSet<string>(artifactPaths, comparer);
         var targets = new Dictionary<string, string>(comparer);
         foreach (var path in externalPaths)
         {
             var target = Path.GetFullPath(Path.Combine(outputDirectory, Path.GetFileName(path)));
-            if (reservedTargets.Contains(target))
+            if (reservedTargets.Contains(CanonicalPath(target)))
                 throw new ArgumentException("External assembly cannot overwrite the output assembly.");
             if (targets.TryGetValue(target, out var previous) && !comparer.Equals(previous, path))
                 throw new ArgumentException($"External assemblies have the same output filename '{Path.GetFileName(path)}'.");
@@ -59,11 +87,22 @@ public static class DotNetEmitter
         foreach (var path in nativePaths)
         {
             var target = Path.GetFullPath(Path.Combine(outputDirectory, Path.GetFileName(path)));
-            if (reservedTargets.Contains(target))
+            if (reservedTargets.Contains(CanonicalPath(target)))
                 throw new ArgumentException($"Native library cannot overwrite an output file '{Path.GetFileName(path)}'.");
             if (targets.TryGetValue(target, out var previous) && !comparer.Equals(previous, path))
                 throw new ArgumentException($"Managed and native assets have the same output filename '{Path.GetFileName(path)}'.");
             targets[target] = path;
+        }
+        var copiedTargets = new HashSet<string>(comparer);
+        foreach (var (target, path) in targets)
+        {
+            var canonicalTarget = CanonicalPath(target);
+            if (!copiedTargets.Add(canonicalTarget))
+                throw new ArgumentException("Copied assets must have distinct output files.");
+            if (!comparer.Equals(canonicalTarget, CanonicalPath(path)) && protectedPaths.Contains(canonicalTarget))
+                throw new ArgumentException("Copied assets cannot overwrite compiler or external input files.");
+            if (Directory.Exists(target))
+                throw new ArgumentException("Copied asset cannot overwrite a directory.");
         }
         var references = platformAssemblies.Split(Path.PathSeparator).Concat(externalPaths).Distinct(StringComparer.Ordinal)
             .Select(path => MetadataReference.CreateFromFile(path));
@@ -84,13 +123,13 @@ public static class DotNetEmitter
         Directory.CreateDirectory(outputDirectory);
         foreach (var (target, path) in targets)
         {
-            if (comparer.Equals(path, target)) continue;
-            File.Copy(path, target, overwrite: true);
+            if (comparer.Equals(CanonicalPath(path), CanonicalPath(target))) continue;
+            Publish(target, temporary => File.Copy(path, temporary));
         }
-        File.WriteAllText(generatedPath, generatedCode, Encoding.UTF8);
-        File.WriteAllBytes(outputPath, assembly.ToArray());
-        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".pdb"), symbols.ToArray());
-        File.WriteAllText(Path.ChangeExtension(outputPath, ".runtimeconfig.json"),
+        Publish(generatedPath, temporary => File.WriteAllText(temporary, generatedCode, Encoding.UTF8));
+        Publish(outputPath, temporary => File.WriteAllBytes(temporary, assembly.ToArray()));
+        Publish(Path.ChangeExtension(outputPath, ".pdb"), temporary => File.WriteAllBytes(temporary, symbols.ToArray()));
+        Publish(Path.ChangeExtension(outputPath, ".runtimeconfig.json"), temporary => File.WriteAllText(temporary,
             JsonSerializer.Serialize(new
             {
                 runtimeOptions = new
@@ -98,6 +137,34 @@ public static class DotNetEmitter
                     tfm = "net10.0",
                     framework = new { name = "Microsoft.NETCore.App", version = "10.0.0" }
                 }
-            }, new JsonSerializerOptions { WriteIndented = true }));
+            }, new JsonSerializerOptions { WriteIndented = true })));
+    }
+
+    private static void Publish(string target, Action<string> write)
+    {
+        var temporary = Path.Combine(Path.GetDirectoryName(target)!, $".blitzcs-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            write(temporary);
+            File.Move(temporary, target, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
+    }
+
+    private static string CanonicalPath(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var current = Path.GetPathRoot(fullPath)!;
+        foreach (var component in fullPath[current.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, component);
+            FileSystemInfo info = Directory.Exists(current) ? new DirectoryInfo(current) : new FileInfo(current);
+            if (info.LinkTarget is not null)
+                current = info.ResolveLinkTarget(returnFinalTarget: true)!.FullName;
+        }
+        return current;
     }
 }

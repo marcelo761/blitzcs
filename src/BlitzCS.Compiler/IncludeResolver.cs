@@ -5,6 +5,8 @@ namespace BlitzCS.Compiler;
 internal sealed class IncludeResolver(string mainPath)
 {
     private readonly string directory = Path.GetDirectoryName(Path.GetFullPath(mainPath))!;
+    private readonly List<string> sourcePaths = [];
+    internal IReadOnlyList<string> SourcePaths => sourcePaths.AsReadOnly();
     private readonly HashSet<string> included = new(StringComparer.OrdinalIgnoreCase);
 
     internal IReadOnlyList<Token>? Load(Token directive, Token filename)
@@ -16,6 +18,7 @@ internal sealed class IncludeResolver(string mainPath)
             // Main is deliberately not pre-seeded: a cycle may include it once.
             if (!included.Add(path)) return null;
             path = FindFile(path);
+            sourcePaths.Add(path);
             return new Lexer(File.ReadAllText(path), path).Tokenize();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)

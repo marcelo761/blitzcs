@@ -42,9 +42,10 @@ public static class CliApplication
             var catalog = args.Length == 6
                 ? ExternalCatalog.Load(args[5])
                 : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
-            var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions);
+            var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions, out var sourceInputs);
             DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram",
-                referencePaths: catalog.Functions.ReferencePaths, nativeLibraryPaths: catalog.NativeLibraries);
+                referencePaths: catalog.Functions.ReferencePaths, nativeLibraryPaths: catalog.NativeLibraries,
+                inputPaths: args.Length == 6 ? sourceInputs.Append(args[5]) : sourceInputs);
             output.WriteLine(outputPath);
             return 0;
         }

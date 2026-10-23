@@ -1,0 +1,10 @@
+{
+  "runtime": "genuine Blitz3D Win32 under Wine with owned Xvfb",
+  "cases": {},
+  "source_sha256": "fe579b9746abff072df1154138a604d7f8b35bdea8fd6be37ad92c050002ca04",
+  "capture": {
+    "phase": "run",
+    "stdout": "default-size=0\nzero-size=0\nsize=16\nzero-init=0,0\nbyte-wrap=255,2\nshort-unsigned=65534\nshort-little-endian=254,255\nshort-wrap=1\nint-signed=-1985229329\nint-little-endian=239,205,171,137\nfloat-roundtrip=1\nfloat-bits=1069547520\nshrink=8,123456\nregrow-in-capacity-zero=0,0\nreallocate-preserve=64,123456\noverlap-forward=1,2,1,2,5,6\noverlap-backward=1,2,5,6\ncross-copy=0,1,6,0\nzero-copy=0\nfree-invalid-noop=1\n",
+    "exit_code": 0
+  }
+}

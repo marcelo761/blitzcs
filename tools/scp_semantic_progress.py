@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import struct
 import subprocess
+import tempfile
 
 try:
     from tools.generate_scp_native_manifest import RTSYM, decode_descriptor, parse_application_declarations
@@ -121,17 +122,30 @@ def external_signatures(source_dir: Path):
 def validate_outputs(entry: Path, cli: Path, bindings: Path, native_catalog: Path,
                      runtime_source: Path, outputs: list[Path]):
     protected = {p.resolve() for p in [entry, cli, bindings, native_catalog]}
+    # Directory exclusions also cover aliases to secondary BASIC/.decls inputs and original runtime files.
+    for source_root in [entry.parent.resolve(), runtime_source.resolve()]:
+        protected.update(p.resolve() for p in source_root.rglob('*') if p.is_file())
+    # Runtime configuration and adjacent compiler/native dependencies are inputs too.
+    if cli.parent.is_dir():
+        protected.update(p.resolve() for p in cli.parent.iterdir()
+                         if p.is_file() and (p.suffix.lower() in {'.dll', '.exe', '.pdb', '.so', '.dylib'}
+                                             or p.name.endswith(('.deps.json', '.runtimeconfig.json'))))
+    protected.update(cli.with_suffix(suffix).resolve() for suffix in ['.deps.json', '.runtimeconfig.json'])
     catalog = json.loads(bindings.read_text())
     for function in catalog['functions']:
         if 'assembly' in function:
             assembly = (bindings.parent / function['assembly']).resolve()
-            protected.update([assembly, assembly.with_suffix('.deps.json'), assembly.with_suffix('.runtimeconfig.json')])
+            protected.update([assembly, assembly.with_suffix('.deps.json').resolve(), assembly.with_suffix('.runtimeconfig.json').resolve()])
     protected.update((bindings.parent / name).resolve() for name in catalog.get('nativeLibraries', []))
     resolved = [p.resolve() for p in outputs]
-    if len(set(resolved)) != len(resolved):
+    if len(set(resolved)) != len(resolved) or any(
+            a.exists() and b.exists() and a.samefile(b)
+            for index, a in enumerate(resolved) for b in resolved[index + 1:]):
         raise ValueError('output files must be distinct')
+    # Preflight assumes stable paths, not concurrent hostile filesystem changes.
     for output in resolved:
-        if output in protected or output.suffix.lower() != '.json' or output.is_relative_to(entry.parent.resolve()) or output.is_relative_to(runtime_source.resolve()):
+        same_input = output.exists() and any(p.exists() and output.samefile(p) for p in protected)
+        if same_input or output in protected or output.suffix.lower() != '.json' or output.is_relative_to(entry.parent.resolve()) or output.is_relative_to(runtime_source.resolve()):
             raise ValueError('output must be a JSON file outside inputs and original source directories')
 
 
@@ -161,25 +175,29 @@ def advance(entry: Path, dotnet: str, cli: Path, bindings: Path, native_catalog:
     names = {x['name'].casefold() for x in catalog['functions']}
     steps = []
     catalog_output.parent.mkdir(parents=True, exist_ok=True)
-    for iteration in range(max_additions + 1):
-        catalog_output.write_text(json.dumps(catalog, indent=2) + '\n')
-        process = subprocess.run([dotnet, str(cli.resolve()), 'check-semantics', str(entry.resolve()),
-                                  '--externals', str(catalog_output.resolve())],
-                                 capture_output=True, text=True, timeout=timeout)
-        diagnostic = (process.stderr or process.stdout).strip()
-        # Public summaries refer to source-relative locations, not machine paths.
-        diagnostic = diagnostic.replace(str(entry.parent.resolve()) + '/', '').replace(str(entry.parent.resolve()) + '\\', '')
-        steps.append({'exit_code': process.returncode, 'diagnostic': diagnostic})
-        if process.returncode == 0:
-            return {'semantic_validated': True, 'assembly_emitted': False, 'steps': steps,
-                    'added_declarations': sorted(names - initial_names),
-                    'rejected_original_contracts': rejected}
-        match = UNKNOWN.search(diagnostic)
-        key = match.group(1).casefold() if match else None
-        if key not in signatures or key in names or iteration == max_additions:
-            break
-        catalog['functions'].append(signatures[key])
-        names.add(key)
+    with tempfile.TemporaryDirectory(prefix='blitzcs-semantic-', dir=catalog_output.parent) as work:
+        working_catalog = Path(work) / 'catalog.json'
+        for iteration in range(max_additions + 1):
+            working_catalog.write_text(json.dumps(catalog, indent=2) + '\n')
+            process = subprocess.run([dotnet, str(cli.resolve()), 'check-semantics', str(entry.resolve()),
+                                      '--externals', str(working_catalog.resolve())],
+                                     capture_output=True, text=True, timeout=timeout)
+            diagnostic = (process.stderr or process.stdout).strip()
+            # Public summaries refer to source-relative locations, not machine paths.
+            diagnostic = diagnostic.replace(str(entry.parent.resolve()) + '/', '').replace(str(entry.parent.resolve()) + '\\', '')
+            steps.append({'exit_code': process.returncode, 'diagnostic': diagnostic})
+            if process.returncode == 0:
+                catalog_output.write_text(working_catalog.read_text())
+                return {'semantic_validated': True, 'assembly_emitted': False, 'steps': steps,
+                        'added_declarations': sorted(names - initial_names),
+                        'rejected_original_contracts': rejected}
+            match = UNKNOWN.search(diagnostic)
+            key = match.group(1).casefold() if match else None
+            if key not in signatures or key in names or iteration == max_additions:
+                break
+            catalog['functions'].append(signatures[key])
+            names.add(key)
+        catalog_output.write_text(working_catalog.read_text())
     return {'semantic_validated': False, 'assembly_emitted': False, 'steps': steps,
             'added_declarations': sorted(names - initial_names),
             'rejected_original_contracts': rejected}
