@@ -28,7 +28,7 @@ public static class WaveOutBackends
         switch (kind)
         {
             case WaveOutBackendKind.VirtualSink:
-                return new VirtualSinkBackend(options.WaveOutObserver, recorder);
+                return new VirtualSinkBackend(options.WaveOutObserver, recorder, options.WaveOutSliceObserver);
             case WaveOutBackendKind.HostWinmm:
                 var user = options.WaveOutObserver;
                 WaveOutObserver? tap = recorder is null ? user : w => { recorder.Append(w); user?.Invoke(w); };

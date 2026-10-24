@@ -14,9 +14,20 @@ to a pluggable `IWaveOutBackend`. Nothing is a silent no-op: an unsupported opti
 
 Selection: `Win32Options.WaveOut` (`Default`, `HostWinmm`, `VirtualSink`, `None`); `Default` is `HostWinmm` on a Windows host and `None` elsewhere. The environment variable
 `BLITZCS_AUDIO=host|virtual|none` overrides the option; any other value throws `Win32UsageException`. Choosing `HostWinmm` on a non-Windows host also throws (it is never silently downgraded).
-Related options: `WaveOutRecordPath` (RIFF WAV of everything consumed/written; a format change starts `name.1.wav`, ...) and `WaveOutObserver` (`Action<WaveOutWrite>`: device id, header address, `WaveOutFormat`,
-stream time in ms, a private copy of the bytes). The tap and the recorder work on top of both `VirtualSink` (when a buffer finished playing, or the played prefix on reset) and `HostWinmm` (when the buffer is written,
-before it is forwarded). The tap sees samples before any volume; the virtual device volume is state only (get returns what set stored).
+Related options: `WaveOutRecordPath` (RIFF WAV; a format change starts `name.1.wav`, ...), `WaveOutObserver` (`Action<WaveOutWrite>`: device id, header address, `WaveOutFormat`, stream time in ms, a private copy of the bytes)
+and `WaveOutSliceObserver` (VirtualSink only).
+
+**Tap contract (exact).**
+
+* `VirtualSink` reads the guest buffer **when each slice is consumed**, never at `waveOutWrite` (a real driver reads the memory while it plays, and mixers such as the original FMOD rewrite their looped
+  WAVEHDR buffer in place behind the device). The stream clock advances in steps of at most ~5 ms; each step reads at most 10 ms of audio from the guest at that moment (every pass of a loop re-reads the buffer).
+  The recorder and `WaveOutSliceObserver` receive these slices live, stamped with their stream time; `WaveOutObserver` receives the aggregated view, one event per finished pass (or the played prefix on reset),
+  assembled from those slices. If the guest unmaps or frees the buffer while it is queued, the sink stops reading it, completes the buffer (WHDR_DONE) and keeps the exception in `VirtualSinkBackend.Faults`.
+  `waveOutWrite` only validates that the range is mapped.
+* `HostWinmm`: the OS driver reads the memory by itself and the backend cannot know when. The observer (and the recorder) therefore receive a **snapshot taken at `waveOutWrite`** (stream time = time since open),
+  before the call is forwarded; for a buffer the guest keeps rewriting that snapshot is NOT what was played (the FMOD demo records silence through it). The authoritative evidence of host playback is the
+  device capture (`scripts/wine/audio-capture.sh`, below). `WaveOutSliceObserver` is never called on this backend.
+* The tap sees samples before any volume; the virtual device volume is state only.
 
 Implemented imports (WINMM.dll, stdcall): `waveOutGetNumDevs`(0), `waveOutGetDevCapsA/W`(3), `waveOutOpen`(6), `waveOutClose/Reset/Pause/Restart/BreakLoop`(1), `waveOutPrepareHeader/UnprepareHeader/Write`(3),
 `waveOutGetPosition`(3), `waveOutGetVolume/SetVolume`(2), `waveOutGetID`(2), `waveOutGetErrorTextA/W`(3). Absent: `waveOutMessage` (no driver message channel), all `waveIn*` and `mixer*` beyond the existing
@@ -33,7 +44,7 @@ zero-device answers, and every `mci*`.
   module (`MMSYSERR_NOTSUPPORTED` otherwise); `CALLBACK_EVENT` needs a HANDLE from this component's `CreateEvent` (`MMSYSERR_INVALHANDLE` otherwise). `WOM_OPEN`, `WOM_DONE` (dwParam1 = guest header address) and
   `WOM_CLOSE` are delivered with `(hwo, msg, dwInstance, dwParam1, dwParam2)`; events are signalled for every message.
 * `VirtualSink` formats: PCM (or EXTENSIBLE with the PCM sub-format), 1-2 channels, 8/16 bit, 8000-48000 Hz, `nBlockAlign` = channels*bits/8; buffers must be a whole number of frames. Buffers are consumed at real-time
-  rate; `Pause` stops the clock; loops follow `WHDR_BEGINLOOP`/`WHDR_ENDLOOP` with the `dwLoops` of the begin header; `BreakLoop` ends the loop after the current pass. `waveOutGetPosition` supports `TIME_MS`, `TIME_SAMPLES`,
+  rate, sliced as described above; `Pause` stops the clock; loops follow `WHDR_BEGINLOOP`/`WHDR_ENDLOOP` with the `dwLoops` of the begin header; `BreakLoop` ends the loop after the current pass. `waveOutGetPosition` supports `TIME_MS`, `TIME_SAMPLES`,
   `TIME_BYTES`; any other type answers `TIME_BYTES` (what Windows does); values are 32-bit and wrap.
 
 ## ABI adaptation table

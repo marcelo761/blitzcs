@@ -19,8 +19,14 @@ public sealed class VirtualSinkBackend : IWaveOutBackend
     /// <summary>Exceptions thrown by the observer, the recorder or a sink notification on a worker thread (kept, never dropped).</summary>
     public IReadOnlyCollection<Exception> Faults => faults;
 
-    public VirtualSinkBackend(WaveOutObserver? observer = null, WavRecorder? recorder = null)
+    private readonly WaveOutObserver? sliceObserver;
+
+    /// <param name="observer">Aggregated view: one event per consumed pass of a buffer (or the played prefix on reset), built from slices read at consume time.</param>
+    /// <param name="recorder">Receives every slice as it is consumed.</param>
+    /// <param name="sliceObserver">The raw consume-time slices (at most ~10 ms of audio each), stamped with their stream time.</param>
+    public VirtualSinkBackend(WaveOutObserver? observer = null, WavRecorder? recorder = null, WaveOutObserver? sliceObserver = null)
     {
+        this.sliceObserver = sliceObserver;
         this.observer = observer;
         this.recorder = recorder;
     }
@@ -55,11 +61,13 @@ public sealed class VirtualSinkBackend : IWaveOutBackend
         return 0;
     }
 
-    internal void Emit(WaveOutWrite w)
+    internal void EmitSlice(WaveOutWrite w)
     {
         recorder?.Append(w);
-        observer?.Invoke(w);
+        sliceObserver?.Invoke(w);
     }
+
+    internal void EmitPass(WaveOutWrite w) => observer?.Invoke(w);
 
     public void Dispose()
     {
@@ -67,15 +75,19 @@ public sealed class VirtualSinkBackend : IWaveOutBackend
         recorder?.Dispose();
     }
 
-    private sealed class Item(WaveOutBuffer buffer, byte[] data)
+    /// <summary>A queued buffer. No data is held: the guest memory is read slice by slice when the slice is consumed.</summary>
+    private sealed class Item(WaveOutBuffer buffer)
     {
         public readonly WaveOutBuffer Buffer = buffer;
-        public readonly byte[] Data = data;
+        public readonly long Length = buffer.Length;
         public long Pos;
+        public readonly List<byte> Pass = [];
+        public long PassStartMs;
     }
 
     private abstract record Outbound;
-    private sealed record Emission(WaveOutWrite Write) : Outbound;
+    private sealed record SliceEmission(WaveOutWrite Write) : Outbound;
+    private sealed record PassEmission(WaveOutWrite Write) : Outbound;
     private sealed record Completion(WaveOutBuffer Buffer) : Outbound;
 
     private sealed class VirtualDevice : IWaveOutDevice
@@ -115,14 +127,12 @@ public sealed class VirtualSinkBackend : IWaveOutBackend
         public uint Write(WaveOutBuffer b)
         {
             if (b.Length % (uint)blockAlign != 0) return WaveOutConst.MmsyserrInvalParam;
-            byte[] data;
-            try { data = b.ReadData(); }
-            catch (Exception e) when (e is BlitzCS.BinaryCompiler.Runtime.GuestMemoryException) { return WaveOutConst.MmsyserrInvalParam; }
+            if (!b.Memory.IsMapped(b.DataAddress, b.Length)) return WaveOutConst.MmsyserrInvalParam;
             lock (gate)
             {
                 if (closed) return WaveOutConst.MmsyserrInvalHandle;
                 Pump(Stopwatch.GetTimestamp());
-                queue.Add(new Item(b, data));
+                queue.Add(new Item(b));
                 Monitor.PulseAll(gate);
             }
             return 0;
@@ -135,30 +145,46 @@ public sealed class VirtualSinkBackend : IWaveOutBackend
         {
             if (!paused && cur < queue.Count) budget += Ticks(now) * bytesPerTick;
             lastPump = now;
+            var sliceMax = Math.Max(blockAlign, (long)(bytesPerTick * Stopwatch.Frequency * 0.010) / blockAlign * blockAlign);
             while (cur < queue.Count && !paused)
             {
                 var it = queue[cur];
-                var remain = it.Data.Length - it.Pos;
-                if (budget >= remain)
+                var remain = it.Length - it.Pos;
+                if (remain > 0)
                 {
-                    budget -= remain; played += remain;
-                    outbox.Add(new Emission(MakeWrite(it, it.Data.Length, 0)));
-                    it.Pos = 0;
-                    EndPass(it);
-                }
-                else
-                {
-                    var n = (long)budget / blockAlign * blockAlign;
+                    var n = Math.Min(remain, Math.Min((long)budget / blockAlign * blockAlign, sliceMax));
+                    if (n <= 0) break;
+                    byte[] bytes = new byte[n];
+                    try { it.Buffer.Memory.Read(it.Buffer.DataAddress + (uint)it.Pos, bytes); }
+                    catch (Exception e) when (e is BlitzCS.BinaryCompiler.Runtime.GuestMemoryException or ObjectDisposedException)
+                    {
+                        // The guest freed or unmapped the buffer behind the device: stop reading it and complete safely.
+                        owner.faults.Enqueue(e);
+                        AbandonCurrent();
+                        continue;
+                    }
+                    if (it.Pos == 0) it.PassStartMs = played * 1000 / ((long)format.SamplesPerSec * blockAlign);
                     budget -= n; it.Pos += n; played += n;
-                    break;
+                    it.Pass.AddRange(bytes);
+                    outbox.Add(new SliceEmission(new WaveOutWrite(0, it.Buffer.HeaderAddress, format, (played - n) * 1000 / ((long)format.SamplesPerSec * blockAlign), bytes)));
+                    if (it.Pos < it.Length) continue;
                 }
+                outbox.Add(new PassEmission(new WaveOutWrite(0, it.Buffer.HeaderAddress, format, it.PassStartMs, it.Pass.ToArray())));
+                it.Pass.Clear();
+                it.Pos = 0;
+                EndPass(it);
             }
             if (cur >= queue.Count) budget = 0;
             if (outbox.Count > 0) Monitor.PulseAll(gate);
         }
 
-        private WaveOutWrite MakeWrite(Item it, int length, int from) =>
-            new(0, it.Buffer.HeaderAddress, format, (played - length + from) * 1000 / (format.SamplesPerSec * (long)blockAlign), it.Data.AsSpan(from, length).ToArray());
+        private void AbandonCurrent()
+        {
+            var first = loopStart >= 0 ? loopStart : cur;
+            for (var i = first; i <= cur; i++) outbox.Add(new Completion(queue[i].Buffer));
+            queue.RemoveRange(first, cur - first + 1);
+            loopStart = -1; cur = 0;
+        }
 
         private void EndPass(Item it)
         {
@@ -177,13 +203,7 @@ public sealed class VirtualSinkBackend : IWaveOutBackend
             queue.RemoveAt(cur);
         }
 
-        private int WaitMs()
-        {
-            if (paused || cur >= queue.Count) return Timeout.Infinite;
-            var it = queue[cur];
-            var missing = it.Data.Length - it.Pos - budget;
-            return (int)Math.Clamp(Math.Ceiling(missing / (bytesPerTick * Stopwatch.Frequency) * 1000), 1, 1000);
-        }
+        private int WaitMs() => paused || cur >= queue.Count ? Timeout.Infinite : 5; // consume in <= 5 ms steps (no busy loop: the monitor sleeps)
 
         private void Run()
         {
@@ -210,10 +230,10 @@ public sealed class VirtualSinkBackend : IWaveOutBackend
             lock (gate)
             {
                 Pump(Stopwatch.GetTimestamp());
-                if (cur < queue.Count && queue[cur].Pos > 0)
+                if (cur < queue.Count && queue[cur].Pass.Count > 0)
                 {
                     var it = queue[cur];
-                    outbox.Add(new Emission(MakeWrite(it, (int)it.Pos, 0)));
+                    outbox.Add(new PassEmission(new WaveOutWrite(0, it.Buffer.HeaderAddress, format, it.PassStartMs, it.Pass.ToArray())));
                 }
                 foreach (var it in queue) outbox.Add(new Completion(it.Buffer));
                 queue.Clear();
@@ -232,7 +252,7 @@ public sealed class VirtualSinkBackend : IWaveOutBackend
             {
                 try
                 {
-                    if (o is Emission e) owner.Emit(e.Write); else sink.BufferDone(((Completion)o).Buffer);
+                    if (o is SliceEmission se) owner.EmitSlice(se.Write); else if (o is PassEmission pe) owner.EmitPass(pe.Write); else sink.BufferDone(((Completion)o).Buffer);
                 }
                 catch (Exception ex) { Fault(ex); }
             }

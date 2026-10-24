@@ -337,4 +337,97 @@ public sealed class WaveVirtualSinkTests
         Assert.Equal(streams * buffers * size, r.Writes.Sum(w => w.Data.Length));
         Assert.InRange(sw.ElapsedMilliseconds, 380, 8000); // 400 ms of audio per stream, streams run concurrently
     }
+
+    private static byte[] Sine(int hz, int frames, int rate)
+    {
+        var b = new byte[frames * 2];
+        for (var i = 0; i < frames; i++) BitConverter.TryWriteBytes(b.AsSpan(2 * i), (short)(12000 * Math.Sin(2 * Math.PI * hz * i / rate)));
+        return b;
+    }
+
+    private static double Tone(short[] x, int from, int count, int hz, int rate)
+    {
+        double k = 2 * Math.Cos(2 * Math.PI * hz / rate), s1 = 0, s2 = 0;
+        for (var i = from; i < from + count; i++) { var s0 = x[i] + k * s1 - s2; s2 = s1; s1 = s0; }
+        return Math.Sqrt(s1 * s1 + s2 * s2 - k * s1 * s2) * 2 / count;
+    }
+
+    [Fact]
+    public void ABufferRewrittenInPlaceWhilePlayingIsRecordedWithTheLateValues()
+    {
+        // F-11: the original mixer keeps one looped WAVEHDR buffer and rewrites it behind the device. The sink must read the memory when each slice is consumed.
+        const int rate = 8000;
+        var path = Path.Combine(Path.GetTempPath(), "blitz-rewrite-" + Guid.NewGuid().ToString("N") + ".wav");
+        try
+        {
+            using (var r = new WaveRig(record: path))
+            {
+                var (_, hwo) = r.Open(r.Format(1, rate, 16));
+                var early = Sine(500, 800, rate);          // 100 ms loop block
+                var (hdr, data) = r.Buffer(early, BeginLoop | EndLoop, 100000);
+                Assert.Equal(0u, r.Call("waveOutPrepareHeader", hwo, hdr, 32));
+                var sw = Stopwatch.StartNew();
+                Assert.Equal(0u, r.Call("waveOutWrite", hwo, hdr, 32));
+                var rewriter = new Thread(() => { while (sw.ElapsedMilliseconds < 500) Thread.Sleep(1); r.Mem.Write(data, Sine(1000, 800, rate)); });
+                rewriter.Start();
+                while (sw.ElapsedMilliseconds < 1000) Thread.Sleep(5);
+                rewriter.Join();
+                Assert.Equal(0u, r.Call("waveOutBreakLoop", hwo));
+                Assert.True(r.WaitFlags(hdr, Done, 2000));
+                Assert.Equal(0u, r.Call("waveOutUnprepareHeader", hwo, hdr, 32));
+                r.Call("waveOutClose", hwo);
+            }
+            var f = File.ReadAllBytes(path);
+            var n = (int)BitConverter.ToUInt32(f, 40) / 2;
+            var pcm = new short[n];
+            Buffer.BlockCopy(f, 44, pcm, 0, n * 2);
+            Assert.True(n > rate * 0.9, $"{n} samples recorded");
+            Assert.True(Tone(pcm, 0, 2400, 500, rate) > 20 * Tone(pcm, 0, 2400, 1000, rate), "first 300 ms must carry the early 500 Hz values");
+            Assert.True(Tone(pcm, 5600, 2000, 1000, rate) > 20 * Tone(pcm, 5600, 2000, 500, rate), "samples after the rewrite must carry the late 1000 Hz values");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void ObserverSlicesAreConsumeTimeAndTheAggregatedViewStillCarriesWholePasses()
+    {
+        var slices = new System.Collections.Concurrent.ConcurrentQueue<WaveOutWrite>();
+        var w = new World(new Win32Options { WaveOut = WaveOutBackendKind.VirtualSink, WaveOutSliceObserver = slices.Enqueue, WaveOutObserver = null });
+        using var rig = w;
+        var f = w.Buf(32); w.Mem.Write(f, [1, 0, 1, 0, 0x40, 0x1F, 0, 0, 0x80, 0x3E, 0, 0, 2, 0, 16, 0]);
+        var phwo = w.Buf(4);
+        Assert.Equal(0u, w.Call("WINMM.dll", "waveOutOpen", phwo, 0, f, 0, 0, 0));
+        var hwo = w.Mem.ReadUInt32(phwo);
+        var d = w.Buf(3200); var h = w.Buf(32);
+        w.Mem.WriteUInt32(h, d); w.Mem.WriteUInt32(h + 4, 3200);
+        w.Call("WINMM.dll", "waveOutPrepareHeader", hwo, h, 32);
+        w.Call("WINMM.dll", "waveOutWrite", hwo, h, 32);
+        var sw = Stopwatch.StartNew();
+        while ((w.Mem.ReadUInt32(h + 16) & 1) == 0 && sw.ElapsedMilliseconds < 2000) Thread.Sleep(1);
+        Assert.InRange(slices.Count, 15, 60);                          // 200 ms in slices of at most 10 ms, produced every ~5 ms
+        Assert.All(slices, s => Assert.True(s.Data.Length <= 160 + 2));
+        Assert.Equal(3200, slices.Sum(s => s.Data.Length));
+        var times = slices.Select(s => s.StreamTimeMs).ToArray();
+        Assert.Equal(times.OrderBy(t => t), times);
+        w.Call("WINMM.dll", "waveOutUnprepareHeader", hwo, h, 32);
+        w.Call("WINMM.dll", "waveOutClose", hwo);
+    }
+
+    [Fact]
+    public void AGuestThatFreesTheBufferWhilePlayingMakesTheSinkStopReadingAndCompleteSafely()
+    {
+        using var r = new WaveRig();
+        var (_, hwo) = r.Open(r.Format(1, 8000, 16));
+        var alloc = r.Mem.Allocate(32000);                         // 2 s of audio
+        var hdr = r.Header(alloc.Address, 32000);
+        Assert.Equal(0u, r.Call("waveOutPrepareHeader", hwo, hdr, 32));
+        Assert.Equal(0u, r.Call("waveOutWrite", hwo, hdr, 32));
+        Thread.Sleep(100);
+        alloc.Dispose();                                           // buggy guest: free while queued
+        Assert.True(r.WaitFlags(hdr, Done, 1000), "the sink must complete the buffer instead of reading freed memory");
+        Assert.Equal(0u, r.Flags(hdr) & InQueue);
+        Assert.Equal(0u, r.Call("waveOutUnprepareHeader", hwo, hdr, 32));
+        Assert.Equal(0u, r.Call("waveOutClose", hwo));
+        Assert.True(r.Writes.Sum(w => w.Data.Length) < 32000);
+    }
 }

@@ -301,6 +301,8 @@ public sealed class Win32Options
     public string? WaveOutRecordPath { get; init; }
     /// <summary>Receives the PCM the guest played (see <see cref="WaveOutWrite"/>), on the backend's threads.</summary>
     public WaveOutObserver? WaveOutObserver { get; init; }
+    /// <summary>VirtualSink only: the raw consume-time slices (about 10 ms each). HostWinmm cannot know consumption times and never calls it.</summary>
+    public WaveOutObserver? WaveOutSliceObserver { get; init; }
 }
 
 /// <summary>Per-process emulation state shared by the services. One instance must serve exactly one guest module.</summary>

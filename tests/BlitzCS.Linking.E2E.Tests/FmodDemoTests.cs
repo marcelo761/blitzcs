@@ -180,11 +180,52 @@ public sealed class FmodDemoTests : E2EBase
     }
 
     /// <summary>
-    /// Known gap, not a pass: FMOD streams into a buffer it keeps rewriting in place, and the virtual sink records the bytes present at waveOutWrite, so the recording is silent
-    /// today. With the sink reading the buffer when each pass is consumed the same program records a 440.03 Hz tone (docs/windows-integration-audit.md, F-11). Remove the Skip then.
+    /// FMOD streams the mix into one looped WAVEHDR buffer that it keeps rewriting in place. The virtual sink reads the guest buffer when each slice is consumed (F-11), so the
+    /// recording of the original library's WINMM output carries the 440 Hz tone: dominant frequency, level and about one second of non-silent audio.
     /// </summary>
-    [Fact(Skip = "known gap F-11: the virtual sink snapshots a looped waveOut buffer at waveOutWrite, FMOD rewrites it in place")]
-    public void TheRecordedWinmmOutputIsTheTone() { }
+    [PackedSampleFact]
+    public void TheRecordedWinmmOutputIsTheTone()
+    {
+        var previous = Environment.GetEnvironmentVariable("BLITZCS_AUDIO");
+        Environment.SetEnvironmentVariable("BLITZCS_AUDIO", null);
+        try
+        {
+            var catalog = JsonNode.Parse(CatalogFor(RealLibraries.PackedSample!))!;
+            catalog["binaryLibraries"]![0]!["audio"] = "virtual";
+            catalog["binaryLibraries"]![0]!["audioRecord"] = "tone-output.wav";
+            File.WriteAllBytes(Path.Combine(Root, "tone.wav"), ToneWav());
+            var stdout = Build(Source("FSOUND_OUTPUT_WINMM"), catalog.ToJsonString(), out var exit, out var err);
+            Assert.True(exit == 0, err + stdout);
+            File.Copy(Path.Combine(Root, "tone.wav"), Path.Combine(Root, "out", "tone.wav"));
+            Run();
+
+            var wav = File.ReadAllBytes(Path.Combine(Root, "out", "tone-output.wav"));
+            var n = BitConverter.ToInt32(wav, 40) / 4;            // stereo 16-bit frames
+            var left = new double[n];
+            for (var i = 0; i < n; i++) left[i] = BitConverter.ToInt16(wav, 44 + 4 * i) / 32768.0;
+            static double Goertzel(double[] x, double hz, int rate)
+            {
+                double k = 2 * Math.Cos(2 * Math.PI * hz / rate), s1 = 0, s2 = 0;
+                foreach (var v in x) { var s0 = v + k * s1 - s2; s2 = s1; s1 = s0; }
+                return Math.Sqrt(s1 * s1 + s2 * s2 - k * s1 * s2) * 2 / x.Length;
+            }
+            // The loudest second-long stretch is the tone: scan 4096-frame windows.
+            var best = 0.0; var bestStart = 0;
+            for (var start = 0; start + 4096 <= n; start += 2048)
+            {
+                var level = Goertzel(left[start..(start + 4096)], 440, 44100);
+                if (level > best) { best = level; bestStart = start; }
+            }
+            var window = left[bestStart..(bestStart + 4096)];
+            Assert.True(best > 0.2, $"the 440 Hz level in the loudest window is {best}");
+            foreach (var other in new[] { 300.0, 380.0, 520.0, 700.0 })
+                Assert.True(Goertzel(window, other, 44100) < best / 10, $"{other} Hz is as strong as the tone");
+            var active = 0;
+            for (var i = 0; i + 441 <= n; i += 441) if (left[i..(i + 441)].Max(Math.Abs) > 0.05) active++;
+            Assert.InRange(active / 100.0, 0.8, 1.6);               // about one second of audible tone (the sample is 1.0 s long)
+        }
+        finally { Environment.SetEnvironmentVariable("BLITZCS_AUDIO", previous); }
+    }
 
     /// <summary>
     /// The product path: `blitzcs build main.bb --externals fmod.json --assets assets` writes a self-contained Windows x64 application (dist/Main/Main.exe), which this test
