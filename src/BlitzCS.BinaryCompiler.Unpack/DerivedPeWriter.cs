@@ -53,6 +53,19 @@ internal static class DerivedPeWriter
             }
         }
 
+        // A thunk-valued dword is an import slot only if it sits in an import table: next to another slot or next to the zero dword that ends a DLL's group. A lone
+        // thunk-valued dword is a coincidence of bytes inside code or data (for example `cmp ecx, 0x80` + `jge` = 81 F9 80 00 00 00 7D xx contains the aligned dword
+        // 00 00 00 7D = 0x7D000000, the first thunk) and rewriting it would corrupt the program. Nothing has been rewritten yet, so a rejected candidate keeps its bytes.
+        var slotRvas = slots.Select(x => x.Rva).ToHashSet();
+        uint DwordAt(uint r) => r + 4 <= mem.Length ? BinaryPrimitives.ReadUInt32LittleEndian(mem.AsSpan((int)r)) : 0xFFFFFFFF;
+        var rejected = slots.Where(x => !(slotRvas.Contains(x.Rva - 4) || slotRvas.Contains(x.Rva + 4) || (x.Rva >= 4 && DwordAt(x.Rva - 4) == 0) || DwordAt(x.Rva + 4) == 0)).ToList();
+        if (rejected.Count > 0)
+        {
+            slots = slots.Except(rejected).ToList();
+            diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "UNPACK_ISOLATED_THUNK_IGNORED",
+                $"{rejected.Count} dword(s) equal to a loader thunk address sit outside any import table (RVAs {string.Join(", ", rejected.Take(6).Select(x => "0x" + x.Rva.ToString("X")))}{(rejected.Count > 6 ? ", ..." : "")}) and were left unchanged."));
+        }
+
         var groups = new List<Group>();
         uint prev = 0;
         foreach (var (rva, idx) in slots)

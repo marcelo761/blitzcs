@@ -23,7 +23,7 @@ Status: **fixed** (changed in this pass, with a test), **open** (reported, owner
 | F-10 | Medium | open (Win32) | The file sandbox refuses every reparse point: cloud-sync placeholders and linked folders on a real Windows host (risk) |
 | F-11 | High (audio) | open (A1) | The virtual sink snapshots a waveOut buffer at `waveOutWrite`; FMOD rewrites its looped buffer in place, so the recording is silent. One-line change verified |
 | F-12 | High (demo) | fixed (`PrecededByFlowEnd`, compiler 0.7.0) | `FSOUND_Close` with WINMM output trapped on an untranslated code address (a function that follows a `jmp`) |
-| F-13 | Medium | open (translator) | `FSOUND_SetMixer(5)` (FPU mixer) crashes the process with an access violation in translated code |
+| F-13 | Medium | root cause fixed (unpacker); the FPU mixer itself reports a named limitation | `FSOUND_SetMixer(5)` (FPU mixer) crashed the process: three code dwords were taken for import slots and rewritten (see below) |
 | F-14 | Medium | open (risk) | A hardware fault in guest code is fatal and cannot be reported: the OS cannot dispatch it from the guest stack |
 | F-15 | - | risk | Control Flow Guard: no `SetProcessValidCallTargets` is needed (default for executable pages); the packaged exe is CFG-enabled |
 | F-16 | - | risk | CET shadow stacks: the packaged exe and the runtime are `CETCOMPAT`; the translated code keeps call/return balanced by construction; unverified on hardware |
@@ -153,12 +153,23 @@ through (ret, any jmp, an indirect jmp, int3, ud2) or when the preceding byte is
 instruction is still data. Tests: `CfgPointerRootsTests.FunctionPlacedAfterAnyFlowEndingInstructionIsRecognised` and `AddressAfterAnOrdinaryInstructionIsStillNotAFunctionStart`; the end-to-end
 check is `FmodDemoTests.TheSameProgramDrivesFmodsWinmmOutputThroughTheVirtualSink`, which now runs the program to `FSOUND_Close` and expects `closed`.
 
-### F-13 `FSOUND_SetMixer(FSOUND_MIXER_QUALITY_FPU = 5)` kills the process (Medium; translator)
+### F-13 `FSOUND_SetMixer(FSOUND_MIXER_QUALITY_FPU = 5)` killed the process (root cause fixed in the unpacker)
 
-Reproducer: output 1 (WINMM, virtual sink), `FSOUND_SetMixer(5)` (returns 1), `FSOUND_Init`. The process ends silently with exit code 5. Wine trace (`WINEDEBUG=err+all,+seh`):
-`EXCEPTION_ACCESS_VIOLATION` at a translated-code address, write to address 0 (`rcx=0`), `rsp=0x78120fa0` (guest stack), then
-`err:seh:call_seh_handlers invalid frame ... NtRaiseException Exception frame is not in stack limits => unable to dispatch exception`. `FSOUND_SetMixer(1)` and `(3)` return 0 (rejected by
-FMOD). The default mixer (MMX, value 7 after `Init`) is the one in use everywhere else.
+Reproduced on Linux native (`linux-sysv` target) as SIGSEGV, analysed post-mortem with `gdb` on the core: the faulting instruction was `add [ebx], cl` (`00 0B`) with `rbx = 0`, reached right after a
+`cmp ecx, imm32`, at guest RVA 0x10DB. The bytes at that address in the loaded guest memory differed from the bytes the translator had used (`81 F9 80 10 70 09 10 0B` against
+`81 F9 80 7A 64 09 00 0B`) before any guest code ran, so the loader or the derived image was rewriting code.
+
+Root cause: the derived image declared 164 import slots; three of them lay inside executable code (RVAs 0x10D8, 0x1C5C, 0x22AD8, all `kernel32!LoadLibraryA`). The sandbox's first loader thunk is
+`0x7D000000`, and compiled code such as `cmp ecx, 0x80` + `jge` is `81 F9 80 00 00 00 7D xx`, whose aligned dword `00 00 00 7D` is exactly `0x7D000000`. `DerivedPeWriter` took each such
+dword for a slot and replaced it with a hint/name RVA; the loader then overwrote it again with an import-stub address, corrupting the loop bound and the `jge` that follows. Execution fell into
+bytes that were no longer a jump.
+
+Fix (generic, `DerivedPeWriter`): a thunk-valued dword is an import slot only next to another slot or the zero dword that ends a group, as in a real import table. Isolated look-alikes are left
+unchanged and reported (`UNPACK_ISOLATED_THUNK_IGNORED`). The derived FMOD now has 161 import slots, none in code. Regression: `RealPackedSampleTests` asserts that no slot lies in executable
+memory (it fails with the check disabled: verified by mutation).
+
+What remains true after the fix: the FPU mixer path calls `kernel32!VirtualProtect`, which means it patches its own mixer code at run time. That is self-modifying code, which ahead-of-time
+translation cannot follow; the call is refused by name (`GuestImportException: ... unbound import kernel32.dll!VirtualProtect`), not a crash. The default mixer (MMX, 7) is unaffected.
 
 ### F-14 Hardware faults inside guest code are fatal (Medium, risk)
 

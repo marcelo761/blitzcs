@@ -98,6 +98,10 @@ public sealed class RealPackedSampleTests(ITestOutputHelper output)
         Assert.DoesNotContain(derived.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
         Assert.DoesNotContain(derived.Sections, s => s.IsExecutable && s.IsWritable);
         Assert.Equal(r.Report.RebuiltImports, derived.Imports.Count);
+        // F-13 root cause: three code dwords (`cmp ecx, 0x80` + `jge` = 00 00 00 7D = the first loader thunk) were taken for import slots and rewritten, which corrupted
+        // the program. No import slot may lie in executable code, and the isolated look-alikes are reported and left alone.
+        Assert.DoesNotContain(derived.Imports, i => derived.Sections.Any(sec => sec.IsExecutable && i.IatRva >= sec.VirtualAddress && i.IatRva < sec.VirtualAddress + Math.Max(sec.VirtualSize, sec.RawSize)));
+        Assert.Contains(r.Diagnostics, d => d.Code == "UNPACK_ISOLATED_THUNK_IGNORED");
         var options = new BinaryCompilerOptions();   // the host's target: on Windows the derived base (>= 0x20000000) is valid, so no BC_BASE_UNUSABLE_ON_TARGET
         var artifact = X64Translator.Translate(derived, options, CacheKey.Compute(derived, options));
         Assert.Equal(loadBase ?? derived.ImageBase, derived.ImageBase);
