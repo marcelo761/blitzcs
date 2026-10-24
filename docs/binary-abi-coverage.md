@@ -51,7 +51,7 @@ Honest status of what the binary recompiler (PE32 x86 to x64) supports. Statuses
 | Import fault containment | Supported | `ImportFaultTests.FaultingImportAbandonsTheGuestCallInsteadOfLettingItRunOn`, `RuntimeLoaderTests.ImportFault_DoesNotUnwindThroughGuestAndSurfacesFromTheOuterCall` | |
 | Concurrency (separate guest stacks per call) | Supported | `ConcurrencyTests.ParallelCallsOnSeparateGuestStacksAreCorrect`, `RuntimeLoaderTests.ConcurrentCallsFromManyThreadsAreCorrect`, `CallbackBlockingOnAnotherThreadThatCallsTheGuestDoesNotDeadlock` | Guest globals are shared and not synchronised for the library |
 | Lifetime / dispose with in-flight calls | Supported | `RuntimeLoaderTests.Dispose_WaitsForInFlightCalls`, `Dispose_FromInsideAnImportIsRejected`, `Dispose_IsIdempotentAndUseAfterDisposeIsRejected` | |
-| Win32 API surface (kernel32 and others) for real libraries | Planned (in progress) | Win32 component (`src/BlitzCS.BinaryCompiler.Win32`) | Until then, real libraries that import heap/CRT functions need managed bindings |
+| Win32 API surface (kernel32 and others) for real libraries | Partial | `src/BlitzCS.BinaryCompiler.Win32` (about 190 APIs: heap, virtual memory, sync, TLS, process, NLS, files in a sandbox, msvcrt subset, winmm with zero devices, registry, COM apartments); `RealOggTests`, `EaxTests`, `RealPackedSampleTests` | Unimplemented APIs are absent and fault at call time naming `dll!name`. Missing: `RtlUnwind`, `RaiseException`, `VirtualProtect`, sockets, msacm32, mci, window APIs |
 | Win32 registry / COM / user32 truthful subsets (eax.dll registration) | Supported (subset) | `RegistryTests`, `Ole32Tests`, `User32Tests`, `EaxTests` (real eax.dll `DllRegisterServer`/`DllUnregisterServer`) | No COM server hosting (`CoCreateInstance` never succeeds), no window system, W registry variants absent; SEH (`RtlUnwind`, `RaiseException`) analysed in `binary-seh.md`, not implemented |
 | x87 arguments / callbacks / data imports for host imports | Supported | `GuestServicesTests` (hand-assembled IA-32: `_ftol`, `_CIpow`, `_initterm`, `qsort`, data imports, `CreateThread`, `timeSetEvent`) | `GuestCall.PopSt0Double`, `SetReturnSt0`, `CallGuest`, `IGuestDataImportResolver`; Linux x86-64 |
 | Win32 services for the unpacked fmod.dll (msvcrt, winmm no-device, winsock core, threads, timers) | Supported (subset) | `MsvcrtRuntimeHostTests`, `WinmmTests`, `WinsockCoreTests`, `Kernel32ExtraTests`, `RealPackedSampleTests` (env `BLITZCS_PACKED_SAMPLE`) | DllMain of the unpacked fmod returns TRUE; `FSOUND_Init` after `SetOutput` blocked by undiscovered indirect targets (relocations dropped by the unpacker); no sockets, MCI, ACM, windows; no audio is played |
@@ -75,12 +75,12 @@ Honest status of what the binary recompiler (PE32 x86 to x64) supports. Statuses
 
 | Feature | Status | Evidence | Notes |
 |---|---|---|---|
-| `fs:` access (TEB, LastError, TLS slots, ExceptionList) | Planned (in progress) | `docs/binary-teb-contract.md`; oracle side ready: `docs/binary-fs-oracle.md`, libs `fs_seh`, `fs_tls`; `BC_FS_UNSUPPORTED_OFFSET`, `BC_SEGMENT_OVERRIDE` | Unmodelled offsets are errors, never zero. `gs:` stays unsupported |
-| SEH registration chain on `fs:[0]` (push/pop, walking) | Planned (in progress) | oracle lib `fs_seh` | Only data-structure semantics; dispatch is not modelled |
+| `fs:` access (TEB, LastError, TLS slots, ExceptionList) | Supported (modelled fields) | `TebTests`, `Differential/FsDifferentialTests` against a real `fs` segment in the x86 oracle (`fs_seh`, `fs_tls`, `fs_ops`); `BC_FS_UNSUPPORTED_OFFSET`, `BC_SEGMENT_OVERRIDE` | Unmodelled offsets are errors, never zero; run-time offsets may only reach the TLS slot array (trap otherwise). `gs:` stays unsupported |
+| SEH registration chain on `fs:[0]` (push/pop, walking) | Supported (bookkeeping only) | `Differential/FsDifferentialTests` (`fs_seh`) | Exception dispatch (`RaiseException`/`RtlUnwind`) is not modelled; plan in `docs/binary-seh.md` |
 | SEH exception dispatch / `RtlUnwind` / hardware faults as exceptions | Unsupported | none; fault becomes a trap (`TrapReportingTests`) | Real libraries using `__try` for control flow will not work |
 | Static (implicit) TLS directory (`.tls`, callbacks) | Unsupported | `RuntimeLoaderTests.Load_RejectsTlsAndTranslationErrorsAndMismatchedArtifacts`, `PeReaderTests.ParsesTls`; `BC_TLS_UNSUPPORTED` | Refused at translation/load |
-| TLS API (`TlsAlloc`/`TlsGetValue`) | Planned (in progress) | via TEB slots + Win32 component | |
-| Thread-per-TEB | Planned (in progress) | contract: one TEB per (module, OS thread) | |
+| TLS API (`TlsAlloc`/`TlsGetValue`) | Partial | `SyncTlsTests` (Win32 component, host-side per-thread table) | Not yet unified with the guest `TEB+0xE10` slot array |
+| Thread-per-TEB | Supported | `TebTests` (distinct TEBs on 6 threads, release at Dispose), `ConcurrencyTests` | One TEB per (module, OS thread); freed at Dispose |
 
 ## Image format
 
