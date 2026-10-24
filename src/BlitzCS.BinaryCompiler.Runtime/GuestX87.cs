@@ -9,11 +9,15 @@ namespace BlitzCS.BinaryCompiler.Runtime;
 /// </summary>
 public static unsafe class GuestX87
 {
-    // fxam; fnstsw ax; and eax,0x4500; cmp eax,0x4100 (ST0 empty); je empty; fstp tbyte [rdi]; xor eax,eax; ret; empty: mov eax,1; ret   (System V: rdi = destination)
-    private static readonly byte[] Code =
+    // fxam; fnstsw ax; and eax,0x4500; cmp eax,0x4100 (ST0 empty); je empty; fstp tbyte [rdi|rcx]; xor eax,eax; ret; empty: mov eax,1; ret
+    // (destination: System V rdi, Win64 rcx; the two variants differ only in the ModRM byte of fstp)
+    private static byte[] Code => OperatingSystem.IsWindows() ? CodeWin64 : CodeSysV;
+    private static readonly byte[] CodeWin64 = [.. BuildCode(0x39)];
+    private static readonly byte[] CodeSysV = [.. BuildCode(0x3F)];
+    private static IEnumerable<byte> BuildCode(byte modrm) =>
     [
         0xD9, 0xE5, 0xDF, 0xE0, 0x25, 0x00, 0x45, 0x00, 0x00, 0x3D, 0x00, 0x41, 0x00, 0x00, 0x74, 0x05,
-        0xDB, 0x3F, 0x31, 0xC0, 0xC3, 0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3,
+        0xDB, modrm, 0x31, 0xC0, 0xC3, 0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3,
     ];
 
     private static nint helper;
@@ -25,10 +29,12 @@ public static unsafe class GuestX87
         lock (Gate)
         {
             if (helper != 0) return helper;
-            var page = Libc.Map(0, (nuint)Libc.PageSize, Libc.PROT_READ | Libc.PROT_WRITE, 0, out var errno);
-            if (page == Libc.MapFailed) throw new GuestLoadException($"mmap for the x87 helper failed with errno {errno}.");
-            Code.CopyTo(new Span<byte>((void*)page, Code.Length));
-            Libc.Protect(page, (nuint)Libc.PageSize, Libc.PROT_READ | Libc.PROT_EXEC);
+            var platform = PlatformMemory.Current;
+            var page = platform.Map((nuint)platform.PageSize, out var errno);
+            if (page == 0) throw new GuestLoadException($"Mapping the x87 helper failed with OS error {errno}.");
+            var code = Code;
+            code.CopyTo(new Span<byte>((void*)page, code.Length));
+            platform.Protect(page, (nuint)platform.PageSize, MemoryProtection.ReadExecute);
             helper = page;
             return helper;
         }

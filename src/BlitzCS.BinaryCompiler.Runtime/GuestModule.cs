@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace BlitzCS.BinaryCompiler.Runtime;
 
 /// <summary>
-/// A translated PE32 image loaded into this process (Linux x86-64 SysV only; other platforms throw
+/// A translated PE32 image loaded into this process (Linux x86-64 SysV and Windows x86-64; other platforms throw
 /// <see cref="PlatformNotSupportedException"/>). Lifetime follows NativeLibraryOwner: explicit disposal; calls hold a
 /// shared lock and Dispose takes the exclusive lock, so it waits for in-flight calls.
 /// </summary>
@@ -105,8 +105,8 @@ public sealed unsafe partial class GuestModule : IDisposable
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(imports);
-        if (!OperatingSystem.IsLinux() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
-            throw new PlatformNotSupportedException("The guest runtime currently supports only Linux x86-64 (SysV); loading translated PE images is not available on this platform.");
+        if (!(OperatingSystem.IsLinux() || OperatingSystem.IsWindows()) || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+            throw new PlatformNotSupportedException("The guest runtime supports only Linux x86-64 (SysV) and Windows x86-64; loading translated PE images is not available on this platform.");
 
         options ??= new GuestModuleOptions();
         Validate(artifact, image, options);
@@ -118,6 +118,10 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     private static void Validate(TranslationArtifact a, PeImage image, GuestModuleOptions options)
     {
+        var host = PlatformMemory.Current;
+        var artifactTarget = a.TargetOs ?? BinaryTargets.LinuxSysV;
+        if (!string.Equals(artifactTarget, host.TargetOs, StringComparison.Ordinal))
+            throw new GuestLoadException($"The artifact was translated for target '{artifactTarget}' but this host is '{host.TargetOs}'. Artifacts are target specific (their runtime routines follow the host calling convention): re-translate with TargetOs = \"{host.TargetOs}\".");
         var errors = a.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         if (errors.Count > 0 && !options.AllowTranslationErrors)
             throw new GuestLoadException("The translation artifact contains error diagnostics and cannot be loaded: " +
@@ -134,7 +138,10 @@ public sealed unsafe partial class GuestModule : IDisposable
             throw new GuestLoadException("The artifact's guest image base/size does not match the PE image.");
         if (a.Imports.Count != image.Imports.Count || !a.Imports.Zip(image.Imports).All(p => p.First.IatRva == p.Second.IatRva && p.First.Dll == p.Second.Dll))
             throw new GuestLoadException("The artifact's import list does not match the PE image.");
-        var ps = (uint)Libc.PageSize;
+        var ps = (uint)PlatformMemory.Current.PageSize;
+        if (a.GuestImageBase < host.MinimumImageBase || a.GuestImageBase % (uint)host.AllocationGranularity != 0)
+            throw new GuestAddressSpaceException($"Guest image base 0x{a.GuestImageBase:X8} is not usable on {host.Name}: bases must be at least 0x{host.MinimumImageBase:X8} and aligned to 0x{host.AllocationGranularity:X}." +
+                (host.Name == "windows" ? " Re-translate the library rebased (BinaryCompilerOptions.LoadBase / ModuleBaseAllocator with TargetOs windows-x64); images without base relocations cannot be moved." : ""));
         if (a.GuestImageBase == 0 || a.GuestImageBase % ps != 0 || (ulong)a.GuestImageBase + a.GuestImageSize > uint.MaxValue)
             throw new GuestAddressSpaceException($"Guest image base 0x{a.GuestImageBase:X8} (size 0x{a.GuestImageSize:X}) is not page aligned or does not fit below 4 GiB.");
         if (a.CodeSize <= 0 || a.CodeSize % ps != 0 || a.CodeSize >= a.HostImage.Length)
@@ -179,23 +186,17 @@ public sealed unsafe partial class GuestModule : IDisposable
         boundImports = bound;
 
         // 2. Guest image at the fixed base.
-        var ps = (uint)Libc.PageSize;
+        var ps = (uint)PlatformMemory.Current.PageSize;
         var end = Math.Max(artifact.GuestImageSize, Math.Max(artifact.ExitGuestRva + 1UL, artifact.ImportStubBaseRva + 16UL * (uint)Math.Max(1, bound.Length)));
         var size = (end + ps - 1) / ps * ps;
         if ((ulong)artifact.GuestImageBase + size > uint.MaxValue)
             throw new GuestAddressSpaceException("Guest image plus synthetic region does not fit below 4 GiB.");
         guestMapLength = (nuint)size;
-        var addr = Libc.Map((nint)artifact.GuestImageBase, guestMapLength, Libc.PROT_READ | Libc.PROT_WRITE, Libc.MAP_FIXED_NOREPLACE, out var errno);
-        if (addr != Libc.MapFailed && addr != (nint)artifact.GuestImageBase)
-        {
-            Libc.Unmap(addr, guestMapLength); // old kernels ignore NOREPLACE and treat the address as a hint
-            addr = Libc.MapFailed;
-            errno = 17; // EEXIST
-        }
-        if (addr == Libc.MapFailed)
+        var addr = PlatformMemory.Current.MapFixed((nint)artifact.GuestImageBase, guestMapLength, out var errno);
+        if (addr == 0)
         {
             guestMapLength = 0;
-            throw new GuestAddressSpaceException($"Cannot map the guest image at its fixed base 0x{artifact.GuestImageBase:X8} (0x{size:X} bytes, errno {errno}); the range is occupied by {AddressSpace.DescribeConflicts(artifact.GuestImageBase, size)}. Translated code is bound to this base: re-translate for another base (BinaryCompilerOptions.LoadBase / ModuleBaseAllocator).");
+            throw new GuestAddressSpaceException($"Cannot map the guest image at its fixed base 0x{artifact.GuestImageBase:X8} (0x{size:X} bytes, OS error {errno}); the range is occupied by {AddressSpace.DescribeConflicts(artifact.GuestImageBase, size)}. Translated code is bound to this base: re-translate for another base (BinaryCompilerOptions.LoadBase / ModuleBaseAllocator).");
         }
         guestMap = addr;
 
@@ -217,12 +218,12 @@ public sealed unsafe partial class GuestModule : IDisposable
         // 3. Host image: copy while RW, then flip the code part to RX.
         var hostLen = ((nuint)artifact.HostImage.Length + ps - 1) / ps * ps;
         hostMapLength = hostLen;
-        hostMap = Libc.Map(0, hostLen, Libc.PROT_READ | Libc.PROT_WRITE, 0, out errno);
-        if (hostMap == Libc.MapFailed) { hostMap = 0; hostMapLength = 0; throw new GuestLoadException($"Cannot map the host image (errno {errno})."); }
+        hostMap = PlatformMemory.Current.Map(hostLen, out errno);
+        if (hostMap == 0) { hostMapLength = 0; throw new GuestLoadException($"Cannot map the host image (OS error {errno})."); }
         Marshal.Copy(artifact.HostImage, 0, hostMap, artifact.HostImage.Length);
         for (var i = 0; i < bound.Length; i++)
             *(nint*)(hostMap + (nint)artifact.ImportThunkTableOffset + 8 * i) = bound[i].FunctionPointer;
-        Libc.Protect(hostMap, (nuint)artifact.CodeSize, Libc.PROT_READ | Libc.PROT_EXEC);
+        PlatformMemory.Current.Protect(hostMap, (nuint)artifact.CodeSize, MemoryProtection.ReadExecute);
 
         // 4. TLS callbacks (DLL_PROCESS_ATTACH), then DllMain(hinst, DLL_PROCESS_ATTACH, 0)
         if (options.RunEntryPoint && tlsCallbacks.Length > 0)
@@ -255,20 +256,22 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     private void ProtectGuest(PeImage image, int pageCount)
     {
-        var ps = (ulong)Libc.PageSize;
+        var platform = PlatformMemory.Current;
+        var ps = (ulong)platform.PageSize;
+        const int R = 1, W = 2, X = 4;
         var prot = new int[pageCount];
-        Array.Fill(prot, Libc.PROT_READ);
+        Array.Fill(prot, R);
         foreach (var s in image.Sections)
         {
             var span = s.VirtualSize != 0 ? s.VirtualSize : s.RawSize;
             if (span == 0) continue;
-            var flags = Libc.PROT_READ | (s.IsWritable ? Libc.PROT_WRITE : 0) | (s.IsExecutable ? Libc.PROT_EXEC : 0);
+            var flags = R | (s.IsWritable ? W : 0) | (s.IsExecutable ? X : 0);
             var first = (int)(s.VirtualAddress / ps);
             var last = (int)(((ulong)s.VirtualAddress + span - 1) / ps);
             for (var p = first; p <= last && p < pageCount; p++)
             {
                 prot[p] |= flags;
-                if ((prot[p] & (Libc.PROT_WRITE | Libc.PROT_EXEC)) == (Libc.PROT_WRITE | Libc.PROT_EXEC))
+                if ((prot[p] & (W | X)) == (W | X))
                     throw new GuestLoadException($"Section '{s.Name}' would make guest page 0x{(ulong)p * ps:X} both writable and executable; W^X violations are rejected.");
             }
         }
@@ -276,11 +279,12 @@ public sealed unsafe partial class GuestModule : IDisposable
         {
             var q = p;
             while (q + 1 < pageCount && prot[q + 1] == prot[p]) q++;
-            Libc.Protect(guestMap + (nint)((ulong)p * ps), (nuint)((ulong)(q - p + 1) * ps), prot[p]);
+            platform.Protect(guestMap + (nint)((ulong)p * ps), (nuint)((ulong)(q - p + 1) * ps),
+                (prot[p] & X) != 0 ? MemoryProtection.ReadExecute : (prot[p] & W) != 0 ? MemoryProtection.ReadWrite : MemoryProtection.Read);
             p = q + 1;
         }
         var writable = new bool[pageCount];
-        for (var p = 0; p < pageCount; p++) writable[p] = (prot[p] & Libc.PROT_WRITE) != 0;
+        for (var p = 0; p < pageCount; p++) writable[p] = (prot[p] & W) != 0;
         Memory.Add(new GuestRegion((ulong)guestMap, (ulong)guestMap + guestMapLength, writable));
     }
 
@@ -493,15 +497,11 @@ public sealed unsafe partial class GuestModule : IDisposable
         {
             if (idleStacks.TryPop(out var idle)) return idle;
         }
-        var ps = (uint)Libc.PageSize;
+        var ps = (uint)PlatformMemory.Current.PageSize;
         var total = (nuint)(((uint)options.StackSize + ps - 1) / ps * ps + ps);
-        var map = Libc.Map(0, total, Libc.PROT_READ | Libc.PROT_WRITE, Libc.MAP_32BIT, out var errno);
-        if (map == Libc.MapFailed || (ulong)map + total > uint.MaxValue)
-        {
-            if (map != Libc.MapFailed) Libc.Unmap(map, total);
-            throw new GuestAddressSpaceException($"Cannot allocate a guest stack of {options.StackSize} bytes in low memory (errno {errno}).");
-        }
-        Libc.Protect(map, ps, Libc.PROT_NONE); // guard page below the stack
+        var map = PlatformMemory.Current.MapLow(total, out var errno);
+        if (map == 0) throw new GuestAddressSpaceException($"Cannot allocate a guest stack of {options.StackSize} bytes in low memory (OS error {errno}).");
+        PlatformMemory.Current.Protect(map, ps, MemoryProtection.None); // guard page below the stack
         var stack = new GuestStack { Map = map, MapLength = total, Low = (uint)map + ps, Top = (uint)((ulong)map + total) };
         lock (resourceLock) allStacks.Add(stack);
         Memory.Add(new GuestRegion(stack.Low, stack.Top, null));
@@ -525,14 +525,10 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     internal GuestBuffer AllocateBuffer(int size)
     {
-        var ps = (nuint)Libc.PageSize;
+        var ps = (nuint)PlatformMemory.Current.PageSize;
         var length = ((nuint)size + ps - 1) / ps * ps;
-        var map = Libc.Map(0, length, Libc.PROT_READ | Libc.PROT_WRITE, Libc.MAP_32BIT, out var errno);
-        if (map == Libc.MapFailed || (ulong)map + length > uint.MaxValue)
-        {
-            if (map != Libc.MapFailed) Libc.Unmap(map, length);
-            throw new GuestAddressSpaceException($"Cannot allocate {size} byte(s) of guest scratch memory in low memory (errno {errno}).");
-        }
+        var map = PlatformMemory.Current.MapLow(length, out var errno);
+        if (map == 0) throw new GuestAddressSpaceException($"Cannot allocate {size} byte(s) of guest scratch memory in low memory (OS error {errno}).");
         var buffer = new GuestBuffer(this, map, length, size);
         lock (resourceLock) buffers[buffer] = (map, length);
         Memory.Add(new GuestRegion((ulong)map, (ulong)map + (ulong)size, null));
@@ -545,7 +541,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         {
             if (!buffers.Remove(buffer)) return; // the module already freed it
             Memory.Remove((ulong)map);
-            Libc.Unmap(map, length);
+            PlatformMemory.Current.Free(map, length);
         }
     }
 
@@ -609,14 +605,14 @@ public sealed unsafe partial class GuestModule : IDisposable
         FreeAllTebs();
         lock (resourceLock)
         {
-            foreach (var (_, (map, length)) in buffers) Libc.Unmap(map, length);
+            foreach (var (_, (map, length)) in buffers) PlatformMemory.Current.Free(map, length);
             buffers.Clear();
-            foreach (var stack in allStacks) Libc.Unmap(stack.Map, stack.MapLength);
+            foreach (var stack in allStacks) PlatformMemory.Current.Free(stack.Map, stack.MapLength);
             allStacks.Clear();
             idleStacks.Clear();
         }
-        Libc.Unmap(hostMap, hostMapLength);
-        Libc.Unmap(guestMap, guestMapLength);
+        PlatformMemory.Current.Free(hostMap, hostMapLength);
+        PlatformMemory.Current.Free(guestMap, guestMapLength);
         hostMap = 0;
         guestMap = 0;
         Volatile.Write(ref disposed, true);

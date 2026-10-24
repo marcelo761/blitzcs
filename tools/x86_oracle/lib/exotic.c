@@ -6,7 +6,8 @@ u32 o_btmem(u32 n, u32 op) { u8 c; g_bits[0] = 0x0f0f0f0f; g_bits[1] = 0xf0f0f0f
   switch (op & 3) { case 0: __asm__("btl %2,%1; setc %0" : "=q"(c), "+m"(g_bits) : "r"(n) : "cc"); break; case 1: __asm__("btsl %2,%1; setc %0" : "=q"(c), "+m"(g_bits) : "r"(n) : "cc"); break; case 2: __asm__("btrl %2,%1; setc %0" : "=q"(c), "+m"(g_bits) : "r"(n) : "cc"); break; default: __asm__("btcl %2,%1; setc %0" : "=q"(c), "+m"(g_bits) : "r"(n) : "cc"); }
   return c ^ (g_bits[0] * 3) ^ (g_bits[1] * 5) ^ (g_bits[2] * 7); }
 u32 o_btimm(u32 a, u32 n) { u8 c; __asm__("btl $13,%1; setc %0" : "=q"(c) : "r"(a) : "cc"); (void)n; return c; }
-u32 o_pusha(u32 a, u32 b) { u32 r; __asm__ volatile("pushal; movl %1,%%eax; movl %2,%%ebx; addl %%ebx,%%eax; movl %%eax,%0; popal" : "=m"(r) : "r"(a), "r"(b) : "memory", "cc"); return r; }
+static u32 g_pusha; /* result goes through a global: after pushal an %esp-relative output slot would address the wrong stack word */
+u32 o_pusha(u32 a, u32 b) { __asm__ volatile("pushal; addl %%ebx,%%eax; movl %%eax,%0; popal" : "=m"(g_pusha) : "a"(a), "b"(b) : "memory", "cc"); return g_pusha; }
 u32 o_enterleave(u32 a, u32 b) { u32 r; __asm__ volatile("pushl %%ebp; movl %%esp,%%ebp; subl $16,%%esp; movl %1,-4(%%ebp); movl %2,-8(%%ebp); movl -4(%%ebp),%%eax; imull -8(%%ebp),%%eax; leave; movl %%eax,%0" : "=m"(r) : "r"(a), "r"(b) : "eax", "memory", "cc"); return r; }
 u32 o_xlat(u32 a, u32 b) { for (int i = 0; i < 256; i++) g_tab[i] = (u8)(i * 7 + b); u32 r = a; __asm__("xlatb" : "+a"(r) : "b"(g_tab) : "memory"); return r & 0xff; }
 u32 o_cmpxchg8b(u32 a, u32 b) { g_q[0] = a; g_q[1] = b; u32 lo = a ^ 1, hi = b, nl = a + 5; u32 zf; __asm__("cmpxchg8b %1; setz %%cl; movzbl %%cl,%2" : "+a"(lo), "+m"(g_q), "=c"(zf) : "d"(hi), "b"(nl), "0"(lo) : "cc"); return lo ^ g_q[0] ^ (g_q[1] * 3) ^ zf; }

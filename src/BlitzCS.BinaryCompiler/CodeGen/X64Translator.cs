@@ -45,6 +45,8 @@ public sealed class X64Translator
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(options);
+        var targetOs = BinaryTargets.Normalize(options.TargetOs);
+        var abi = HostAbis.For(targetOs);
         if (options.LoadBase is { } loadBase && loadBase != image.ImageBase) image = image.Rebase(loadBase);
         var mapped = image.MapImage();
         var cfg = ControlFlowGraph.Build(image, mapped);
@@ -76,7 +78,7 @@ public sealed class X64Translator
 
         (X64CodeGen, CodeEmitter.Result) Generate(ulong dataBase, Func<ulong, uint>? previousOffsets, CodeEmitter? seed)
         {
-            var g = new X64CodeGen(image, cfg, release, dataBase, thunkRel, boundRel, tableRel, tableEntries, exitRva, stubBase) { PreviousOffsets = previousOffsets };
+            var g = new X64CodeGen(image, cfg, release, dataBase, thunkRel, boundRel, tableRel, tableEntries, exitRva, stubBase, abi) { PreviousOffsets = previousOffsets };
             g.EmitRuntime();
             g.EmitGuestCode();
             return (g, g.E.Encode(seed));
@@ -112,6 +114,9 @@ public sealed class X64Translator
                 ? new BinaryDiagnostic(DiagnosticSeverity.Info, "TLS_HANDLED", "Implicit TLS is modelled: per-thread TLS data, the TLS index and TLS callbacks are provided by the runtime.")
                 : new BinaryDiagnostic(DiagnosticSeverity.Error, "BC_TLS_UNSUPPORTED", problem));
         }
+        if (targetOs == BinaryTargets.WindowsX64 && image.ImageBase < ModuleBaseAllocator.WindowsMinimumBase)
+            diagnostics.Add(new BinaryDiagnostic(DiagnosticSeverity.Error, "BC_BASE_UNUSABLE_ON_TARGET",
+                $"The guest base 0x{image.ImageBase:X8} lies below 0x{ModuleBaseAllocator.WindowsMinimumBase:X8}, which cannot be reserved on windows-x64 (the range holds the host's own mappings and is unavailable under Wine). Rebase the library (PeImage.Rebase / ModuleBaseAllocator.RequiredBase / BinaryCompilerOptions.LoadBase); images without base relocations cannot run on windows-x64."));
         diagnostics.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "BC_FIXED_BASE", $"Translated code is bound to the fixed guest base 0x{image.ImageBase:X8}" + (image.RebasedFrom is { } rf ? $" (rebased from 0x{rf.OriginalImageBase:X8})." : ".")));
 
         var exports = new List<TranslatedExport>();
@@ -134,6 +139,6 @@ public sealed class X64Translator
         return new TranslationArtifact(
             ArtifactSerializer.CurrentVersion, image.Sha256, cacheKey, image.ImageBase, image.SizeOfImage, host, codeSize,
             (uint)(codeSize + tableRel), (uint)(codeSize + thunkRel), (uint)(codeSize + ctxRel), enc.OffsetOf(gen.EnterLabel),
-            exitRva, stubBase, addressMap, exports, image.Imports, diagnostics, image.RebasedFrom?.OriginalImageBase);
+            exitRva, stubBase, addressMap, exports, image.Imports, diagnostics, image.RebasedFrom?.OriginalImageBase, targetOs);
     }
 }

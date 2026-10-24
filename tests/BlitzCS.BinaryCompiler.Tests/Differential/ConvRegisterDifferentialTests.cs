@@ -45,7 +45,7 @@ public sealed class ConvRegisterDifferentialTests
     {
         var art = OracleRunner.Build("regconv");
         var oracle = OracleRunner.Run("regconv");
-        var image = PeReader.Read(OracleDifferential.BuildFixture(art));
+        var image = OracleDifferential.LoadImage(art);
         var tr = X64Translator.Translate(image, new BinaryCompilerOptions(profile), "regconv");
         Assert.DoesNotContain(tr.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
         using var module = GuestModule.Load(tr, image, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false });
@@ -71,12 +71,12 @@ public sealed class ConvRegisterDifferentialTests
             }
             var where = $"{FailureClass.Translation}: regconv/{profile} vector #{v.Index} {v.Function}({string.Join(", ", v.Args.Select(a => "0x" + a.ToString("x")))})";
             Assert.True(got == v.Result, $"{where}: result oracle=0x{v.Result:x} guest=0x{got:x} ({shown})");
-            module.Memory.Read(OracleDifferential.DataVa, data);
+            module.Memory.Read(image.ImageBase + PeFixtureBuilder.DataRva, data);
             Assert.True(Hash(data) == v.DataHash, $"{where}: data hash oracle=0x{v.DataHash:x} guest=0x{Hash(data):x}");
             seen.Add(v.Function);
         }
         Assert.Equal(Functions.Count, seen.Count);
-        module.Memory.Read(OracleDifferential.DataVa, data);
+        module.Memory.Read(image.ImageBase + PeFixtureBuilder.DataRva, data);
         Assert.Equal(oracle.FinalData, data);
     }
 }

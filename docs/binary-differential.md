@@ -53,3 +53,33 @@ dotnet test tests/BlitzCS.BinaryCompiler.Tests -c Release --filter "FullyQualifi
 tools/x86_oracle/build.sh tools/x86_oracle/lib/intops2.c tools/x86_oracle/drivers/intops2.c /tmp/o && /tmp/o/intops2.oracle | head
 ```
 Built artifacts are cached under the test output directory (`x86_oracle-cache`) and rebuilt when sources change.
+
+## Windows oracle (PE32 EXE) and running under Wine
+
+The primary target is Windows x64, and on Linux the Windows build of the test suite runs under Wine (`docs/wine-testing.md`). A Windows process
+cannot run `gcc` or an ELF32 binary, so the same controlled libraries also produce a PE32 console EXE:
+
+```
+ORACLE_EXE=1 tools/x86_oracle/build.sh tools/x86_oracle/lib/arith.c tools/x86_oracle/drivers/arith.c <out>   # -> <out>/arith.oracle.exe (+ the ELF oracle)
+tools/x86_oracle/build_all_exe.sh <out>                                                                       # every library with a driver, plus fixtures-only libraries
+```
+
+* Same machine code: the library object (`lib.o`) is linked unchanged by `oracle_win.ld` at the fixture addresses (`.text` 0x10001000, `.data`
+  0x10002000, import slots 0x10003400); only the driver object differs (`-DORACLE_WIN32`: kernel32 `GetStdHandle`/`WriteFile`/`ExitProcess` through an
+  IAT at 0x10008000 instead of `int 0x80`; the driver lives at 0x10010000/0x10080000). `make_pe.py` (stdlib only) turns the linked ELF into a PE32
+  image (ImageBase 0x10000000, no relocations, DYNAMIC_BASE off); the loader maps it at the preferred base (verified under Wine: the fs libraries read
+  `PEB.ImageBaseAddress` = 0x10000000).
+* Test plumbing: `OracleRunner` uses the ELF oracle on Linux x86-64 and, on Windows (also Wine), the prebuilt flat images and `<lib>.oracle.exe` from the
+  directory named by `BLITZCS_ORACLE_DIR` (fallback `x86_oracle-prebuilt` next to the test assembly). Without them the oracle tests skip with the reason.
+  `OracleDifferential.LoadImage` moves the fixture to 0x30000000 on Windows (the low 512 MiB cannot be reserved there); the oracle EXE still runs at 0x10000000.
+* Equivalence: for all 16 library/driver pairs the stdout transcript of the EXE under Wine is byte-identical to the ELF oracle's (see "Findings" below).
+
+### Findings from the Windows oracle
+
+* **x87 precision control.** A 32-bit Windows thread starts with FPCW 0x027F (53-bit precision); Linux starts with 0x037F (64-bit). The `fp`, `regconv` and
+  `ret_abi` transcripts differ (double rounding in x87 results) unless the control word is pinned. Drivers therefore load `ORACLE_FPCW` (default 0x037F, the
+  contract) at start on both hosts; `ORACLE_FPCW=0x27F tools/x86_oracle/build.sh ...` pins Windows' value instead (verified: ELF and EXE then agree at 0x27F too,
+  and differ from the 0x37F transcript). The translated guest must pick the same precision; on win-x64 the .NET process runs with 0x027F, which is why the
+  translated `fp`/`regconv`/`ret_abi` vectors diverge from the 0x37F oracle until the runtime sets/emulates 64-bit precision (or the contract adopts 0x27F).
+* **Latent library bug found.** `o_pusha` (lib/exotic.c) used an `%esp`-relative output operand inside a `pushal`/`popal` pair, so the result was written to
+  the wrong stack slot (0 on Linux, stale data on Windows). It now returns through a global, which makes the Linux and Windows transcripts agree.

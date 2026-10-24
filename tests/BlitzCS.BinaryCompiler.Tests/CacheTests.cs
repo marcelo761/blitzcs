@@ -14,7 +14,7 @@ public class CacheTests : IDisposable
         [new AddressMapEntry(0x1000, 0), new AddressMapEntry(0x1001, 2)],
         [new TranslatedExport("f", 1, 0x1000, 0, GuestCallingConvention.Stdcall, 8), new TranslatedExport(null, 2, 0x1001, 2, GuestCallingConvention.Unknown, null)],
         [new PeImport("k.dll", "Sleep", null, 0x3400), new PeImport("k.dll", null, 7, 0x3404)],
-        [new BinaryDiagnostic(DiagnosticSeverity.Warning, "X1", "msg", 5), new BinaryDiagnostic(DiagnosticSeverity.Info, "X2", "m2")]);
+        [new BinaryDiagnostic(DiagnosticSeverity.Warning, "X1", "msg", 5), new BinaryDiagnostic(DiagnosticSeverity.Info, "X2", "m2")], null, "windows-x64");
 
     [Fact]
     public void KeyIsSensitiveToEveryInput()

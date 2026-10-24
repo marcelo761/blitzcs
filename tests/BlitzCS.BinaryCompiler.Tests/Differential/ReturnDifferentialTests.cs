@@ -46,7 +46,7 @@ public sealed class ReturnDifferentialTests
     {
         var art = OracleRunner.Build(lib);
         var oracle = OracleRunner.Run(lib);
-        var image = PeReader.Read(OracleDifferential.BuildFixture(art));
+        var image = OracleDifferential.LoadImage(art);
         var tr = X64Translator.Translate(image, new BinaryCompilerOptions(profile), "ret-" + lib);
         Assert.DoesNotContain(tr.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
         using var module = GuestModule.Load(tr, image, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false });

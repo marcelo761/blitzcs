@@ -68,4 +68,4 @@ static const Fn Tb[] = {
   {"tr_f32", 'C', 2, {0}, w_tr_f32}, {"fr_f32", 'C', 2, {0}, w_fr_f32}, {"tr_f64", 'C', 3, {0}, w_tr_f64}, {"fr_f64", 'C', 3, {0}, w_fr_f64},
   {"tr_i64", 'C', 3, {0}, w_tr_i64}, {"fr_i64", 'C', 3, {0}, w_fr_i64}, {"tr_f32_nested", 'C', 2, {0}, w_tr_f32_nested}, {"fr_ld", 'C', 3, {0}, w_fr_ld},
 };
-__attribute__((force_align_arg_pointer, noreturn)) void _start(void) { runr(Tb, (int)(sizeof Tb / sizeof Tb[0]), 60); finish(); }
+__attribute__((force_align_arg_pointer, noreturn)) void _start(void) { oracle_init(); runr(Tb, (int)(sizeof Tb / sizeof Tb[0]), 60); finish(); }

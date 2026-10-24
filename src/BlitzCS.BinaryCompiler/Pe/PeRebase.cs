@@ -87,6 +87,29 @@ public static class ModuleBaseAllocator
 {
     public static readonly IReadOnlyList<(uint Start, uint End)> DefaultReserved = [(0, 0x01000000), (0x40000000, 0x80000000)];
     private static readonly (uint Start, uint End)[] SearchWindows = [(0x10000000, 0x40000000), (0x80000000, 0xE0000000)];
+
+    /// <summary>
+    /// Windows x64 arena layout: nothing below 0x20000000 is usable (VirtualAlloc cannot reserve those fixed addresses under Wine, and the
+    /// range holds the host's own mappings), images are placed in [0x20000000, 0x70000000) and the runtime's low arenas (guest stacks, TEB/PEB,
+    /// scratch buffers) are carved at run time from VirtualQuery-verified free ranges between 0x78000000 and 4 GiB. The image window ends
+    /// 64 KiB early because of the inter-module gap.
+    /// </summary>
+    public static readonly IReadOnlyList<(uint Start, uint End)> WindowsReserved = [(0, 0x1FFF0000), (0x70000000, 0xFFFFFFFF)];
+    public const uint WindowsMinimumBase = 0x20000000, WindowsImageWindowEnd = 0x70000000;
+    private static readonly (uint Start, uint End)[] WindowsSearchWindows = [(0x20000000, 0x70000000)];
+
+    /// <summary>True when <paramref name="targetOs"/> (null = the running OS) is the Windows x64 target.</summary>
+    public static bool IsWindowsTarget(string? targetOs) => (BinaryTargets.TryNormalize(targetOs) ?? BinaryTargets.Host) == BinaryTargets.WindowsX64;
+
+    /// <summary>
+    /// The base a SINGLE library must be translated at for <paramref name="targetOs"/>: null when its preferred base is already usable, else the
+    /// deterministic first free base of the target's image window. Throws <see cref="PeRebaseException"/> (with a Windows-specific hint) if the image must move but has no relocations.
+    /// </summary>
+    public static uint? RequiredBase(string name, PeImage image, string? targetOs)
+    {
+        if (!IsWindowsTarget(targetOs) || image.ImageBase >= WindowsMinimumBase) return null;
+        return Allocate([(name, image)], null, targetOs)[0].Base;
+    }
     private const uint Gap = 0x10000;
 
     /// <summary>Bytes the loader maps for the image: SizeOfImage plus the synthetic exit/import-stub area, rounded up to 4 KiB.</summary>
@@ -97,11 +120,14 @@ public static class ModuleBaseAllocator
         return (uint)((end + 0xFFF) & ~0xFFFUL);
     }
 
-    public static IReadOnlyList<ModuleBase> Allocate(IReadOnlyList<(string Name, PeImage Image)> modules, IEnumerable<(uint Start, uint End)>? reserved = null)
+    public static IReadOnlyList<ModuleBase> Allocate(IReadOnlyList<(string Name, PeImage Image)> modules, IEnumerable<(uint Start, uint End)>? reserved = null, string? targetOs = null)
     {
         ArgumentNullException.ThrowIfNull(modules);
+        var windows = IsWindowsTarget(targetOs);
+        var windowsHint = " For windows-x64 images must live in [0x20000000, 0x70000000); a library without base relocations cannot be moved there - rebuild it with relocations (/DYNAMICBASE or without /FIXED) or choose another target.";
+        var searchWindows = windows ? WindowsSearchWindows : SearchWindows;
         var taken = new List<(ulong Start, ulong End, string Owner)>();
-        foreach (var (s, e) in reserved ?? DefaultReserved) taken.Add((s, e, "reserved range"));
+        foreach (var (s, e) in reserved ?? (windows ? WindowsReserved : DefaultReserved)) taken.Add((s, e, "reserved range"));
         var result = new ModuleBase?[modules.Count];
 
         bool Fits(ulong start, ulong size, out ulong blockedEnd, out string owner)
@@ -121,7 +147,7 @@ public static class ModuleBaseAllocator
             var owner = "";
             if (image.ImageBase % BaseAlign != 0 || !Fits(image.ImageBase, size, out _, out owner))
                 throw new PeRebaseException("PE_REBASE_NO_RELOCS",
-                    $"Module '{name}' has no relocations and must stay at 0x{image.ImageBase:X8}, which is not available ({(image.ImageBase % BaseAlign != 0 ? "not 64 KiB aligned" : "conflicts with " + owner)}).");
+                    $"Module '{name}' has no relocations and must stay at 0x{image.ImageBase:X8}, which is not available ({(image.ImageBase % BaseAlign != 0 ? "not 64 KiB aligned" : "conflicts with " + owner)}).{(windows ? windowsHint : "")}");
             taken.Add((image.ImageBase, (ulong)image.ImageBase + size, name));
             result[i] = new ModuleBase(name, image.ImageBase, size, false);
         }
@@ -132,11 +158,11 @@ public static class ModuleBaseAllocator
             var (name, image) = modules[i];
             var size = Footprint(image);
             ulong chosen = 0; var found = false;
-            if (image.ImageBase % BaseAlign == 0 && image.ImageBase != 0 && Fits(image.ImageBase, size, out _, out _)) { chosen = image.ImageBase; found = true; }
-            for (var w = 0; !found && w < SearchWindows.Length; w++)
+            if (image.ImageBase % BaseAlign == 0 && image.ImageBase != 0 && Fits(image.ImageBase, size, out _, out _) && (!windows || image.ImageBase >= WindowsMinimumBase)) { chosen = image.ImageBase; found = true; }
+            for (var w = 0; !found && w < searchWindows.Length; w++)
             {
-                var cursor = (ulong)SearchWindows[w].Start;
-                while (cursor + size <= SearchWindows[w].End)
+                var cursor = (ulong)searchWindows[w].Start;
+                while (cursor + size <= searchWindows[w].End)
                 {
                     if (Fits(cursor, size, out var blockedEnd, out _)) { chosen = cursor; found = true; break; }
                     cursor = (blockedEnd + BaseAlign - 1) / BaseAlign * BaseAlign;

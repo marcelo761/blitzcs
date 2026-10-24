@@ -42,13 +42,9 @@ public sealed unsafe partial class GuestModule
 
     private void AllocatePeb(PeImage image)
     {
-        var length = (nuint)Math.Max(4096, Libc.PageSize);
-        var map = Libc.Map(0, length, Libc.PROT_READ | Libc.PROT_WRITE, Libc.MAP_32BIT, out var errno);
-        if (map == Libc.MapFailed || (ulong)map + length > uint.MaxValue)
-        {
-            if (map != Libc.MapFailed) Libc.Unmap(map, length);
-            throw new GuestAddressSpaceException($"Cannot allocate the guest PEB in low memory (errno {errno}).");
-        }
+        var length = (nuint)Math.Max(4096, PlatformMemory.Current.PageSize);
+        var map = PlatformMemory.Current.MapLow(length, out var errno);
+        if (map == 0) throw new GuestAddressSpaceException($"Cannot allocate the guest PEB in low memory (OS error {errno}).");
         pebMap = map; pebLength = length;
         *(byte*)(map + (nint)PebBeingDebugged) = 0;
         *(uint*)(map + (nint)PebImageBase) = artifact.GuestImageBase;
@@ -58,14 +54,10 @@ public sealed unsafe partial class GuestModule
 
     private static (nint Map, nuint Length) AllocateLow(nuint bytes, string what)
     {
-        var ps = (nuint)Libc.PageSize;
+        var ps = (nuint)PlatformMemory.Current.PageSize;
         var length = (bytes + ps - 1) / ps * ps;
-        var map = Libc.Map(0, length, Libc.PROT_READ | Libc.PROT_WRITE, Libc.MAP_32BIT, out var errno);
-        if (map == Libc.MapFailed || (ulong)map + length > uint.MaxValue)
-        {
-            if (map != Libc.MapFailed) Libc.Unmap(map, length);
-            throw new GuestAddressSpaceException($"Cannot allocate the guest {what} in low memory (errno {errno}).");
-        }
+        var map = PlatformMemory.Current.MapLow(length, out var errno);
+        if (map == 0) throw new GuestAddressSpaceException($"Cannot allocate the guest {what} in low memory (OS error {errno}).");
         return (map, length);
     }
 
@@ -93,7 +85,7 @@ public sealed unsafe partial class GuestModule
                 *(uint*)(map + (nint)TebTlsPointer) = (uint)tlsMap;
             }
         }
-        catch { Libc.Unmap(map, length); Libc.Unmap(tlsMap, tlsLength); throw; }
+        catch { PlatformMemory.Current.Free(map, length); PlatformMemory.Current.Free(tlsMap, tlsLength); throw; }
         var block = new TebBlock(this, map, length, tlsMap, tlsLength);
         lock (resourceLock) tebRegistry[map] = (length, tlsMap, tlsLength);
         Memory.Add(new GuestRegion((ulong)map, (ulong)map + 0x1000, null));
@@ -111,8 +103,8 @@ public sealed unsafe partial class GuestModule
         }
         Memory.Remove((ulong)map);
         if (entry.TlsMap != 0) Memory.Remove((ulong)entry.TlsMap);
-        Libc.Unmap(map, entry.Length);
-        Libc.Unmap(entry.TlsMap, entry.TlsLength);
+        PlatformMemory.Current.Free(map, entry.Length);
+        PlatformMemory.Current.Free(entry.TlsMap, entry.TlsLength);
     }
 
     /// <summary>Called for every outermost entry: the TEB mirrors the stack the call runs on and starts with an empty SEH chain.</summary>
@@ -154,10 +146,10 @@ public sealed unsafe partial class GuestModule
         lock (resourceLock) { blocks = [.. tebRegistry]; tebRegistry.Clear(); }
         foreach (var (map, e) in blocks)
         {
-            Libc.Unmap(map, e.Length);
-            Libc.Unmap(e.TlsMap, e.TlsLength);
+            PlatformMemory.Current.Free(map, e.Length);
+            PlatformMemory.Current.Free(e.TlsMap, e.TlsLength);
         }
-        Libc.Unmap(pebMap, pebLength);
+        PlatformMemory.Current.Free(pebMap, pebLength);
         pebMap = 0;
     }
 }

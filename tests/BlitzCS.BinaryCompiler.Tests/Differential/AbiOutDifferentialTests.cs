@@ -43,7 +43,7 @@ public sealed class AbiOutDifferentialTests
     {
         var art = OracleRunner.Build("abiout");
         var oracle = OracleRunner.Run("abiout");
-        var image = PeReader.Read(OracleDifferential.BuildFixture(art));
+        var image = OracleDifferential.LoadImage(art);
         var tr = X64Translator.Translate(image, new BinaryCompilerOptions(profile), "abiout");
         Assert.DoesNotContain(tr.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
         using var module = GuestModule.Load(tr, image, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false });
@@ -66,7 +66,7 @@ public sealed class AbiOutDifferentialTests
             var got = OracleDifferential.Fnv(bytes);
             var where = $"{FailureClass.Translation}: abiout/{profile} vector #{v.Index} {v.Function}({string.Join(", ", a.Select(x => "0x" + x.ToString("x")))})";
             Assert.True(got == v.Result, $"{where}: oracle=0x{v.Result:x} guest=0x{got:x} ({Convert.ToHexString(bytes)})");
-            module.Memory.Read(OracleDifferential.DataVa, data);
+            module.Memory.Read(image.ImageBase + PeFixtureBuilder.DataRva, data);
             Assert.True(OracleDifferential.Fnv(data) == v.DataHash, $"{where}: data hash differs");
             seen.Add(v.Function);
         }

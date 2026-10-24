@@ -7,18 +7,31 @@ namespace BlitzCS.CLI;
 /// <summary>Translates catalog 'binaryLibraries' (PE32 x86) into x64 artifacts next to the output. A no-op for programs without them.</summary>
 internal static class BinaryTranslationStep
 {
-    internal static void Run(ExternalCatalogResult catalog, string outputPath, TextWriter output, TextWriter? warnings = null) =>
-        Prepare(catalog, outputPath, warnings).Publish(output);
+    internal static void Run(ExternalCatalogResult catalog, string outputPath, TextWriter output, TextWriter? warnings = null, string? target = null) =>
+        Prepare(catalog, outputPath, warnings, target).Publish(output);
+
+    /// <summary>Environment override of the default target (used by test hosts that must run the artifacts they build).</summary>
+    internal const string TargetEnvironmentVariable = "BLITZCS_BINARY_TARGET";
+
+    /// <summary>Artifacts are target specific. Precedence: --target, the catalog's binaryTarget, BLITZCS_BINARY_TARGET, then windows-x64 (the primary target).</summary>
+    internal static string ResolveTarget(ExternalCatalogResult catalog, string? requested)
+    {
+        if (requested is not null) return BinaryTargets.Normalize(requested);
+        if (catalog.BinaryTarget is not null) return catalog.BinaryTarget;
+        var fromEnvironment = Environment.GetEnvironmentVariable(TargetEnvironmentVariable);
+        return string.IsNullOrWhiteSpace(fromEnvironment) ? BinaryTargets.WindowsX64 : BinaryTargets.Normalize(fromEnvironment);
+    }
 
     /// <summary>
     /// Translates (or loads from cache) and validates every library and binding without writing next to the output. With several libraries each gets a load
-    /// base from <see cref="ModuleBaseAllocator"/> (a single library keeps its preferred base) and the cache key includes it.
+    /// base from <see cref="ModuleBaseAllocator"/> (a single library keeps its preferred base on Linux; for windows-x64 every library is placed in the Windows image window) and the cache key includes it.
     /// Unprovided imports are reported to <paramref name="warnings"/> (or fail the build for libraries with <c>"unboundImports": "error"</c>).
     /// </summary>
-    internal static PreparedBinaries Prepare(ExternalCatalogResult catalog, string outputPath, TextWriter? warnings = null)
+    internal static PreparedBinaries Prepare(ExternalCatalogResult catalog, string outputPath, TextWriter? warnings = null, string? target = null)
     {
         var pending = new List<PendingBinary>();
         if (catalog.BinaryLibraries is not { Count: > 0 } libraries) return new(pending);
+        var targetOs = ResolveTarget(catalog, target);
         var specs = catalog.LibrarySpecs ?? [.. libraries.Select(path => new BinaryLibrarySpec(path))];
         var profile = catalog.BinaryProfile is null ? OptimizationProfile.Release
             : Enum.TryParse<OptimizationProfile>(catalog.BinaryProfile, ignoreCase: true, out var parsed) ? parsed
@@ -29,13 +42,14 @@ internal static class BinaryTranslationStep
             if (!BinaryBuild.IsPe32X86(spec.Path))
                 throw new ArgumentException($"Binary library '{spec.Path}' is not a PE32 x86 image.");
         var images = specs.Select(spec => PeReader.Read(File.ReadAllBytes(spec.EffectivePath))).ToArray();
-        var bases = specs.Count > 1 ? ModuleBaseAllocator.Allocate([.. specs.Select((spec, i) => (spec.FileName, images[i]))]) : null;
+        // windows-x64 rebases every library (a single one too) into the Windows image window; on Linux a single library keeps its preferred base.
+        var bases = specs.Count > 1 || ModuleBaseAllocator.IsWindowsTarget(targetOs) ? ModuleBaseAllocator.Allocate([.. specs.Select((spec, i) => (spec.FileName, images[i]))], null, targetOs) : null;
         var artifacts = new TranslationArtifact[specs.Count];
         for (var i = 0; i < specs.Count; i++)
         {
             var spec = specs[i];
             var library = spec.Path;
-            var options = new BinaryCompilerOptions(profile, LoadBase: bases is not null && bases[i].Base != images[i].ImageBase ? bases[i].Base : null);
+            var options = new BinaryCompilerOptions(profile, TargetOs: targetOs, LoadBase: bases is not null && bases[i].Base != images[i].ImageBase ? bases[i].Base : null);
             var result = BinaryBuild.Translate(spec.EffectivePath, options, cacheDirectory, spec.Preprocessed is { } pre ? [pre.LineageToken] : null);
             var errors = result.Artifact.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
             if (errors.Length > 0)

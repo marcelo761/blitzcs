@@ -24,6 +24,7 @@ internal sealed partial class X64CodeGen
     private readonly PeImage image;
     private readonly ControlFlowGraph cfg;
     private readonly bool release;
+    private readonly HostAbi abi;
     private readonly ulong dataBase;
     private readonly uint tableOffset, boundOffset, thunkOffset, tableEntries, exitRva, stubBaseRva;
     public readonly CodeEmitter E = new();
@@ -48,8 +49,9 @@ internal sealed partial class X64CodeGen
     private readonly HashSet<uint> labeled = [];
     private readonly SortedSet<uint> reportedTargets = [];
 
-    public X64CodeGen(PeImage image, ControlFlowGraph cfg, bool release, ulong dataBase, uint thunkOffset, uint boundOffset, uint tableOffset, uint tableEntries, uint exitRva, uint stubBaseRva)
+    public X64CodeGen(PeImage image, ControlFlowGraph cfg, bool release, ulong dataBase, uint thunkOffset, uint boundOffset, uint tableOffset, uint tableEntries, uint exitRva, uint stubBaseRva, HostAbi abi = HostAbi.SysV)
     {
+        this.abi = abi;
         this.image = image; this.cfg = cfg; this.release = release; this.dataBase = dataBase;
         this.thunkOffset = thunkOffset; this.boundOffset = boundOffset; this.tableOffset = tableOffset; this.tableEntries = tableEntries;
         this.exitRva = exitRva; this.stubBaseRva = stubBaseRva;
@@ -240,13 +242,92 @@ internal sealed partial class X64CodeGen
         A(Instruction.Create(Code.Xor_r32_rm32, Register.EAX, Register.EAX));
         Jmp(ExitCommonLabel);
 
-        // ulong EnterGuest(ulong hostTarget /*rdi*/, uint guestEsp /*esi*/, ulong callContext /*rdx*/)
+        EmitEnterGuestAndExit();
+
+        // Dispatch: r8d = guest VA. Flags are preserved (only lea/mov/SSE are used). Out-of-range indexes clamp to the
+        // reserved last entry (0), which targets the trap routine; r9d keeps the original VA for the trap report.
+        E.Place(DispatchLabel);
+        EmitDispatchPreservingFlags();
+
+        var importExt = E.NewLabel();
+        for (var k = 0; k < image.Imports.Count; k++)
+        {
+            var body = E.NewLabel(); ImportBodyLabels.Add(body);
+            E.Place(body);
+            A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.ESP));
+            A(Instruction.Create(Code.Mov_r64_rm64, Register.RSP, Ctx(CtxNativeRsp)));
+            if (Win64)
+            {
+                // RSI/RDI/RBX/RBP are callee-saved for the managed callee, so only the volatile R8 (guest ESP) is spilled. Two pushes + 32 bytes of shadow space keep RSP 16-aligned at the call.
+                A(Instruction.Create(Code.Push_r64, Register.R8));
+                A(Instruction.Create(Code.Push_r64, Register.R8));
+                A(Instruction.Create(Code.Sub_rm64_imm8, Register.RSP, 32));
+                A(Instruction.Create(Code.Mov_r32_rm32, Register.ECX, Register.R8D));
+                A(Instruction.Create(Code.Cld));
+                A(Instruction.Create(Code.Call_rm64, new MemoryOperand(Register.RIP, (long)dataBase + thunkOffset + 8L * k, 8)));
+                A(Instruction.Create(Code.Cmp_rm32_imm8, Ctx(CtxFault), 0));
+                Jcc(ConditionCode.ne, FaultExitLabel);
+                A(Instruction.Create(Code.Add_rm64_imm8, Register.RSP, 32));
+                A(Instruction.Create(Code.Pop_r64, Register.R9));
+                A(Instruction.Create(Code.Pop_r64, Register.R8));
+            }
+            else
+            {
+                A(Instruction.Create(Code.Push_r64, Register.RSI));
+                A(Instruction.Create(Code.Push_r64, Register.RDI));
+                A(Instruction.Create(Code.Push_r64, Register.R8));
+                A(Instruction.Create(Code.Push_r64, Register.R8));
+                A(Instruction.Create(Code.Mov_r32_rm32, Register.EDI, Register.R8D));
+                A(Instruction.Create(Code.Cld));
+                A(Instruction.Create(Code.Call_rm64, new MemoryOperand(Register.RIP, (long)dataBase + thunkOffset + 8L * k, 8)));
+                A(Instruction.Create(Code.Cmp_rm32_imm8, Ctx(CtxFault), 0));
+                Jcc(ConditionCode.ne, FaultExitLabel);
+                A(Instruction.Create(Code.Pop_r64, Register.R9));
+                A(Instruction.Create(Code.Pop_r64, Register.R8));
+                A(Instruction.Create(Code.Pop_r64, Register.RDI));
+                A(Instruction.Create(Code.Pop_r64, Register.RSI));
+            }
+            A(Instruction.Create(Code.Mov_r64_rm64, Register.R9, Register.RAX));
+            A(Instruction.Create(Code.Shr_rm64_imm8, Register.R9, (byte)32));
+            A(Instruction.Create(Code.Test_rm32_r32, Register.R9D, Register.R9D)); // bit 63 of the import result = extended return (EDX / ST0), see ImportExtLabel
+            Jcc(ConditionCode.s, importExt);
+            A(Instruction.Create(Code.Mov_r32_rm32, Register.EAX, Register.EAX));
+            A(Instruction.Create(Code.Mov_r32_rm32, Register.R10D, M(Register.R8D)));
+            A(Instruction.Create(Code.Lea_r32_m, Register.R8D, M(Register.R8D, Register.R9D, 1, 4)));
+            A(Instruction.Create(Code.Mov_r32_rm32, Register.ESP, Register.R8D));
+            A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R10D));
+            Jmp(DispatchLabel);
+        }
+        EmitImportExtendedReturn(importExt);
+    }
+
+    private bool Win64 => abi == HostAbi.Win64;
+    /// <summary>Win64 only: bytes reserved below the 8 saved GPRs for XMM6, XMM7 and XMM15 (callee-saved there) plus alignment (8 pushes leave RSP = 8 mod 16, so 56 re-aligns it).</summary>
+    private const int Win64Frame = 56;
+
+    /// <summary>
+    /// EnterGuest and ExitCommon. SysV: ulong EnterGuest(rdi = hostTarget, esi = guestEsp, rdx = callContext). Win64: the same logical
+    /// contract with rcx = hostTarget, edx = guestEsp, r8 = callContext. Win64 additionally preserves RDI, RSI (callee-saved there, guest ESI/EDI)
+    /// and XMM6, XMM7 (guest XMM0-7) and XMM15 (dispatch scratch): the only callee-saved XMM registers translated code can write.
+    /// </summary>
+    private void EmitEnterGuestAndExit()
+    {
         E.Place(EnterLabel);
-        foreach (var r in new[] { Register.RBX, Register.RBP, Register.R12, Register.R13, Register.R14, Register.R15 })
-            A(Instruction.Create(Code.Push_r64, r));
-        A(Instruction.Create(Code.Mov_r64_rm64, Register.R14, Register.RDX));
+        var saved = Win64
+            ? new[] { Register.RBX, Register.RBP, Register.RDI, Register.RSI, Register.R12, Register.R13, Register.R14, Register.R15 }
+            : new[] { Register.RBX, Register.RBP, Register.R12, Register.R13, Register.R14, Register.R15 };
+        foreach (var r in saved) A(Instruction.Create(Code.Push_r64, r));
+        if (Win64)
+        {
+            A(Instruction.Create(Code.Sub_rm64_imm8, Register.RSP, Win64Frame));
+            A(Instruction.Create(Code.Movups_xmmm128_xmm, M(Register.RSP, 0), Register.XMM6));
+            A(Instruction.Create(Code.Movups_xmmm128_xmm, M(Register.RSP, 16), Register.XMM7));
+            A(Instruction.Create(Code.Movups_xmmm128_xmm, M(Register.RSP, 32), Register.XMM15));
+            A(Instruction.Create(Code.Mov_r64_rm64, Register.R14, Register.R8));
+        }
+        else A(Instruction.Create(Code.Mov_r64_rm64, Register.R14, Register.RDX));
         A(Instruction.Create(Code.Mov_r64_rm64, Register.R15, Ctx(CtxTeb))); // the thread's guest TEB; the caller's R15 was pushed above, so nested entries restore it
-        A(Instruction.Create(Code.Push_r64, Register.RDX)); // padding: keeps the saved native RSP 16-byte aligned for the import stubs' managed calls
+        if (!Win64) A(Instruction.Create(Code.Push_r64, Register.RDX)); // padding: keeps the saved native RSP 16-byte aligned for the import stubs' managed calls
         A(Instruction.Create(Code.Mov_rm64_r64, Ctx(CtxNativeRsp), Register.RSP));
         A(Instruction.Create(Code.Mov_rm32_imm32, Ctx(CtxTrapKind), 0u));
         // Floating-point state contract: the x87 stack must be empty (TOP == 0) on entry; the host's x87 control word and MXCSR are
@@ -266,8 +347,8 @@ internal sealed partial class X64CodeGen
         E.Place(enterGo);
         A(Instruction.Create(Code.Lea_r64_m, Register.R12, new MemoryOperand(Register.RIP, 0L, 8)));
         A(Instruction.Create(Code.Lea_r64_m, Register.R13, new MemoryOperand(Register.RIP, (long)dataBase + tableOffset, 8)));
-        A(Instruction.Create(Code.Mov_r64_rm64, Register.R8, Register.RDI));
-        A(Instruction.Create(Code.Mov_r32_rm32, Register.ESP, Register.ESI));
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R8, Win64 ? Register.RCX : Register.RDI));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.ESP, Win64 ? Register.EDX : Register.ESI));
         foreach (var r in new[] { Register.EAX, Register.EBX, Register.EBP, Register.ESI, Register.EDI })
             A(Instruction.Create(Code.Xor_r32_rm32, r, r));
         // Register arguments of thiscall/fastcall come from the (zeroed by default) call context; cdecl/stdcall calls leave both zero.
@@ -280,49 +361,17 @@ internal sealed partial class X64CodeGen
         E.Place(ExitCommonLabel);
         A(Instruction.Create(Code.Mov_r64_rm64, Register.RSP, Ctx(CtxNativeRsp)));
         EmitExitFloatingPoint();
-        A(Instruction.Create(Code.Pop_r64, Register.R9)); // padding
-        foreach (var r in new[] { Register.R15, Register.R14, Register.R13, Register.R12, Register.RBP, Register.RBX })
-            A(Instruction.Create(Code.Pop_r64, r));
+        if (Win64)
+        {
+            A(Instruction.Create(Code.Movups_xmm_xmmm128, Register.XMM6, M(Register.RSP, 0)));
+            A(Instruction.Create(Code.Movups_xmm_xmmm128, Register.XMM7, M(Register.RSP, 16)));
+            A(Instruction.Create(Code.Movups_xmm_xmmm128, Register.XMM15, M(Register.RSP, 32)));
+            A(Instruction.Create(Code.Add_rm64_imm8, Register.RSP, Win64Frame));
+        }
+        else A(Instruction.Create(Code.Pop_r64, Register.R9)); // padding
+        foreach (var r in saved.Reverse()) A(Instruction.Create(Code.Pop_r64, r));
         A(Instruction.Create(Code.Mov_r32_rm32, Register.EAX, Register.EAX));
         A(Instruction.Create(Code.Retnq));
-
-        // Dispatch: r8d = guest VA. Flags are preserved (only lea/mov/SSE are used). Out-of-range indexes clamp to the
-        // reserved last entry (0), which targets the trap routine; r9d keeps the original VA for the trap report.
-        E.Place(DispatchLabel);
-        EmitDispatchPreservingFlags();
-
-        var importExt = E.NewLabel();
-        for (var k = 0; k < image.Imports.Count; k++)
-        {
-            var body = E.NewLabel(); ImportBodyLabels.Add(body);
-            E.Place(body);
-            A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.ESP));
-            A(Instruction.Create(Code.Mov_r64_rm64, Register.RSP, Ctx(CtxNativeRsp)));
-            A(Instruction.Create(Code.Push_r64, Register.RSI));
-            A(Instruction.Create(Code.Push_r64, Register.RDI));
-            A(Instruction.Create(Code.Push_r64, Register.R8));
-            A(Instruction.Create(Code.Push_r64, Register.R8));
-            A(Instruction.Create(Code.Mov_r32_rm32, Register.EDI, Register.R8D));
-            A(Instruction.Create(Code.Cld));
-            A(Instruction.Create(Code.Call_rm64, new MemoryOperand(Register.RIP, (long)dataBase + thunkOffset + 8L * k, 8)));
-            A(Instruction.Create(Code.Cmp_rm32_imm8, Ctx(CtxFault), 0));
-            Jcc(ConditionCode.ne, FaultExitLabel);
-            A(Instruction.Create(Code.Pop_r64, Register.R9));
-            A(Instruction.Create(Code.Pop_r64, Register.R8));
-            A(Instruction.Create(Code.Pop_r64, Register.RDI));
-            A(Instruction.Create(Code.Pop_r64, Register.RSI));
-            A(Instruction.Create(Code.Mov_r64_rm64, Register.R9, Register.RAX));
-            A(Instruction.Create(Code.Shr_rm64_imm8, Register.R9, (byte)32));
-            A(Instruction.Create(Code.Test_rm32_r32, Register.R9D, Register.R9D)); // bit 63 of the import result = extended return (EDX / ST0), see ImportExtLabel
-            Jcc(ConditionCode.s, importExt);
-            A(Instruction.Create(Code.Mov_r32_rm32, Register.EAX, Register.EAX));
-            A(Instruction.Create(Code.Mov_r32_rm32, Register.R10D, M(Register.R8D)));
-            A(Instruction.Create(Code.Lea_r32_m, Register.R8D, M(Register.R8D, Register.R9D, 1, 4)));
-            A(Instruction.Create(Code.Mov_r32_rm32, Register.ESP, Register.R8D));
-            A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R10D));
-            Jmp(DispatchLabel);
-        }
-        EmitImportExtendedReturn(importExt);
     }
 
     /// <summary>

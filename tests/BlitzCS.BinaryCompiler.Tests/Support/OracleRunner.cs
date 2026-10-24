@@ -32,8 +32,11 @@ public sealed class OracleTranscript
 public sealed record OracleArtifacts(string Name, byte[] Code, byte[] Data, IReadOnlyList<(string Name, uint Offset)> Exports, IReadOnlyList<uint> Relocs, string? OraclePath);
 
 /// <summary>
-/// Builds controlled C libraries lazily with tools/x86_oracle/build.sh and runs the natively executing ELF32 oracle.
-/// The oracle is real IA-32 execution (kernel compat mode); the translator output is never used as an oracle.
+/// Linux x86-64: builds controlled C libraries lazily with tools/x86_oracle/build.sh and runs the natively executing ELF32 oracle.
+/// Windows x64 (including Wine): the process cannot run gcc, so it uses the prebuilt flat images and PE32 <c>&lt;lib&gt;.oracle.exe</c> files produced
+/// beforehand on Linux by <c>ORACLE_EXE=1 tools/x86_oracle/build.sh</c> (or tools/x86_oracle/build_all_exe.sh), located through the
+/// <c>BLITZCS_ORACLE_DIR</c> environment variable (fallback: <c>x86_oracle-prebuilt</c> next to the test assembly).
+/// Both oracles are real IA-32 execution of the same machine code; the translator output is never used as an oracle.
 /// </summary>
 public static class OracleRunner
 {
@@ -44,6 +47,18 @@ public static class OracleRunner
     private static bool probed;
 
     public static string RepoRoot { get; } = FindRoot();
+    public const string OracleDirVariable = "BLITZCS_ORACLE_DIR";
+    private static bool Prebuilt => HostPlatform.IsWindows;
+    private static string? PrebuiltDir
+    {
+        get
+        {
+            var d = System.Environment.GetEnvironmentVariable(OracleDirVariable);
+            if (!string.IsNullOrWhiteSpace(d)) return d;
+            var local = Path.Combine(AppContext.BaseDirectory, "x86_oracle-prebuilt");
+            return Directory.Exists(local) ? local : null;
+        }
+    }
     private static string ToolDir => Path.Combine(RepoRoot, "tools", "x86_oracle");
     private static string CacheDir => Path.Combine(AppContext.BaseDirectory, "x86_oracle-cache");
 
@@ -62,6 +77,7 @@ public static class OracleRunner
 
     private static string? Probe()
     {
+        if (Prebuilt) return ProbePrebuilt();
         if (!OperatingSystem.IsLinux() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64)
             return "x86 oracle requires Linux x86-64";
         if (!File.Exists(Path.Combine(ToolDir, "build.sh"))) return "tools/x86_oracle/build.sh not found";
@@ -74,6 +90,19 @@ public static class OracleRunner
             if (r.ExitCode != 0 || !r.Stdout.Contains("E done")) return $"IA-32 oracle did not run (exit {r.ExitCode}; missing gcc -m32 support or IA32 emulation): {Trim(r.Stderr)}";
         }
         catch (Exception e) { return "gcc -m32/ld toolchain cannot build the oracle: " + Trim(e.Message); }
+        return null;
+    }
+
+    private static string? ProbePrebuilt()
+    {
+        if (!HostPlatform.IsX64) return $"the PE32 oracle needs an x86-64 Windows host (found {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture})";
+        var dir = PrebuiltDir;
+        if (dir is null) return $"no prebuilt oracle directory: set {OracleDirVariable} to a folder with <name>.oracle.exe files (build them on Linux with ORACLE_EXE=1 tools/x86_oracle/build_all_exe.sh <dir>)";
+        if (!Directory.Exists(dir)) return $"{OracleDirVariable}='{dir}' does not exist";
+        var probe = Path.Combine(dir, "arith.oracle.exe");
+        if (!File.Exists(probe)) return $"{OracleDirVariable}='{dir}' has no arith.oracle.exe (build with ORACLE_EXE=1 tools/x86_oracle/build_all_exe.sh)";
+        var r = Exec(probe, [], 60_000);
+        if (r.ExitCode != 0 || !r.Stdout.Contains("E done")) return $"the PE32 oracle did not run on this host (exit {r.ExitCode}): {Trim(r.Stderr)}";
         return null;
     }
 
@@ -92,6 +121,7 @@ public static class OracleRunner
 
     private static OracleArtifacts BuildCore(string lib, string? driver, string outDir)
     {
+        if (Prebuilt) return LoadPrebuilt(lib, driver);
         Directory.CreateDirectory(outDir);
         var src = Path.Combine(ToolDir, "lib", lib + ".c");
         var drv = driver is null ? null : Path.Combine(ToolDir, "drivers", driver + ".c");
@@ -112,6 +142,19 @@ public static class OracleRunner
         var relocs = doc.RootElement.GetProperty("relocs").EnumerateArray().Select(e => e.GetUInt32()).ToList();
         return new OracleArtifacts(lib, File.ReadAllBytes(Path.Combine(outDir, lib + ".code.bin")), File.ReadAllBytes(Path.Combine(outDir, lib + ".data.bin")),
             exports, relocs, drv is not null && File.Exists(drv) ? oracle : null);
+    }
+
+    private static OracleArtifacts LoadPrebuilt(string lib, string? driver)
+    {
+        var dir = PrebuiltDir ?? throw new OracleEnvironmentException($"{OracleDirVariable} is not set");
+        string P(string ext) => Path.Combine(dir, lib + ext);
+        foreach (var ext in new[] { ".code.bin", ".data.bin", ".exports.json" })
+            if (!File.Exists(P(ext))) throw new OracleEnvironmentException($"prebuilt oracle file '{P(ext)}' is missing (rebuild with tools/x86_oracle/build_all_exe.sh)");
+        using var doc = JsonDocument.Parse(File.ReadAllText(P(".exports.json")));
+        var exports = doc.RootElement.GetProperty("exports").EnumerateArray().Select(e => (e.GetProperty("name").GetString()!, e.GetProperty("offset").GetUInt32())).ToList();
+        var relocs = doc.RootElement.GetProperty("relocs").EnumerateArray().Select(e => e.GetUInt32()).ToList();
+        return new OracleArtifacts(lib, File.ReadAllBytes(P(".code.bin")), File.ReadAllBytes(P(".data.bin")), exports, relocs,
+            driver is not null && File.Exists(P(".oracle.exe")) ? P(".oracle.exe") : null);
     }
 
     /// <summary>Runs the oracle once per library (cached) and parses its transcript.</summary>

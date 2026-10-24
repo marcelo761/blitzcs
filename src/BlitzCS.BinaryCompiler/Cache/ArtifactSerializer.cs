@@ -7,7 +7,7 @@ public sealed class ArtifactFormatException(string message) : Exception(message)
 
 public sealed class ArtifactSerializer
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
     private static readonly byte[] Magic = "BCSA"u8.ToArray();
     private const int MaxString = 1 << 20;
 
@@ -29,6 +29,7 @@ public sealed class ArtifactSerializer
             w.Write(a.Diagnostics.Count);
             foreach (var d in a.Diagnostics) { w.Write((int)d.Severity); Str(w, d.Code); Str(w, d.Message); w.Write(d.GuestRva.HasValue); w.Write(d.GuestRva ?? 0u); }
             w.Write(a.RebasedFromImageBase.HasValue); w.Write(a.RebasedFromImageBase ?? 0u);
+            Str(w, BinaryTargets.Normalize(a.TargetOs ?? BinaryTargets.LinuxSysV));
         }
         var body = ms.ToArray();
         var res = new byte[body.Length + 32];
@@ -88,8 +89,9 @@ public sealed class ArtifactSerializer
             diags.Add(new BinaryDiagnostic((DiagnosticSeverity)sev, code2, msg, has ? rva : null));
         }
         var rebased = r.ReadBoolean(); var rebasedBase = r.ReadUInt32();
+        var target = BinaryTargets.TryNormalize(ReadStr()) ?? throw new ArtifactFormatException("Unknown artifact target OS.");
         if (Remaining() != 0) throw new ArtifactFormatException("Trailing bytes in artifact.");
-        return new TranslationArtifact(fv, src, key, gb, gs, host, code, disp, thunk, ctx, enter, exit, stubs, map, exports, imports, diags, rebased ? rebasedBase : null);
+        return new TranslationArtifact(fv, src, key, gb, gs, host, code, disp, thunk, ctx, enter, exit, stubs, map, exports, imports, diags, rebased ? rebasedBase : null, target);
     }
 
     private static void Str(BinaryWriter w, string s) { var b = Encoding.UTF8.GetBytes(s); w.Write(b.Length); w.Write(b); }

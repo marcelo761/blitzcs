@@ -8,7 +8,7 @@ internal sealed record GuestRegion(ulong Start, ulong End, bool[]? PageWritable)
     internal bool CoversWrite(ulong from, ulong to)
     {
         if (PageWritable is null) return true;
-        var ps = (ulong)Libc.PageSize;
+        var ps = (ulong)PlatformMemory.Current.PageSize;
         for (var p = (from - Start) / ps; p <= (to - 1 - Start) / ps; p++)
             if (!PageWritable[p]) return false;
         return true;

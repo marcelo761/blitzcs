@@ -85,19 +85,44 @@ public sealed record TranslationArtifact(
     uint DispatchTableOffset,   // offset (in HostImage) of uint32[] indexed by (guestRva) -> host offset, 0 = not translated
     uint ImportThunkTableOffset,// offset of uint64[] (one per PeImport, same order) the loader fills with managed function pointers
     uint ContextOffset,         // legacy: offset of an unused 64-byte area in the RW data area (the live context is per call, see EnterGuest)
-    uint EnterGuestOffset,      // host routine, SysV: ulong EnterGuest(ulong hostTarget /*rdi*/, uint guestEsp /*esi*/, ulong callContext /*rdx*/) -> eax. callContext points to a zeroed 128-byte caller-owned block: [0]=saved native RSP, [16]=trap kind (u32, 1=untranslated target, 2=rejected instruction, 3=fs: offset outside the TEB), [24]=trap guest VA, [32]=import fault flag, [40]=guest TEB base (u64, copied into R15 for the whole call; see docs/binary-teb-contract.md), [48]=EDX out, [56]=capture request (2=ST0, 4=XMM0), [64..74)=ST0 raw 80-bit, [80]=ST0 as double, [88]=ST0 as float, [96..112)=XMM0, [112]=status out (1=x87 stack not empty on entry, 2=unbalanced on return, 4=ST0 empty), [116..128)=saved/current x87 CW and MXCSR. It is kept in R14 for the whole call, so calls on different threads (and nested calls) never share state.
+    uint EnterGuestOffset,      // host routine, SysV: ulong EnterGuest(ulong hostTarget /*rdi*/, uint guestEsp /*esi*/, ulong callContext /*rdx*/) -> eax; Win64: the same with rcx/edx/r8 (and RDI, RSI, XMM6, XMM7, XMM15 preserved too). callContext points to a zeroed 128-byte caller-owned block: [0]=saved native RSP, [16]=trap kind (u32, 1=untranslated target, 2=rejected instruction, 3=fs: offset outside the TEB), [24]=trap guest VA, [32]=import fault flag, [40]=guest TEB base (u64, copied into R15 for the whole call; see docs/binary-teb-contract.md), [48]=EDX out, [56]=capture request (2=ST0, 4=XMM0), [64..74)=ST0 raw 80-bit, [80]=ST0 as double, [88]=ST0 as float, [96..112)=XMM0, [112]=status out (1=x87 stack not empty on entry, 2=unbalanced on return, 4=ST0 empty), [116..128)=saved/current x87 CW and MXCSR. It is kept in R14 for the whole call, so calls on different threads (and nested calls) never share state.
     uint ExitGuestRva,          // synthetic guest RVA (>= SizeOfImage, covered by the dispatch table); loader places it as the outermost return address
     uint ImportStubBaseRva,     // synthetic guest RVA of import stub 0; stub i is at ImportStubBaseRva + 16*i; the loader writes ImageBase+that into IAT slot i
     IReadOnlyList<AddressMapEntry> AddressMap,
     IReadOnlyList<TranslatedExport> Exports,
     IReadOnlyList<PeImport> Imports,
     IReadOnlyList<BinaryDiagnostic> Diagnostics,
-    uint? RebasedFromImageBase = null);   // non-null when the translated image was rebased from this preferred base (SourceSha256 stays the original file hash)
+    uint? RebasedFromImageBase = null,   // non-null when the translated image was rebased from this preferred base (SourceSha256 stays the original file hash)
+    string? TargetOs = null);   // host OS/ABI the runtime routines were generated for (BinaryTargets); null = legacy artifact = linux-sysv. The loader refuses a mismatch.
 
 public enum OptimizationProfile { Debug, Release, ReleasePgo }
 
 /// <param name="LoadBase">Guest base address to translate for (64 KiB aligned, below 4 GiB). Null = the image's preferred base. Translated code embeds absolute addresses, so this is part of the cache key.</param>
-public sealed record BinaryCompilerOptions(OptimizationProfile Profile = OptimizationProfile.Release, string TargetArchitecture = "x64", string TargetOs = "linux-sysv", uint? LoadBase = null)
+public sealed record BinaryCompilerOptions(OptimizationProfile Profile = OptimizationProfile.Release, string TargetArchitecture = "x64", string? TargetOs = null, uint? LoadBase = null)
 {
+    /// <summary>The host OS/ABI the artifact is generated for (see <see cref="BinaryTargets"/>). Defaults to the OS of the running process; validated by the translator.</summary>
+    public string TargetOs { get; init; } = TargetOs ?? BinaryTargets.Host;
+
     public const string CompilerVersion = "0.6.0";
+}
+
+/// <summary>Target OS/ABI identifiers. Artifacts are target specific: the runtime routines (EnterGuest, import stubs) follow the host calling convention, and the loader refuses a mismatching artifact.</summary>
+public static class BinaryTargets
+{
+    public const string LinuxSysV = "linux-sysv", WindowsX64 = "windows-x64";
+
+    /// <summary>The target of the running process; PlatformNotSupportedException on any other OS.</summary>
+    public static string Host => OperatingSystem.IsWindows() ? WindowsX64 : OperatingSystem.IsLinux() ? LinuxSysV
+        : throw new PlatformNotSupportedException("The binary compiler runtime supports Linux x86-64 and Windows x86-64 only.");
+
+    /// <summary>Maps user-facing aliases (linux-x64, win-x64 ...) to the canonical identifier; null when unknown.</summary>
+    public static string? TryNormalize(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        LinuxSysV or "linux-x64" or "linux" => LinuxSysV,
+        WindowsX64 or "win-x64" or "windows" or "win64" => WindowsX64,
+        _ => null,
+    };
+
+    public static string Normalize(string? value) => TryNormalize(value)
+        ?? throw new ArgumentException($"Unknown target OS '{value}'. Supported: {LinuxSysV} (alias linux-x64), {WindowsX64} (alias win-x64).", nameof(value));
 }

@@ -4,13 +4,17 @@
 #       exports.json = {"exports":[{name,offset}], "relocs":[rva of every absolute 32-bit field (R_386_32)]}
 #   <out>/<name>.oracle                               : static ELF32 driver that runs the code natively on x86 (the oracle),
 #       with the library at the SAME absolute addresses (see oracle.ld) and an import slot area at 0x10003400.
-# usage: build.sh <lib.c> <driver.c> <out-dir>   (driver.c may be '-' to skip the oracle)
+#   <out>/<name>.oracle.exe                           : (only with ORACLE_EXE=1) the SAME lib object + the driver compiled with -DORACLE_WIN32, linked
+#       with oracle_win.ld and converted by make_pe.py to a PE32 console EXE (ImageBase 0x10000000) that runs on Windows or Wine.
+#   ORACLE_FPCW=0x27F builds the drivers with the Windows default x87 control word (53-bit precision) instead of the Linux one (0x37F, default).
+# usage: [ORACLE_EXE=1] build.sh <lib.c> <driver.c> <out-dir>   (driver.c may be '-' to skip the oracle)
 # A first line of the form  // FLAGS: <gcc flags>  in lib.c adds compiler flags (used for both lib and driver).
 set -euo pipefail
 lib=$1; driver=$2; out=$3; name=$(basename "$lib" .c); here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$out"; tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+FPCW="${ORACLE_FPCW:+-DORACLE_FPCW=$ORACLE_FPCW}"
 extra=$(sed -n '1s#^// FLAGS: *##p' "$lib")
-CF="-m32 -O2 -ffreestanding -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fcf-protection=none -fno-builtin -nostdlib -Wall -Wextra -Werror $extra"
+CF="-m32 -O2 -ffreestanding -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fcf-protection=none -fno-builtin -nostdlib -Wall -Wextra -Werror $extra $FPCW"
 gcc $CF -I"$here/lib" -c "$lib" -o "$tmp/lib.o"
 ld -m elf_i386 -q -T "$here/layout.ld" -e 0 -o "$tmp/lib.elf" "$tmp/lib.o"
 objcopy -O binary -j .text "$tmp/lib.elf" "$out/$name.code.bin"
@@ -30,4 +34,9 @@ P
 if [ "$driver" != "-" ]; then
   gcc $CF -I"$here/lib" -I"$here/drivers" -c "$driver" -o "$tmp/drv.o"
   ld -m elf_i386 -static --no-warn-rwx-segments -T "$here/oracle.ld" -e _start -o "$out/$name.oracle" "$tmp/lib.o" "$tmp/drv.o"
+  if [ "${ORACLE_EXE:-0}" = "1" ]; then
+    gcc $CF -DORACLE_WIN32 -I"$here/lib" -I"$here/drivers" -c "$driver" -o "$tmp/drvw.o"
+    ld -m elf_i386 -static --no-warn-rwx-segments -T "$here/oracle_win.ld" -e _start -o "$tmp/win.elf" "$tmp/lib.o" "$tmp/drvw.o"
+    python3 "$here/make_pe.py" "$tmp/win.elf" "$out/$name.oracle.exe"
+  fi
 fi

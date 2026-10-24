@@ -23,6 +23,8 @@ internal static class ExternalCatalog
             : [];
         var binaryProfile = root.TryGetProperty("binaryProfile", out var profile) && profile.ValueKind == JsonValueKind.String
             ? profile.GetString() : null;
+        var binaryTarget = root.TryGetProperty("binaryTarget", out var targetElement) && targetElement.ValueKind == JsonValueKind.String
+            ? BinaryTargets.TryNormalize(targetElement.GetString()) ?? throw new ArgumentException($"Unknown binaryTarget '{targetElement.GetString()}'; expected linux-x64 or windows-x64.") : null;
         string Read(JsonElement item, string key) => item.GetProperty(key).GetString()
             ?? throw new ArgumentException($"External catalog '{key}' cannot be null.");
         var catalogDirectory = Path.GetDirectoryName(catalogPath)!;
@@ -95,7 +97,7 @@ internal static class ExternalCatalog
             signatures.Add(signature);
             if (function is not null) functions.Add(function);
         }
-        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs);
+        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs, binaryTarget);
         }
         catch { staging?.Dispose(); throw; }
         finally { context.Dispose(); }
@@ -252,7 +254,8 @@ internal sealed record ExternalCatalogResult(
     string? BinaryProfile = null,
     IReadOnlyList<BinaryBinding>? BinaryBindings = null,
     IDisposable? Staging = null,
-    IReadOnlyList<BinaryLibrarySpec>? LibrarySpecs = null) : IDisposable
+    IReadOnlyList<BinaryLibrarySpec>? LibrarySpecs = null,
+    string? BinaryTarget = null) : IDisposable
 {
     public void Dispose() => Staging?.Dispose();
 }

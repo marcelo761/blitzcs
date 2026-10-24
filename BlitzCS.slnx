@@ -22,4 +22,7 @@
     <Project Path="tests/BlitzCS.BinaryCompiler.Unpack.Tests/BlitzCS.BinaryCompiler.Unpack.Tests.csproj" />
     <Project Path="tests/BlitzCS.Linking.E2E.Tests/BlitzCS.Linking.E2E.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/WinTestRunner/WinTestRunner.csproj" />
+  </Folder>
 </Solution>

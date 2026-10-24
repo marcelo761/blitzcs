@@ -1,3 +1,4 @@
+using BlitzCS.BinaryCompiler;
 using BlitzCS.BinaryCompiler.CodeGen;
 using System.Text;
 using BlitzCS.BinaryCompiler.Runtime;
@@ -16,7 +17,26 @@ public sealed record DifferentialOutcome(string Lib, OptimizationProfile Profile
 /// <summary>Replays the oracle's exact vectors on the translated guest and compares results, data bytes and callback traces.</summary>
 internal static class OracleDifferential
 {
-    public const uint DataVa = TranslatorHarness.DataVa;
+
+    /// <summary>
+    /// Reads the fixture as a <see cref="PeImage"/>, moved to a usable guest base for the host. On Linux this is the preferred base (0x10000000) unless
+    /// <paramref name="loadBase"/> is given. On Windows x64 the low 512 MiB cannot be reserved, so the image is moved to <see cref="HostPlatform.DefaultHighGuestBase"/>:
+    /// by <c>Rebase</c> when the library has absolute references (relocations), else by patching the header's ImageBase (an image without
+    /// absolute references is position independent, so this is exact). The oracle EXE keeps running at 0x10000000 either way.
+    /// </summary>
+    public static PeImage LoadImage(OracleArtifacts a, FixtureMutation? mutation = null, uint? loadBase = null)
+    {
+        var bytes = BuildFixture(a, mutation); var image = PeReader.Read(bytes);
+        var target = loadBase ?? (HostPlatform.RequiresHighGuestBase ? HostPlatform.DefaultHighGuestBase : (uint?)null);
+        if (target is not { } t || t == image.ImageBase) return image;
+        if (loadBase is null && a.Relocs.Count == 0)
+        {
+            var optional = BitConverter.ToInt32(bytes, 0x3C) + 4 + 20;   // PE signature + COFF header
+            BitConverter.GetBytes(t).CopyTo(bytes, optional + 28);       // OptionalHeader.ImageBase (PE32)
+            return PeReader.Read(bytes);
+        }
+        return image.Rebase(t);
+    }
 
     /// <summary>The imports a library may call, with the same formulas as the oracle driver's host functions.</summary>
     public static readonly (string Dll, string Name)[] CallbackImports = [("host.dll", "cb_std"), ("host.dll", "cb_c")];
@@ -49,8 +69,7 @@ internal static class OracleDifferential
     {
         var art = OracleRunner.Build(lib);
         var oracle = oracleOverride ?? OracleRunner.Run(lib);
-        var image = PeReader.Read(BuildFixture(art, mutation));
-        if (loadBase is { } lb) image = image.Rebase(lb);
+        var image = LoadImage(art, mutation, loadBase);
         var delta = unchecked(image.ImageBase - PeFixtureBuilder.ImageBase);
         var dataVa = image.ImageBase + PeFixtureBuilder.DataRva;
         var dataRelocs = art.Relocs.Where(r => r >= PeFixtureBuilder.DataRva && r + 4 <= PeFixtureBuilder.DataRva + (uint)oracle.DataLength).ToArray();

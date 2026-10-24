@@ -3,6 +3,9 @@
  *   teb_install()   build the TEB/PEB, install the descriptor, load %fs      teb_block()/peb_block()  the blocks (to print values)
  *   teb_set_tls(p)  optional implicit-TLS array published at fs:[0x2C]
  * Drivers print ONLY address-independent facts (equalities, differences, round-tripped values). */
+#ifdef ORACLE_WIN32
+#include "fs_teb_win.h"
+#else
 #define TEB_EXCEPTION_LIST 0x00
 #define TEB_STACK_BASE 0x04
 #define TEB_STACK_LIMIT 0x08
@@ -47,3 +50,4 @@ static inline void teb_install(void) {
 
 /* ORACLE_MAIN variant that installs the fs segment first. */
 #define ORACLE_MAIN_FS(tbl, nrand) __attribute__((force_align_arg_pointer, noreturn)) void _start(void) { teb_install(); run_all(tbl, (int)(sizeof tbl / sizeof tbl[0]), nrand); finish(); }
+#endif

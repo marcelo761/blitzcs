@@ -105,7 +105,7 @@ public sealed class UnsupportedConventionTests(ITestOutputHelper output)
     public void Fastcall_and_thiscall_exports_are_refused_not_mistranslated(OptimizationProfile profile)
     {
         var art = OracleRunner.Build("unsup");
-        var image = PeReader.Read(OracleDifferential.BuildFixture(art));
+        var image = OracleDifferential.LoadImage(art);
         var tr = BlitzCS.BinaryCompiler.CodeGen.X64Translator.Translate(image, new BinaryCompilerOptions(profile), "unsup");
         foreach (var d in tr.Diagnostics) output.WriteLine($"{d.Severity} {d.Code}: {d.Message}");
         foreach (var e in tr.Exports) output.WriteLine($"export {e.Name}: {e.Convention} argbytes={e.ArgBytes}");
@@ -133,7 +133,7 @@ public sealed class UnsupportedConventionTests(ITestOutputHelper output)
     {
         // GAP (documented): daa/das/aam have no 64-bit lowering. They must surface as a build Error, never as a wrong result.
         var art = OracleRunner.Build("bcd", null);
-        var image = PeReader.Read(OracleDifferential.BuildFixture(art));
+        var image = OracleDifferential.LoadImage(art);
         var tr = BlitzCS.BinaryCompiler.CodeGen.X64Translator.Translate(image, new BinaryCompilerOptions(profile), "bcd");
         var errors = tr.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         output.WriteLine($"{FailureClass.Unsupported}: " + string.Join("; ", errors.Select(e => e.Message)));

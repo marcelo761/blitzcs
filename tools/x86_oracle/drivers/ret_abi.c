@@ -67,4 +67,4 @@ static const Fn T[] = {
   E(r_s1_c, 2, 0), E(r_s1_s, 2, 0), E(r_s2_c, 2, 0), E(r_s4_c, 2, 0), E(r_s4_s, 2, 0), E(r_s8_c, 2, 0), E(r_s8_s, 2, 0), E(r_big_c, 2, 0), E(r_big_s, 2, 0),
   E(r_x0f_c, 2, 0), E(r_x0d_s, 2, 0, 2),
 };
-__attribute__((force_align_arg_pointer, noreturn)) void _start(void) { run2(T, (int)(sizeof T / sizeof T[0]), 60); finish(); }
+__attribute__((force_align_arg_pointer, noreturn)) void _start(void) { oracle_init(); run2(T, (int)(sizeof T / sizeof T[0]), 60); finish(); }
