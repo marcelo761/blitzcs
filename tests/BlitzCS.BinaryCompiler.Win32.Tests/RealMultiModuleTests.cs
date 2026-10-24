@@ -3,6 +3,7 @@ using System.Text;
 using BlitzCS.BinaryCompiler.CodeGen;
 using BlitzCS.BinaryCompiler.Runtime;
 using BlitzCS.BinaryCompiler.Win32;
+using BlitzCS.Testing;
 using Xunit;
 
 namespace BlitzCS.BinaryCompiler.Win32.Tests;
@@ -27,7 +28,7 @@ public sealed class RealMultiModuleTests
     private static readonly Dictionary<string, (PeImage Image, uint Base, TranslationArtifact Artifact)> Cache = [];
     private static readonly object Gate = new();
 
-    private static string? Dir => Environment.GetEnvironmentVariable("BLITZCS_REAL_PE32_DIR") is { Length: > 0 } d && Directory.Exists(d) ? d : null;
+    private static string Dir => RealLibraries.Dir ?? throw new InvalidOperationException(RealLibraries.DirVariable + " is not set");
 
     private sealed class Loaded(GuestModuleSet set, IReadOnlyList<string> names, IReadOnlyList<uint> bases) : IDisposable
     {
@@ -39,9 +40,9 @@ public sealed class RealMultiModuleTests
     }
 
     /// <summary>Loads the named libraries (in this order) at distinct bases. <paramref name="hostFor"/> may add host callbacks in front of the Win32 component.</summary>
-    private static Loaded? Open(string[] names, Func<string, IGuestImportResolver?>? hostFor = null)
+    private static Loaded Open(string[] names, Func<string, IGuestImportResolver?>? hostFor = null)
     {
-        if (Dir is not { } dir || names.Any(n => !File.Exists(Path.Combine(dir, n + ".dll")))) return null;
+        var dir = Dir;   // the callers are [RealLibraryFact]s: the files exist, else the test was skipped at discovery
         lock (Gate)
         {
             var images = names.Select(n => (n, PeReader.Read(File.ReadAllBytes(Path.Combine(dir, n + ".dll"))))).ToList();
@@ -113,11 +114,10 @@ public sealed class RealMultiModuleTests
         public void Dispose() { Info.Dispose(); Comment.Dispose(); Op.Dispose(); data?.Dispose(); }
     }
 
-    [Fact]
+    [RealLibraryFact("ogg.dll", "vorbis.dll")]
     public void OggAndVorbisLoadTogetherAtDifferentBases()
     {
-        if (Open(["ogg", "vorbis"]) is not { } l) return;
-        using var _ = l;
+        using var l = Open(["ogg", "vorbis"]);
         Assert.NotEqual(l.Bases[0], l.Bases[1]);                       // both prefer 0x10000000: one had to move
         Assert.Contains(l.Bases, b => b != 0x10000000u);
         Assert.Equal(l.Bases[0], l["ogg"].ImageBase); Assert.Equal(l.Bases[1], l["vorbis"].ImageBase);
@@ -128,11 +128,10 @@ public sealed class RealMultiModuleTests
 
     private static GuestBuffer AllocZero(GuestModule m, int n) { var b = m.Memory.Allocate(n); b.Write(0, new byte[n]); return b; }
 
-    [Fact]
+    [RealLibraryFact("ogg.dll", "vorbis.dll")]
     public void VorbisIdentificationHeaderIsParsedThroughOggpackAcrossModules()
     {
-        if (Open(["ogg", "vorbis"]) is not { } l) return;
-        using var _ = l;
+        using var l = Open(["ogg", "vorbis"]);
         using var v = new VorbisHandle(l["vorbis"]);
         v.Fn("vorbis_info_init", 1).Call(v.Info.Address);
         v.Fn("vorbis_comment_init", 1).Call(v.Comment.Address);
@@ -155,7 +154,7 @@ public sealed class RealMultiModuleTests
         v.Fn("vorbis_info_clear", 1).Call(v.Info.Address);
     }
 
-    [Theory]
+    [RealLibraryTheory("ogg.dll", "vorbis.dll")]
     [InlineData("bad-magic", -132)]       // OV_ENOTVORBIS
     [InlineData("version-1", -134)]       // OV_EVERSION
     [InlineData("zero-channels", -133)]   // OV_EBADHEADER
@@ -163,8 +162,7 @@ public sealed class RealMultiModuleTests
     [InlineData("framing-zero", -133)]
     public void MalformedIdentificationHeadersAreRejectedWithTheSpecifiedErrors(string flaw, int expected)
     {
-        if (Open(["ogg", "vorbis"]) is not { } l) return;
-        using var _ = l;
+        using var l = Open(["ogg", "vorbis"]);
         using var v = new VorbisHandle(l["vorbis"]);
         v.Fn("vorbis_info_init", 1).Call(v.Info.Address); v.Fn("vorbis_comment_init", 1).Call(v.Comment.Address);
         var packet = flaw switch
@@ -178,11 +176,10 @@ public sealed class RealMultiModuleTests
         Assert.Equal(Mutated("reject-" + flaw) ? expected + 1 : expected, v.Headerin(packet, bos: true));
     }
 
-    [Fact]
+    [RealLibraryFact("ogg.dll", "vorbis.dll")]
     public void CommentHeaderIsParsedAndQueriedAcrossModules()
     {
-        if (Open(["ogg", "vorbis"]) is not { } l) return;
-        using var _ = l;
+        using var l = Open(["ogg", "vorbis"]);
         var vorbis = l["vorbis"];
         using var v = new VorbisHandle(vorbis);
         v.Fn("vorbis_info_init", 1).Call(v.Info.Address); v.Fn("vorbis_comment_init", 1).Call(v.Comment.Address);
@@ -213,30 +210,53 @@ public sealed class RealMultiModuleTests
 
     // ---- vorbisFile: a real stream produced by ffmpeg/libvorbis, decoded and compared with ffmpeg's own decode ----
 
-    private static string? Ffmpeg(params string[] args)
+    /// <summary>Optional directory holding tone.ogg and tone.s16 (what the ffmpeg command below produces); scripts/wine/run-tests.sh prepares it on Linux because a Windows/Wine process has no ffmpeg.</summary>
+    private const string ReferenceDirVariable = "BLITZCS_VORBIS_REFERENCE_DIR";
+    private static string? ReferenceDir => Environment.GetEnvironmentVariable(ReferenceDirVariable) is { Length: > 0 } d && File.Exists(Path.Combine(d, "tone.ogg")) && File.Exists(Path.Combine(d, "tone.s16")) ? d : null;
+
+    private static string? FfmpegWithVorbis()
+    {
+        if (RealLibraries.ToolSkipReason("ffmpeg") is { } missing) return missing;
+        var r = Ffmpeg("-encoders");
+        return r.Output.Contains("libvorbis", StringComparison.Ordinal) ? null : "ffmpeg has no libvorbis encoder";
+    }
+
+    private static (int Exit, string Output) Ffmpeg(params string[] args)
     {
         var psi = new ProcessStartInfo("ffmpeg") { RedirectStandardError = true, RedirectStandardOutput = true, UseShellExecute = false };
         foreach (var a in new[] { "-hide_banner", "-loglevel", "error", "-y" }.Concat(args)) psi.ArgumentList.Add(a);
-        try
-        {
-            using var p = Process.Start(psi)!;
-            p.StandardOutput.ReadToEnd(); var err = p.StandardError.ReadToEnd();
-            return p.WaitForExit(60000) && p.ExitCode == 0 ? null : "ffmpeg failed: " + err;
-        }
-        catch (System.ComponentModel.Win32Exception) { return "ffmpeg is not installed"; }
+        using var p = Process.Start(psi)!;
+        var stdout = p.StandardOutput.ReadToEndAsync(); var err = p.StandardError.ReadToEnd();
+        return (p.WaitForExit(60000) ? p.ExitCode : -1, stdout.Result + err);
     }
 
-    [Fact]
+    /// <summary>Skipped with the reason unless the three DLLs and a source of reference audio (prepared directory or a local ffmpeg with libvorbis) exist.</summary>
+    [AttributeUsage(AttributeTargets.Method)]
+    private sealed class VorbisStreamFactAttribute : FactAttribute
+    {
+        public VorbisStreamFactAttribute()
+        {
+            Skip = RealLibraries.DirSkipReason("ogg.dll", "vorbis.dll", "vorbisFile.dll")
+                ?? (ReferenceDir is not null ? null : FfmpegWithVorbis() is { } r ? $"no reference stream: {ReferenceDirVariable} is not set and {r}" : null);
+        }
+    }
+
+    [VorbisStreamFact]
     public void VorbisFileDecodesARealStreamLikeFfmpegAcrossThreeModules()
     {
-        if (Dir is null || !File.Exists(Path.Combine(Dir, "vorbisFile.dll"))) return;
         var work = Path.Combine(Path.GetTempPath(), "bcs-vorbis-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         try
         {
             var ogg = Path.Combine(work, "tone.ogg"); var pcm = Path.Combine(work, "tone.s16");
-            if (Ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=0.6:sample_rate=22050", "-ac", "2", "-c:a", "libvorbis", "-q:a", "3", ogg) is not null) return;   // no encoder here: nothing to test against
-            if (Ffmpeg("-i", ogg, "-f", "s16le", "-acodec", "pcm_s16le", pcm) is not null) return;
+            if (ReferenceDir is { } prepared) { File.Copy(Path.Combine(prepared, "tone.ogg"), ogg); File.Copy(Path.Combine(prepared, "tone.s16"), pcm); }
+            else
+            {
+                var encode = Ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=0.6:sample_rate=22050", "-ac", "2", "-c:a", "libvorbis", "-q:a", "3", ogg);
+                Assert.True(encode.Exit == 0, "ffmpeg encode failed: " + encode.Output);
+                var decode = Ffmpeg("-i", ogg, "-f", "s16le", "-acodec", "pcm_s16le", pcm);
+                Assert.True(decode.Exit == 0, "ffmpeg decode failed: " + decode.Output);
+            }
             var stream = File.ReadAllBytes(ogg); var reference = File.ReadAllBytes(pcm);
 
             // The stream is served by host callbacks. vorbisFile.dll has no file imports of its own that we could use, so the four function pointers
@@ -261,7 +281,7 @@ public sealed class RealMultiModuleTests
                 .Add("KERNEL32.dll", "CloseHandle", GuestImportBuilder.CdeclCall(_ => 0))
                 .Add("KERNEL32.dll", "FlushFileBuffers", GuestImportBuilder.CdeclCall(_ => (uint)position));   // long tell(void* ds)
 
-            using var l = Open(["ogg", "vorbis", "vorbisFile"], name => name == "vorbisFile" ? imports : null)!;
+            using var l = Open(["ogg", "vorbis", "vorbisFile"], name => name == "vorbisFile" ? imports : null);
             var vf = l["vorbisFile"];
             uint Stub(string n) => vf.GetImportStubAddress("KERNEL32.dll", n)!.Value;
             GuestFunction Fn(string n, int a) => vf.Bind(n, GuestCallingConvention.Cdecl, a);

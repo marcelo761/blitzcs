@@ -175,11 +175,10 @@ public sealed class HostScenarioTests
         Assert.Equal(3u, first.Bind("add", GuestCallingConvention.Cdecl, 2).Call(1, 2)); // the first module is untouched
     }
 
-    [Fact]
+    [WindowsOnlyFact("a base below the host minimum is refused only on Windows; Linux accepts any page-aligned base")]
     public void A_base_below_the_hosts_minimum_is_refused_before_any_mapping()
     {
-        if (!OperatingSystem.IsWindows()) return;   // Linux accepts any page-aligned base
-        var image = PeReader.Read(new PeFixtureBuilder().WithCode([0xC3]).WithData(new byte[16]).Export("f", 0).Relocate(PeFixtureBuilder.DataRva).Build());
+        var image = PeReader.Read(new PeFixtureBuilder().WithImageBase(PeFixtureBuilder.LowBase).WithCode([0xC3]).WithData(new byte[16]).Export("f", 0).Relocate(PeFixtureBuilder.DataRva).Build());
         var art = X64Translator.Translate(image, new BinaryCompilerOptions(TargetOs: BinaryTargets.WindowsX64), "low") with { Diagnostics = [] };
         var error = Assert.Throws<GuestAddressSpaceException>(() => GuestModule.Load(art, image, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false }));
         Assert.Contains("0x20000000", error.Message);

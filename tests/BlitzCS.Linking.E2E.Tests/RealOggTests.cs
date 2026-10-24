@@ -1,4 +1,5 @@
 using System.Text;
+using BlitzCS.Testing;
 using Xunit;
 
 namespace BlitzCS.Linking.E2E.Tests;
@@ -19,12 +20,10 @@ public sealed class RealOggTests : E2EBase
     }
     private static uint Crc(byte[] data) { uint c = 0; foreach (var x in data) c = (c << 8) ^ CrcTable[((c >> 24) & 0xFF) ^ x]; return c; }
 
-    private string? Stage(params string[] files)
+    /// <summary>Copies the named libraries into the test's scratch folder. The callers are [RealLibraryFact]s, skipped at discovery when the files are absent.</summary>
+    private void Stage(params string[] files)
     {
-        var dir = RealDirectory();
-        if (dir is null || files.Any(f => !File.Exists(Path.Combine(dir, f)))) return null;
-        foreach (var f in files) File.Copy(Path.Combine(dir, f), Path.Combine(Root, f));
-        return dir;
+        foreach (var f in files) File.Copy(RealLibraries.PathOf(f), Path.Combine(Root, f));
     }
 
     private static string ExpectedOgg()
@@ -50,10 +49,10 @@ public sealed class RealOggTests : E2EBase
         return sb.ToString();
     }
 
-    [Fact]
+    [RealLibraryFact("ogg.dll")]
     public void BasicProgramDrivesRealLibogg()
     {
-        if (Stage("ogg.dll") is null) return;
+        Stage("ogg.dll");
         var catalog = File.ReadAllText(RepoFile("samples/BinaryLinking/Real/ogg.json"));
         var source = File.ReadAllText(RepoFile("samples/BinaryLinking/Real/ogg.bb"));
         var stdout = Build(source, catalog, out var exit, out var err);
@@ -61,10 +60,10 @@ public sealed class RealOggTests : E2EBase
         Assert.Equal(ExpectedOgg(), Run());
     }
 
-    [Fact]
+    [RealLibraryFact("ogg.dll", "vorbis.dll")]
     public void VorbisAndOggLoadAsOneRebasedSetAndVorbisCallsIntoOgg()
     {
-        if (Stage("ogg.dll", "vorbis.dll") is null) return;
+        Stage("ogg.dll", "vorbis.dll");
         const string I = "Integer";
         var catalog = "{\"binaryLibraries\":[{\"path\":\"ogg.dll\",\"defaultConvention\":\"cdecl\"},{\"path\":\"vorbis.dll\",\"defaultConvention\":\"cdecl\"}],\"functions\":["
             + string.Join(",", new[]

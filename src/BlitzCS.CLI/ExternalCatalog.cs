@@ -7,7 +7,7 @@ namespace BlitzCS.CLI;
 
 internal static class ExternalCatalog
 {
-    internal static ExternalCatalogResult Load(string catalogPath)
+    internal static ExternalCatalogResult Load(string catalogPath, string? target = null)
     {
         catalogPath = Path.GetFullPath(catalogPath);
         using var document = JsonDocument.Parse(File.ReadAllText(catalogPath));
@@ -29,7 +29,7 @@ internal static class ExternalCatalog
             ?? throw new ArgumentException($"External catalog '{key}' cannot be null.");
         var catalogDirectory = Path.GetDirectoryName(catalogPath)!;
         var binaryItems = items.Where(item => item.TryGetProperty("binary", out var binary) && binary.ValueKind != JsonValueKind.Null).ToArray();
-        var specs = ReadLibrarySpecs(root, binaryItems, catalogDirectory);
+        var specs = ReadLibrarySpecs(root, binaryItems, catalogDirectory, BinaryTranslationStep.ResolveTarget(binaryTarget, target));
         var binaryLibraries = specs.Select(spec => spec.Path).ToArray();
         var binaryBindings = binaryItems.Select(item => ReadBinding(item, catalogDirectory, specs)).ToArray();
         DirectoryStaging? staging = null;
@@ -111,7 +111,7 @@ internal static class ExternalCatalog
     /// Merges the <c>binaryLibraries</c> entries with the libraries named by function bindings (implicit entries with defaults), rejects duplicate files
     /// and duplicate output file names, and runs the opt-in preprocessors (<c>unpack</c>).
     /// </summary>
-    private static List<BinaryLibrarySpec> ReadLibrarySpecs(JsonElement root, JsonElement[] binaryItems, string catalogDirectory)
+    private static List<BinaryLibrarySpec> ReadLibrarySpecs(JsonElement root, JsonElement[] binaryItems, string catalogDirectory, string targetOs)
     {
         var specs = new List<BinaryLibrarySpec>();
         if (root.TryGetProperty("binaryLibraries", out var entries) && entries.ValueKind == JsonValueKind.Array)
@@ -142,7 +142,8 @@ internal static class ExternalCatalog
                 throw new ArgumentException($"Binary libraries '{other}' and '{spec.Path}' have the same file name; modules are published side by side and linked by name.");
             else names[spec.FileName] = spec.Path;
         var work = BinaryCache.Directory();
-        for (var i = 0; i < specs.Count; i++) specs[i] = specs[i].Preprocess(work);
+        var unpackBases = BinaryTranslationStep.PlanUnpackBases(specs, targetOs);
+        for (var i = 0; i < specs.Count; i++) specs[i] = specs[i].Preprocess(work, unpackBases[i]);
         return specs;
     }
 

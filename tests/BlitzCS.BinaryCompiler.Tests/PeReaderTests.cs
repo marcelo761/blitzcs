@@ -1,3 +1,4 @@
+using BlitzCS.Testing;
 using Xunit;
 using System.Buffers.Binary;
 using BlitzCS.BinaryCompiler.Tests.Support;
@@ -169,15 +170,15 @@ public class PeReaderTests
         Assert.Throws<ArgumentOutOfRangeException>(() => PeRelocator.Apply(img, new byte[16], 0x2000));
     }
 
-    [Fact]
+    [RealLibraryFact]
     public void ReadsRealWorldDll()
     {
-        // Optional: point BLITZCS_REAL_PE32_DIR at a directory of locally available PE32 DLLs; nothing is copied or distributed.
-        var dir = Environment.GetEnvironmentVariable("BLITZCS_REAL_PE32_DIR");
-        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
-        foreach (var p in Directory.EnumerateFiles(dir, "*.dll").Take(20))
+        // Point BLITZCS_REAL_PE32_DIR at a directory of locally available PE32 DLLs; nothing is copied or distributed. Skipped (with the reason) when it is not set.
+        var dir = RealLibraries.Dir!;
+        var dlls = Directory.EnumerateFiles(dir, "*.dll").Take(20).ToList();
+        Assert.NotEmpty(dlls);
+        foreach (var p in dlls)
         {
-            if (!File.Exists(p)) continue;
             var img = Read(File.ReadAllBytes(p));
             Assert.Equal(0x14C, img.Machine);
             Assert.NotEmpty(img.Sections);

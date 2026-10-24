@@ -12,7 +12,9 @@
     <!-- Test fixture builders are shared by file, not by project reference. -->
     <Compile Include="../BlitzCS.BinaryCompiler.Tests/Support/PeFixtureBuilder.cs" Link="Shared/PeFixtureBuilder.cs" />
     <Compile Include="../BlitzCS.BinaryCompiler.Tests/Support/TranslatorHarness.cs" Link="Shared/TranslatorHarness.cs" />
+    <Compile Include="../BlitzCS.BinaryCompiler.Tests/Support/GeneratedProgramRunner.cs" Link="Shared/GeneratedProgramRunner.cs" />
     <Compile Include="../BlitzCS.BinaryCompiler.Tests/Support/Asm32.cs" Link="Shared/Asm32.cs" />
     <Compile Include="../BlitzCS.BinaryCompiler.Unpack.Tests/SyntheticPacker.cs" Link="Shared/SyntheticPacker.cs" />
+    <Compile Include="../Shared/RealLibraryAttributes.cs" Link="Shared/RealLibraryAttributes.cs" />
   </ItemGroup>
 </Project>

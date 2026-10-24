@@ -87,6 +87,13 @@ internal sealed class FileState : IDisposable
                 var match = Directory.EnumerateFileSystemEntries(current).Select(Path.GetFileName).FirstOrDefault(n => string.Equals(n, parts[i], StringComparison.OrdinalIgnoreCase));
                 if (match is not null) next = Path.Combine(current, match);
             }
+            else if (!ctx.Options.CaseInsensitiveFileNames && HostIsCaseInsensitive && Exists(next) && Directory.Exists(current)
+                     && !Directory.EnumerateFileSystemEntries(current).Any(e => string.Equals(Path.GetFileName(e), parts[i], StringComparison.Ordinal)))
+            {
+                // Exact-case lookups were requested but the host file system folds case (Windows, macOS, Wine): Exists() would accept "DIR" for "dir".
+                // The name only matches in a different case, which a case-sensitive file system would report as missing.
+                return (null, i == parts.Count - 1 ? Win32Error.FileNotFound : Win32Error.PathNotFound);
+            }
             if (Exists(next) && (File.GetAttributes(next) & FileAttributes.ReparsePoint) != 0) return (null, Win32Error.AccessDenied); // links are never followed
             current = next;
         }
@@ -94,6 +101,9 @@ internal sealed class FileState : IDisposable
     }
 
     private static bool Exists(string p) => File.Exists(p) || Directory.Exists(p);
+
+    /// <summary>The default file systems of Windows and macOS (and therefore Wine) fold case; Linux file systems are case-sensitive.</summary>
+    private static bool HostIsCaseInsensitive => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
 }
 
 /// <summary>

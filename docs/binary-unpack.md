@@ -21,7 +21,7 @@ The stub never runs through the Win32 component either; the sandbox answers only
 
 `ControlledUnpacker.TryUnpack(PeImage packed, UnpackOptions?) -> UnpackResult(DerivedPe, Report, Diagnostics, Lineage)`.
 
-* Memory: the mapped image at its preferred base (so the dump is consistent with the translator's fixed base), a 1 MiB stack, a TEB/PEB page
+* Memory: the mapped image at its preferred base, or at `UnpackOptions.LoadBase` (next section), so the dump is consistent with the translator's fixed base; a 1 MiB stack, a TEB/PEB page
   (SEH list head, stack bounds, self pointer, PEB pointer, image base) and bump-allocated `VirtualAlloc` regions. All fixed zones are checked against the image range.
 * CPU: integer IA-32 (mov/alu/shifts/rotates/mul/div/string ops with rep, push/pop/pushad/popad/flags, call/jmp/ret/jcc/loop, setcc/cmovcc, bt*, bsf/bsr, bswap, xchg, fs: reads).
   FPU/SSE, gs:, far transfers and anything else: `UNPACK_UNSUPPORTED_INSTRUCTION` with address and text.
@@ -56,10 +56,33 @@ A **new** PE32 is produced; the input file is never touched.
   not found without relocations, and code mixed with writable data on one page becomes read-only.
 * Imports: every aligned dword of the snapshot that equals a handed-out thunk is an IAT slot; consecutive slots of one DLL form one descriptor in a new `.impfix` section, names/ordinals from the
   `GetProcAddress` log. Slots inside the stub's own section (its private table) are dropped. A resolved import that is stored nowhere in the final image is reported (`UNPACK_UNSTORED_IMPORTS`).
-* Relocations are dropped and `IMAGE_FILE_RELOCS_STRIPPED` set (the dump is for the preferred base); `DYNAMIC_BASE` cleared; exports, resources and TLS are kept; bound/IAT/debug directories cleared.
+* Relocations are dropped and `IMAGE_FILE_RELOCS_STRIPPED` set (the dump is for the base the stub ran at: the preferred base, or `LoadBase`, which becomes the derived `ImageBase`); `DYNAMIC_BASE` cleared; exports, resources and TLS are kept; bound/IAT/debug directories cleared.
 * Lineage (`UnpackLineage`): `DerivedFromSha256`, `UnpackerVersion`, options digest, derived SHA-256. `UnpackBuild.TranslateWithUnpack` stores the derived image and a `.lineage.json` in
   `<cache>/unpacked/<key>.dll`, reuses it when hash and lineage match, and adds `unpack:<orig>:<version>:<options>` to the translation cache key's dependencies. The original hash does not
   appear in the BCX artifact itself (`SourceSha256` is the derived image's); the sidecar and the cache key carry the link.
+
+## Running the stub at a chosen base (`UnpackOptions.LoadBase`)
+
+windows-x64 cannot map an image below `0x20000000` (`BC_BASE_UNUSABLE_ON_TARGET`, see `docs/binary-windows-host.md`), and an unpacked image has no relocation table, so a library that
+prefers `0x10000000` (FMOD, most DLLs) could not be loaded there. The stub is therefore run with the image **mapped at the base the build wants**:
+
+* `UnpackOptions.LoadBase` (default `null` = the preferred base; 64 KiB aligned, image below 4 GiB, outside the sandbox zones, else `UNPACK_BAD_LOAD_BASE` / `UNPACK_ADDRESS_CONFLICT`).
+* The sandbox first does what the Windows loader does for a DLL loaded away from its preferred base: it applies the **packed file's own** base relocations (for UPX typically the one
+  entry of the stub), stores the actual base into the in-memory optional header, and hands the base out as the module handle (`DllMain`'s `hinstDLL`, `GetModuleHandle(NULL)`, `PEB.ImageBaseAddress`).
+  A packed file without relocations cannot be moved (the real loader could not either): `UNPACK_LOAD_BASE_NO_RELOCS`.
+* A packer handles the rest itself, exactly as it does on a real system: the stub derives `delta = runtime base - preferred base` from its own runtime address and adds it to every location of
+  its packed relocation list in the unpacked image. After the OEP is reached the snapshot is therefore correct for `LoadBase`; the derived PE gets `ImageBase = LoadBase` and needs no table.
+* Limits: the derived image is **fixed at `LoadBase`**. It carries no `.reloc` (the stub consumed its relocation data and does not leave a usable table in memory), so `PeImage.Rebase` refuses it
+  (`PE_REBASE_NO_RELOCS`); a different base means unpacking again with another `LoadBase` (the options digest, and with it the derived-file key, lineage and translation cache key, include the base).
+  A stub that does not relocate (a packer that assumes its preferred base) produces a dump that is wrong for any other base: not detectable generically, the run simply faults.
+* Build policy (CLI): `BinaryTranslationStep.PlanUnpackBases` runs **before** any stub, from `ExternalCatalog.Load` (the target comes from `--target`, the catalog or `BLITZCS_BINARY_TARGET`).
+  For `windows-x64` the whole library set is planned with `ModuleBaseAllocator` (packed images keep their preferred base when usable, otherwise get the next free base of the image window) and each
+  `unpack` library is unpacked at its planned base through `IBinaryPreprocessor.Preprocess(path, workDirectory, loadBase)` (additive overload; preprocessors that ignore the base keep working).
+  The derived image is then fixed at that base, which the later allocation honours. For `linux-x64` the preferred base is used (`LoadBase = null`). A packed library that has no relocations and a
+  preferred base below `0x20000000` fails the windows-x64 build with `PE_REBASE_NO_RELOCS` and the Windows hint, before the stub runs.
+* Tests: `UnpackLoadBaseTests` (synthetic packer with a runtime-delta relocating stub: unpack at base A and at base B, each image works at its own base, and the two images differ exactly by `B - A`
+  at the relocated locations and nowhere else), `UnpackRefusalTests` (fixed low-base image: `BC_BASE_UNUSABLE_ON_TARGET` for windows-x64, `PE_REBASE_NO_RELOCS`), `PackedUnpackTests` (CLI policy
+  for windows-x64, run on the host's base), `RealPackedSampleTests` (the real FMOD, see below).
 
 ## Use
 
@@ -68,7 +91,7 @@ var r = UnpackBuild.TranslateWithUnpack(path, new BinaryCompilerOptions(), cache
 // r.Build.Artifact, r.DerivedImage (pass both to GuestModule.Load), r.Lineage, r.UnpackCacheHit
 ```
 
-CLI opt-in (not wired): `IBinaryPreprocessor` (in `BlitzCS.BinaryCompiler`) is the seam; `UnpackPreprocessor` (`Id = "unpack"`) implements it. The CLI should, only when a library entry has
+CLI opt-in (wired, see the last section): `IBinaryPreprocessor` (in `BlitzCS.BinaryCompiler`) is the seam; `UnpackPreprocessor` (`Id = "unpack"`) implements it. The CLI should, only when a library entry has
 `"unpack": true`, load `BlitzCS.BinaryCompiler.Unpack.dll` from its output directory (`Assembly.LoadFrom`, then instantiate the single `IBinaryPreprocessor` whose `Id == "unpack"`), call
 `Preprocess(path, cacheDir)`, translate `DerivedPath` instead of the input and add `LineageToken` to the dependency list. The CLI project keeps no reference to the Unpack project.
 
@@ -82,10 +105,17 @@ Runtime hook added to `GuestModule`: `BoundImports` and `GetImportStubAddress(dl
 * The stub resolved 152 distinct `dll!name` through LoadLibraryA/GetProcAddress and called nothing else (only LoadLibraryA and GetProcAddress themselves); 164 IAT slots rebuilt in 19 descriptors
   (ADVAPI32, MSACM32, MSVCRT, ole32, USER32, WINMM, WSOCK32 ordinals, KERNEL32).
 * Derived image: 52 code pages, 94 data pages, 13 sections; translates with 0 errors and 0 warnings (2 Info: jump tables, fixed base); 232 exports translated.
-* Win32 component coverage of the 164 imports (initially 46 implemented, 118 missing; now 130 implemented incl. registry/COM/user32 subsets, 34 missing: msacm32 8, user32 window APIs, mci 2, sockets 11, DeviceIoControl/OpenFile/VirtualLock/VirtualProtect, sscanf). DllMain returns TRUE; FSOUND_Init is blocked by code reachable only through data pointers (relocations dropped). Previously (winmm 31, msvcrt 33, wsock32 14, user32 10, kernel32 11, msacm32 8, advapi32 6, ole32 5).
+* Win32 component coverage of the 164 imports (initially 46 implemented, 118 missing; now 130 implemented incl. registry/COM/user32 subsets, 34 missing: msacm32 8, user32 window APIs, mci 2, sockets 11, DeviceIoControl/OpenFile/VirtualLock/VirtualProtect, sscanf). DllMain returns TRUE. Previously (winmm 31, msvcrt 33, wsock32 14, user32 10, kernel32 11, msacm32 8, advapi32 6, ole32 5).
 * `_FSOUND_GetVersion@0` (stdcall, no arguments, float in ST0) loaded with `RunEntryPoint=false`, `AllowUnboundImports=true` returned **3.75** (observed, not assumed).
-* `DllMain(DLL_PROCESS_ATTACH)` (the OEP) now runs with `Win32ImportResolver` and returns TRUE (`_initterm` was the first blocker). State-only exports then answer (GetError 0, GetNumDrivers 0 on a host without devices, SetOutput/GetOutput round trip); `FSOUND_Init`, `FSOUND_SetDriver` and driver counts after `SetOutput` trap in code only reachable through the output-driver function table.
-  Exports that need device I/O will fault naming their missing import in the same way.
+* `DllMain(DLL_PROCESS_ATTACH)` (the OEP) runs with `Win32ImportResolver` and returns TRUE. State-only exports answer (GetError 0, GetNumDrivers 0 on a host without devices, SetOutput/GetOutput round trip),
+  `FSOUND_Init(44100, 64, 0)` with NOSOUND completes (the translator finds the output-driver function table by scanning data for code pointers), `GetMaxChannels` is 64 and `FSOUND_Close` returns.
+  Exports that need device I/O fault naming their missing import.
+* **At a chosen base** (`UnpackOptions.LoadBase = 0x30000000`, the run used on windows-x64): the packed file has 1 base relocation (the stub's); the stub reaches the same OEP (0x3CD05, High) after the same 4,946,106
+  instructions; the derived image has `ImageBase = 0x30000000`, 0 relocations, 164 imports, 232 exports, translates for windows-x64, and the whole sequence above (GetVersion 3.75, DllMain TRUE, SetOutput/GetOutput,
+  Init, GetMaxChannels, Close) passes both natively on Linux and as a win-x64 process under Wine (`RealPackedSampleTests.Real_sample_unpacked_at_a_chosen_base_runs_like_the_native_original`).
+  Comparing the images unpacked at 0x10000000 and at 0x30000000: 5,181 four-byte locations differ by exactly 0x20000000 and not a single other byte differs
+  (`Real_sample_unpacked_at_two_bases_differs_only_by_relocated_addresses`): UPX's own relocation processing ran. Observation, not a limit of the feature: this two-base difference is also a way to recover the
+  relocation table of an unpacked image (a future option would unpack twice and emit a `.reloc`; not implemented, so the derived image stays fixed at its `LoadBase`).
 
 ## Limits
 

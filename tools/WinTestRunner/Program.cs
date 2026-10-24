@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Reflection;
 using System.Runtime.Loader;
 using Xunit;
 using Xunit.Runners;
@@ -14,6 +15,9 @@ namespace BlitzCS.WinTestRunner;
 ///   --threads &lt;n&gt;      max parallel collections (default 1; xunit still serialises tests inside one [Collection])
 ///   --verbose          also print passing tests' output
 ///   --list             discover and list tests without running
+///   --run &lt;assembly.dll&gt; [args]   instead of testing, run a generated program (what <c>dotnet assembly.dll</c> does on Linux): loads the assembly and its dependencies
+///                      from its folder (AssemblyDependencyResolver / own load context), invokes the entry point, forwards stdout/stderr, returns its exit code;
+///                      an unhandled exception prints "Unhandled exception. ..." on stderr and returns 134.
 /// Exit code: 0 all passed, 1 failures or errors, 2 usage / nothing run.
 /// </summary>
 internal static class Program
@@ -22,6 +26,7 @@ internal static class Program
 
     private static int Main(string[] args)
     {
+        if (args.Length >= 2 && args[0] == "--run") return RunProgram(args[1], args[2..]);
         var assemblies = new List<string>(); var filters = new List<string>(); var threads = 1; var verbose = false; var list = false;
         for (var i = 0; i < args.Length; i++)
         {
@@ -75,6 +80,47 @@ internal static class Program
         if (list) return 0;
         if (passed + failed + skipped == 0 && errors == 0) { Console.WriteLine("no tests were run"); return 2; }
         return failed > 0 || errors > 0 ? 1 : 0;
+    }
+
+    private sealed class ProgramLoadContext(string path) : AssemblyLoadContext("program", isCollectible: false)
+    {
+        private readonly string dir = Path.GetDirectoryName(path)!;
+        private readonly AssemblyDependencyResolver? resolver = TryResolver(path);
+        private static AssemblyDependencyResolver? TryResolver(string p) { try { return new AssemblyDependencyResolver(p); } catch { return null; } }
+        protected override Assembly? Load(AssemblyName name)
+        {
+            var p = resolver?.ResolveAssemblyToPath(name);
+            if (p is null) { var f = Path.Combine(dir, name.Name + ".dll"); if (File.Exists(f)) p = f; }
+            return p is null ? null : LoadFromAssemblyPath(p);   // null: fall back to the default context (framework assemblies)
+        }
+        protected override IntPtr LoadUnmanagedDll(string name)
+        {
+            var p = resolver?.ResolveUnmanagedDllToPath(name);
+            return p is null ? IntPtr.Zero : LoadUnmanagedDllFromPath(p);
+        }
+    }
+
+    /// <summary>Runs the entry point of a generated program like the dotnet host would (no test framework involved).</summary>
+    private static int RunProgram(string assemblyPath, string[] programArgs)
+    {
+        try
+        {
+            var full = Path.GetFullPath(assemblyPath);
+            var asm = new ProgramLoadContext(full).LoadFromAssemblyPath(full);
+            var entry = asm.EntryPoint ?? throw new InvalidOperationException("assembly has no entry point: " + full);
+            var parameters = entry.GetParameters();
+            var result = entry.Invoke(null, parameters.Length == 0 ? null : [programArgs]);
+            if (result is Task task) { task.GetAwaiter().GetResult(); result = task.GetType().IsGenericType ? task.GetType().GetProperty("Result")!.GetValue(task) : null; }
+            Console.Out.Flush(); Console.Error.Flush();
+            return result is int code ? code : 0;
+        }
+        catch (Exception e)
+        {
+            var inner = e is TargetInvocationException { InnerException: { } i } ? i : e;
+            Console.Out.Flush();
+            Console.Error.WriteLine("Unhandled exception. " + inner);
+            return 134;
+        }
     }
 
     /// <summary>xunit's AssemblyRunner loads the test assembly and its dependencies by name through the default context: resolve them from the test assembly's

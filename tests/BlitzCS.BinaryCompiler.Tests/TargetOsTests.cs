@@ -14,10 +14,11 @@ namespace BlitzCS.BinaryCompiler.Tests;
 public sealed class TargetOsTests
 {
     private static byte[] Body() => Asm(a => { a.mov(eax, __dword_ptr[esp + 4]); a.add(eax, eax); a.ret(); });
+    // These tests translate for either target on any host: the fixture sits at the low base (0x10000000), the one the pinned hashes and the windows-x64 base diagnostic are about.
 
     private static Built For(string targetOs, OptimizationProfile profile = OptimizationProfile.Release, Action<PeFixtureBuilder>? configure = null)
     {
-        var fx = new PeFixtureBuilder().WithCode(Body()).Export("_f", 0);
+        var fx = new PeFixtureBuilder().WithImageBase(PeFixtureBuilder.LowBase).WithCode(Body()).Export("_f", 0);
         configure?.Invoke(fx);
         var image = PeReader.Read(fx.Build());
         return new Built(image, X64Translator.Translate(image, new BinaryCompilerOptions(profile, TargetOs: targetOs), "k"));
@@ -50,7 +51,7 @@ public sealed class TargetOsTests
     {
         Assert.Equal("linux-sysv", For("linux-sysv").Artifact.TargetOs);
         Assert.Equal("windows-x64", For("windows-x64").Artifact.TargetOs);
-        var image = PeReader.Read(new PeFixtureBuilder().WithCode(Body()).Export("_f", 0).Build());
+        var image = PeReader.Read(new PeFixtureBuilder().WithImageBase(PeFixtureBuilder.LowBase).WithCode(Body()).Export("_f", 0).Build());
         Assert.NotEqual(CacheKey.Compute(image, new BinaryCompilerOptions(TargetOs: "linux-sysv")), CacheKey.Compute(image, new BinaryCompilerOptions(TargetOs: "windows-x64")));
     }
 

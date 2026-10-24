@@ -33,7 +33,18 @@ public sealed class RebaseDifferentialTests
             return;
         }
         var atPreferred = OracleDifferential.Run(lib, profile);
-        var atBase = OracleDifferential.Run(lib, profile, loadBase: loadBase);
+        loadBase = HostPlatform.FreeBase(loadBase);   // Windows: the wanted range may be taken by the process itself
+        DifferentialOutcome atBase;
+        for (var attempt = 0; ; attempt++)
+        {
+            try { atBase = OracleDifferential.Run(lib, profile, loadBase: loadBase); break; }
+            // Windows/Wine: the .NET heap grows bottom-up through the image window while the fixture is translated, so the range that was free a moment ago can be taken
+            // by the time the image is mapped. That is an allocation race of the test process, not a translation result: pick the next free run and map again.
+            catch (BlitzCS.BinaryCompiler.Runtime.GuestAddressSpaceException) when (HostPlatform.IsWindows && attempt < 4)
+            {
+                loadBase = HostPlatform.FreeBase(loadBase + 0x100000);
+            }
+        }
         Assert.True(atPreferred.Passed, atPreferred.ToString());
         Assert.True(atBase.Passed, $"rebased to 0x{loadBase:X8}: {atBase}");
         Assert.Equal(atPreferred.Vectors, atBase.Vectors);
@@ -46,10 +57,10 @@ public sealed class RebaseDifferentialTests
         var art = OracleRunner.Build("state");
         Assert.Contains(art.Relocs, r => r >= PeFixtureBuilder.DataRva && r < PeFixtureBuilder.DataRva + 0x1000);
         var broken = art with { Relocs = [.. art.Relocs.Where(r => r < PeFixtureBuilder.DataRva)] };   // table entries no longer relocated
-        var fixture = new PeFixtureBuilder().WithCode(broken.Code).WithData(broken.Data);
+        var fixture = new PeFixtureBuilder().WithImageBase(PeFixtureBuilder.OracleBase).WithCode(broken.Code).WithData(broken.Data);
         foreach (var (n, o) in broken.Exports) fixture.Export(n, o);
         foreach (var r in broken.Relocs) fixture.Relocate(r);
-        var image = PeReader.Read(fixture.Build()).Rebase(0x20000000);
+        var image = PeReader.Read(fixture.Build()).Rebase(HostPlatform.FreeBase(0x20000000));
         var tr = BlitzCS.BinaryCompiler.CodeGen.X64Translator.Translate(image, new BinaryCompilerOptions(), "mut");
         using var m = BlitzCS.BinaryCompiler.Runtime.GuestModule.Load(tr, image, new BlitzCS.BinaryCompiler.Runtime.DictionaryGuestImportResolver(), new BlitzCS.BinaryCompiler.Runtime.GuestModuleOptions { RunEntryPoint = false });
         var oracle = OracleRunner.Run("state");

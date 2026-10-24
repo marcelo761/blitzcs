@@ -13,8 +13,8 @@ namespace BlitzCS.BinaryCompiler.Tests;
 [Collection("GuestRuntime")]
 public sealed class TebTlsTests
 {
-    private const uint Data = PeFixtureBuilder.ImageBase + PeFixtureBuilder.DataRva;
-    private const uint Log = PeFixtureBuilder.ImageBase + PeFixtureBuilder.IdataRva + 0x400;
+    private static readonly uint Data = PeFixtureBuilder.ImageBase + PeFixtureBuilder.DataRva;
+    private static readonly uint Log = PeFixtureBuilder.ImageBase + PeFixtureBuilder.IdataRva + 0x400;
     private const uint TemplateOff = 0x100, IndexOff = 0x20, CallbacksOff = 0x30;
 
     private sealed record Fixture(byte[] Pe, int ReadOffset, int IncOffset);
@@ -23,7 +23,7 @@ public sealed class TebTlsTests
     /// _read(off): value of the thread's TLS data at byte offset off (the MSVC access sequence: [tls_index] -> fs:[2Ch][index*4] -> +off).
     /// _inc(off): adds 1 to that dword and returns the new value. A TLS callback logs its reason through the host import.
     /// </summary>
-    private static Fixture Build(bool callbacks = true, uint indexAddress = Data + IndexOff, uint zeroFill = 0x20, bool withTls = true)
+    private static Fixture Build(bool callbacks = true, uint? indexAddress = null, uint zeroFill = 0x20, bool withTls = true)
     {
         var read = Asm(a =>
         {
@@ -43,7 +43,7 @@ public sealed class TebTlsTests
         var data = new byte[0x400];
         void W(int at, uint v) => BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(at), v);
         const uint templateLength = 16;
-        W(0x00, Data + TemplateOff); W(0x04, Data + TemplateOff + templateLength); W(0x08, indexAddress);
+        W(0x00, Data + TemplateOff); W(0x04, Data + TemplateOff + templateLength); W(0x08, indexAddress ?? Data + IndexOff);
         W(0x0C, callbacks ? Data + CallbacksOff : 0); W(0x10, zeroFill); W(0x14, 0);
         W((int)IndexOff, 0x55);                                   // the loader must overwrite this with the real index
         W((int)CallbacksOff, PeFixtureBuilder.ImageBase + PeFixtureBuilder.TextRva + (uint)cbAt); W((int)CallbacksOff + 4, 0);

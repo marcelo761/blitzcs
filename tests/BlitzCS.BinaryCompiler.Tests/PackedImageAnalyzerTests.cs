@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using BlitzCS.BinaryCompiler.Tests.Support;
+using BlitzCS.Testing;
 using Xunit;
 
 namespace BlitzCS.BinaryCompiler.Tests;
@@ -142,27 +143,20 @@ public sealed class PackedImageAnalyzerTests
         Assert.Equal(PackedVerdict.Likely, Run(Mutate(Plain(), 0, name: ".text", rawSize: 0)).Verdict);
     }
 
-    [Fact]
+    [RealLibraryFact("ogg.dll", "vorbis.dll", "vorbisFile.dll", "eax.dll")]
     public void Real_unpacked_libraries_are_not_flagged()
     {
-        var dir = Environment.GetEnvironmentVariable("BLITZCS_REAL_PE32_DIR");
-        if (string.IsNullOrEmpty(dir)) return;
         foreach (var name in new[] { "ogg.dll", "vorbis.dll", "vorbisFile.dll", "eax.dll" })
         {
-            var path = Path.Combine(dir, name);
-            if (!File.Exists(path)) continue;
-            var r = Run(File.ReadAllBytes(path));
+            var r = Run(File.ReadAllBytes(RealLibraries.PathOf(name)));
             Assert.True(r.Verdict == PackedVerdict.None, $"{name} flagged: {string.Join("; ", r.Reasons)}");
         }
     }
 
-    [Fact]
+    [PackedSampleFact]
     public void The_local_fmod_stub_is_recognised_as_packed()
     {
-        var path = Environment.GetEnvironmentVariable("BLITZCS_PACKED_SAMPLE");
-        if (string.IsNullOrEmpty(path)) for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent) { var c = Path.Combine(d.FullName, "artifacts", "m13-fmod", "fmod.dll"); if (File.Exists(c)) { path = c; break; } }
-        if (path is null || !File.Exists(path)) return;
-        var r = Run(File.ReadAllBytes(path));
+        var r = Run(File.ReadAllBytes(RealLibraries.PackedSample!));
         Assert.Equal(PackedVerdict.Likely, r.Verdict);
         Assert.True(Has(r, "PACK_UNBACKED_EXEC_SECTION"));
         Assert.True(Has(r, "PACK_EXPORT_UNBACKED"));

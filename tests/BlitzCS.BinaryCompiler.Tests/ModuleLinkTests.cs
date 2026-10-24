@@ -74,7 +74,7 @@ public sealed class ModuleLinkTests
 
     private static List<Built> Translate(params (string Name, PeImage Image)[] mods)
     {
-        var plan = ModuleBaseAllocator.Allocate(mods.Select(m => (m.Name, m.Image)).ToList());
+        var plan = ModuleBaseAllocator.Allocate(mods.Select(m => (m.Name, m.Image)).ToList(), HostPlatform.AllocatorReserved());
         var list = new List<Built>();
         for (var i = 0; i < mods.Length; i++)
         {

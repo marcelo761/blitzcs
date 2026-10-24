@@ -19,7 +19,7 @@ internal static class DerivedPeWriter
     private sealed record Sec(string Name, uint Va, uint VSize, uint Flags, byte[]? Own = null);
     private sealed record Group(string Dll, uint StartRva, List<string> Names);
 
-    public static BuiltPe? Build(PeImage packed, byte[] snapshot, uint oepRva, GuestLoaderSandbox loader, HashSet<uint> stubSlots, int entrySection, List<BinaryDiagnostic> diags)
+    public static BuiltPe? Build(PeImage packed, byte[] snapshot, uint oepRva, uint loadBase, GuestLoaderSandbox loader, HashSet<uint> stubSlots, int entrySection, List<BinaryDiagnostic> diags)
     {
         var mem = (byte[])snapshot.Clone();
         var b = packed.Bytes;
@@ -76,7 +76,7 @@ internal static class DerivedPeWriter
         var original = packed.Sections.Select(s => new Sec(s.Name, s.VirtualAddress, Span(s), s.Characteristics)).ToList();
         var pass1 = original.Select(s => (s.Flags & Writable) != 0 && (s.Flags & Executable) != 0 ? s with { Flags = s.Flags & ~Writable } : s).ToList();
         if (importBlob.Length > 0) pass1.Add(new Sec(".impfix", importVa, (uint)importBlob.Length, ImportFlags, importBlob));
-        var probeBytes = Assemble(b, pe, opt, table, sizeOfHeaders, fileAlignment, sectionAlignment, oepRva, mem, pass1, importVa, importDirSize, diags);
+        var probeBytes = Assemble(b, pe, opt, table, sizeOfHeaders, fileAlignment, sectionAlignment, oepRva, loadBase, mem, pass1, importVa, importDirSize, diags);
         if (probeBytes is null) return null;
         var probe = PeReader.Read(probeBytes);
         var cfg = ControlFlowGraph.Build(probe, probe.MapImage());
@@ -106,7 +106,7 @@ internal static class DerivedPeWriter
                     runs[k].Code ? CodeFlags : DataFlags));
         }
         if (importBlob.Length > 0) final.Add(new Sec(".impfix", importVa, (uint)importBlob.Length, ImportFlags, importBlob));
-        var bytes = Assemble(b, pe, opt, table, sizeOfHeaders, fileAlignment, sectionAlignment, oepRva, mem, final, importVa, importDirSize, diags);
+        var bytes = Assemble(b, pe, opt, table, sizeOfHeaders, fileAlignment, sectionAlignment, oepRva, loadBase, mem, final, importVa, importDirSize, diags);
         return bytes is null ? null : new BuiltPe(bytes, importCount, groups.Count, codeCount, dataCount);
     }
 
@@ -160,7 +160,7 @@ internal static class DerivedPeWriter
         return blob;
     }
 
-    private static byte[]? Assemble(byte[] orig, int pe, int opt, int table, uint sizeOfHeaders, uint fileAlignment, uint sectionAlignment, uint oep,
+    private static byte[]? Assemble(byte[] orig, int pe, int opt, int table, uint sizeOfHeaders, uint fileAlignment, uint sectionAlignment, uint oep, uint loadBase,
         byte[] mem, List<Sec> sections, uint importVa, uint importDirSize, List<BinaryDiagnostic> diags)
     {
         if (table + sections.Count * 40L > sizeOfHeaders)
@@ -196,6 +196,7 @@ internal static class DerivedPeWriter
         BinaryPrimitives.WriteUInt16LittleEndian(headers.AsSpan(pe + 6), (ushort)sections.Count);
         BinaryPrimitives.WriteUInt16LittleEndian(headers.AsSpan(pe + 22), (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(headers.AsSpan(pe + 22)) | 0x0001)); // RELOCS_STRIPPED
         W32(opt + 16, oep);
+        W32(opt + 28, loadBase);   // the dump is correct for the base the stub ran at; there is no relocation table, so this is also the only base it can be mapped at
         W32(opt + 56, Align(last.Va + last.VSize, sectionAlignment));
         W32(opt + 64, 0);
         BinaryPrimitives.WriteUInt16LittleEndian(headers.AsSpan(opt + 70), (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(headers.AsSpan(opt + 70)) & ~0x0040)); // not DYNAMIC_BASE

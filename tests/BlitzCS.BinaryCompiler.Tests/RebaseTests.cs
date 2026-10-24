@@ -11,7 +11,7 @@ public sealed class RebaseTests
     /// <summary>One function-pointer table (relocated) and one function that dispatches through it, a jump table, an absolute data load.</summary>
     private static byte[] Fixture(bool relocs)
     {
-        var a = new Asm32();
+        var a = new Asm32(PeFixtureBuilder.LowBase);   // the fixture is linked at the low base on every host (the tests rebase it)
         // f0: return table[1](arg) via an absolute function-pointer table at data+0x10 (entries are absolute VAs -> relocated)
         a.Raw(0x8B, 0x44, 0x24, 0x04);                       // mov eax,[esp+4]
         a.Raw(0x83, 0xE0, 0x01);                             // and eax,1
@@ -28,10 +28,10 @@ public sealed class RebaseTests
         var f4 = a.Func(); a.LoadEaxAbs(PeFixtureBuilder.DataRva + 0x40).Ret();   // returns data dword (absolute load)
         var data = new byte[0x100];
         void Put(int o, uint v) => BitConverter.GetBytes(v).CopyTo(data, o);
-        Put(0x10, PeFixtureBuilder.ImageBase + PeFixtureBuilder.TextRva + f1); Put(0x14, PeFixtureBuilder.ImageBase + PeFixtureBuilder.TextRva + f2);
-        Put(0x20, PeFixtureBuilder.ImageBase + PeFixtureBuilder.TextRva + j0); Put(0x24, PeFixtureBuilder.ImageBase + PeFixtureBuilder.TextRva + j1);
+        Put(0x10, PeFixtureBuilder.LowBase + PeFixtureBuilder.TextRva + f1); Put(0x14, PeFixtureBuilder.LowBase + PeFixtureBuilder.TextRva + f2);
+        Put(0x20, PeFixtureBuilder.LowBase + PeFixtureBuilder.TextRva + j0); Put(0x24, PeFixtureBuilder.LowBase + PeFixtureBuilder.TextRva + j1);
         Put(0x40, 0xCAFE0001);
-        var fx = new PeFixtureBuilder().WithCode(a.Bytes).WithData(data).Export("viatable", 0).Export("viajump", f3).Export("readdata", f4);
+        var fx = new PeFixtureBuilder().WithImageBase(PeFixtureBuilder.LowBase).WithCode(a.Bytes).WithData(data).Export("viatable", 0).Export("viajump", f3).Export("readdata", f4);
         if (relocs)
         {
             foreach (var r in a.Relocs) fx.Relocate(r);
@@ -126,12 +126,15 @@ public sealed class RebaseTests
     {
         var image = PeReader.Read(Fixture(true));
         TranslationArtifact At(uint? b) => X64Translator.Translate(image, new BinaryCompilerOptions(LoadBase: b), "k");
-        var a = At(null); var c = At(0x30000000);
+        // Linux: the preferred base and 0x30000000. Windows cannot map the fixture's low preferred base at all, so both are free bases inside its image window.
+        var baseA = HostPlatform.RequiresHighGuestBase ? HostPlatform.FreeBase(0x20000000) : (uint?)null;
+        var baseC = HostPlatform.FreeBase(HostPlatform.RequiresHighGuestBase ? 0x40000000u : 0x30000000u);
+        var a = At(baseA); var c = At(baseC);
         Assert.Equal(a.CodeSize, c.CodeSize);
         Assert.Equal(a.AddressMap.Select(m => m.HostOffset), c.AddressMap.Select(m => m.HostOffset));   // identical code layout
         Assert.Equal(a.HostImage.AsSpan(0, a.CodeSize).Length, c.HostImage.AsSpan(0, c.CodeSize).Length);
 
-        foreach (var (art, img) in new[] { (a, image), (c, image.Rebase(0x30000000)) })
+        foreach (var (art, img) in new[] { (a, baseA is { } ba ? image.Rebase(ba) : image), (c, image.Rebase(baseC)) })
         {
             using var m = GuestModule.Load(art, img, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false });
             Assert.Equal(img.ImageBase, m.ImageBase);
@@ -149,18 +152,21 @@ public sealed class RebaseTests
     public void LoaderRejectsMismatchedLineage_AndNamesTheOccupant()
     {
         var image = PeReader.Read(Fixture(true));
-        var moved = X64Translator.Translate(image, new BinaryCompilerOptions(LoadBase: 0x30000000), "k");
+        var moved = X64Translator.Translate(image, new BinaryCompilerOptions(LoadBase: HostPlatform.FreeBase(0x30000000)), "k");
         var ex = Assert.Throws<GuestLoadException>(() => GuestModule.Load(moved, image, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false }));
         Assert.Contains("PeImage.Rebase", ex.Message);
 
-        var art = X64Translator.Translate(image, new BinaryCompilerOptions(), "k");
-        using var first = GuestModule.Load(art, image, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false });
-        var clash = Assert.Throws<GuestAddressSpaceException>(() => GuestModule.Load(art, image, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false }));
-        Assert.Contains("occupied by 0x10000000-", clash.Message);   // names the existing mapping from /proc/self/maps
+        // Linux loads the fixture at its preferred base; Windows cannot map that low base, so it loads the same fixture rebased to a free base inside its window.
+        var at = HostPlatform.RequiresHighGuestBase ? HostPlatform.FreeBase(0x20000000) : image.ImageBase;
+        var loaded = at == image.ImageBase ? image : image.Rebase(at);
+        var art = X64Translator.Translate(image, new BinaryCompilerOptions(LoadBase: at == image.ImageBase ? null : at), "k");
+        using var first = GuestModule.Load(art, loaded, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false });
+        var clash = Assert.Throws<GuestAddressSpaceException>(() => GuestModule.Load(art, loaded, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false }));
+        Assert.Contains($"occupied by 0x{at:X8}-", clash.Message);   // names the existing mapping (/proc/self/maps on Linux, VirtualQuery on Windows)
         Assert.Equal(1u * 111, first.Bind("viatable", GuestCallingConvention.Cdecl, 1).Call(0)); // the first module is intact
     }
 
-    [Fact]
+    [LinuxOnlyFact("the Linux base policy (first module at its preferred 0x10000000, MAP_32BIT zone avoided); the Windows policy is covered by TargetOsBasePolicyTests")]
     public void BaseAllocatorIsDeterministicAlignedAndNonOverlapping()
     {
         PeImage Make(bool relocs) => PeReader.Read(Fixture(relocs));

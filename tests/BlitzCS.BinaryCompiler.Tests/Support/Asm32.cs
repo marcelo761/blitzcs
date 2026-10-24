@@ -1,8 +1,10 @@
 namespace BlitzCS.BinaryCompiler.Tests.Support;
 
 /// <summary>Tiny hand assembler for relocatable fixture code: absolute 32-bit operands are recorded as HIGHLOW relocations.</summary>
-internal sealed class Asm32
+internal sealed class Asm32(uint? imageBase = null)
 {
+    /// <summary>Base the absolute operands are computed against: the fixture builder's host default unless the fixture is linked elsewhere.</summary>
+    private readonly uint baseVa = imageBase ?? PeFixtureBuilder.ImageBase;
     private readonly List<byte> bytes = [];
     private readonly List<uint> relocs = [];
     public uint Here => (uint)bytes.Count;
@@ -12,7 +14,7 @@ internal sealed class Asm32
     public Asm32 Raw(params byte[] b) { bytes.AddRange(b); return this; }
     public Asm32 U32(uint v) { bytes.AddRange(BitConverter.GetBytes(v)); return this; }
     /// <summary>Absolute address of an RVA at the fixture's preferred base, with a relocation entry.</summary>
-    public Asm32 Abs(uint rva) { relocs.Add(PeFixtureBuilder.TextRva + Here); return U32(PeFixtureBuilder.ImageBase + rva); }
+    public Asm32 Abs(uint rva) { relocs.Add(PeFixtureBuilder.TextRva + Here); return U32(baseVa + rva); }
 
     public Asm32 CallIat(uint iatSlotRva) => Raw(0xFF, 0x15).Abs(iatSlotRva);           // call dword ptr [abs]
     public Asm32 LoadEaxAbs(uint rva) => Raw(0xA1).Abs(rva);                              // mov eax, [abs]

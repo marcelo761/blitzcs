@@ -53,7 +53,7 @@ public static class CliApplication
             }
             var outputPath = Path.GetFullPath(args[3]);
             using var catalog = args.Length == 6
-                ? ExternalCatalog.Load(args[5])
+                ? ExternalCatalog.Load(args[5], target)
                 : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
             var binaries = BinaryTranslationStep.Prepare(catalog, outputPath, error, target);
             var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions, out var sourceInputs);
@@ -67,7 +67,7 @@ public static class CliApplication
         catch (Exception exception) when (exception is BasicDiagnosticException
             or IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException
             or System.Text.Json.JsonException or KeyNotFoundException or TypeLoadException or BadImageFormatException
-            or System.Reflection.AmbiguousMatchException)
+            or System.Reflection.AmbiguousMatchException or PeRebaseException)
         {
             error.WriteLine(exception.Message);
             return 1;

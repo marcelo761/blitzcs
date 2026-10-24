@@ -70,12 +70,19 @@ static void vec(const Fn *f, u32 *a) {
 }
 
 /* Per-process setup shared by every driver loop (run_all and the custom loops of regconv/ret_abi). */
+/* x87 control word. ELF oracle (Linux): pinned to 0x037F (64-bit precision = the Linux default). PE32 oracle (-DORACLE_WIN32): NOT pinned, it runs at the natural
+   Windows value 0x027F (53-bit precision), exactly like an original Windows x86 process and like the translated guest inside a Windows .NET thread.
+   -DORACLE_FPCW=<cw> (build.sh: ORACLE_FPCW=<cw>) pins either oracle explicitly. */
+#if defined(ORACLE_FPCW) || !defined(ORACLE_WIN32)
 #ifndef ORACLE_FPCW
-#define ORACLE_FPCW 0x037F /* x87 control word the oracle runs under (64-bit precision = Linux default = the contract); -DORACLE_FPCW=0x027F selects Windows' 53-bit default */
+#define ORACLE_FPCW 0x037F
+#endif
+#define ORACLE_PIN_FPCW 1
 #endif
 static inline void oracle_init(void) {
-  /* Windows starts 32-bit threads with 0x27F (53-bit precision), Linux with 0x37F; pin one so both oracles execute identically. */
+#ifdef ORACLE_PIN_FPCW
   static const unsigned short cw = ORACLE_FPCW; __asm__ volatile("fldcw %0" : : "m"(cw));
+#endif
 }
 
 static void run_all(const Fn *t, int nf, int nrand) {

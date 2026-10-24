@@ -172,10 +172,11 @@ public sealed class ReturnAbiTests
     [Fact]
     public void FpuControlWordAndMxcsrAreRestoredAfterTheGuestChangesThem()
     {
+        var otherCw = HostPlatform.IsWindows ? 0x37F : 0x27F;                    // the OTHER precision than the host's natural one (so a missing restore is visible)
         var change = Asm(a =>
         {
             a.sub(esp, 4);
-            a.mov(__word_ptr[esp], 0x27F); a.fldcw(__word_ptr[esp]);              // 53-bit precision, as on Windows
+            a.mov(__word_ptr[esp], otherCw); a.fldcw(__word_ptr[esp]);
             a.mov(__dword_ptr[esp], 0x9FC0); a.ldmxcsr(__dword_ptr[esp]);        // FTZ|DAZ, round to nearest
             a.add(esp, 4); a.mov(eax, 1); a.ret();
         });
@@ -188,7 +189,7 @@ public sealed class ReturnAbiTests
             Assert.Equal(1u, m.Bind("_change", GuestCallingConvention.Cdecl, 0).Call());
             var after = rd.Invoke(GuestReturn.Eax);
             Assert.Equal(before.Eax, after.Eax); Assert.Equal(before.Edx, after.Edx);                // the next guest call starts from the host's x87 CW and MXCSR
-            Assert.Equal(0x37Fu, after.Eax);
+            Assert.Equal(HostPlatform.NaturalX87ControlWord, after.Eax);
         }
     }
 
@@ -196,7 +197,7 @@ public sealed class ReturnAbiTests
     public void GuestSeesTheHostControlStateOnEveryCall()
     {
         var code = Asm(a => { a.sub(esp, 4); a.fnstcw(__word_ptr[esp]); a.movzx(eax, __word_ptr[esp]); a.add(esp, 4); a.ret(); });
-        foreach (var p in Profiles) { using var m = Load(code, p, ("_f", 0)); Assert.Equal(0x37Fu, F(m).Call()); Assert.Equal(0x37Fu, F(m).Call()); }
+        foreach (var p in Profiles) { using var m = Load(code, p, ("_f", 0)); Assert.Equal(HostPlatform.NaturalX87ControlWord, F(m).Call()); Assert.Equal(HostPlatform.NaturalX87ControlWord, F(m).Call()); }
     }
 
     [Fact]

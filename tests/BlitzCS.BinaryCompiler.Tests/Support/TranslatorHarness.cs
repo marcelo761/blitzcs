@@ -7,8 +7,8 @@ namespace BlitzCS.BinaryCompiler.Tests.Support;
 /// <summary>Assembles IA-32 with Iced, wraps it into a fixture DLL, translates it and optionally executes it.</summary>
 internal static class TranslatorHarness
 {
-    public const uint CodeVa = PeFixtureBuilder.ImageBase + PeFixtureBuilder.TextRva;
-    public const uint DataVa = PeFixtureBuilder.ImageBase + PeFixtureBuilder.DataRva;
+    public static readonly uint CodeVa = PeFixtureBuilder.ImageBase + PeFixtureBuilder.TextRva;
+    public static readonly uint DataVa = PeFixtureBuilder.ImageBase + PeFixtureBuilder.DataRva;
 
     public static byte[] Asm(Action<Assembler> body, out AssemblerResult result)
     {

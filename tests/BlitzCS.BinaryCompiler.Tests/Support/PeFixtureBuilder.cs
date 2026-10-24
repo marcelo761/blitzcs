@@ -9,7 +9,13 @@ namespace BlitzCS.BinaryCompiler.Tests.Support;
 /// </summary>
 public sealed class PeFixtureBuilder
 {
-    public const uint ImageBase = 0x10000000;
+    /// <summary>The base the oracle libraries are linked at (their machine code holds absolute addresses at this base).</summary>
+    public const uint OracleBase = 0x10000000;
+    /// <summary>A deliberately low base (below the 0x20000000 minimum of a Windows x64 host), for tests of the base policy.</summary>
+    public const uint LowBase = 0x10000000;
+    /// <summary>Preferred base of the fixtures on this host: 0x10000000 on Linux, 0x60000000 on Windows (a 64-bit Windows process cannot reserve below 0x20000000, and its own heaps grow upwards from the bottom of the image window - under Wine they reach 0x30000000 during a long run - so fixtures sit in the upper part of the window).</summary>
+    public static readonly uint ImageBase = OperatingSystem.IsWindows() ? 0x60000000u : OracleBase;
+    private uint imageBase = ImageBase;
     public const uint TextRva = 0x1000, DataRva = 0x2000, IdataRva = 0x3000, EdataRva = 0x4000, RelocRva = 0x5000, DelayRva = 0x6000;
 
     private byte[] code = [0xC3];
@@ -21,6 +27,8 @@ public sealed class PeFixtureBuilder
     private readonly List<(string Dll, string Name, uint InitialCodeOffset)> delayImports = [];
     private uint delayAttributes = 1;
 
+    /// <summary>Overrides the preferred base of this fixture (used for the oracle libraries, which are linked at <see cref="OracleBase"/>).</summary>
+    public PeFixtureBuilder WithImageBase(uint b) { imageBase = b; return this; }
     public PeFixtureBuilder WithCode(byte[] bytes) { code = bytes; return this; }
     public PeFixtureBuilder WithData(byte[] bytes) { data = bytes; return this; }
     public PeFixtureBuilder Export(string name, uint codeOffset) { exports.Add((name, codeOffset)); return this; }
@@ -68,7 +76,7 @@ public sealed class PeFixtureBuilder
         W16(file, coff, 0x014C); W16(file, coff + 2, (ushort)sections.Count); W16(file, coff + 16, 224);
         W16(file, coff + 18, (ushort)0x2102); // DLL | executable | 32-bit machine
         var opt = coff + 20;
-        W16(file, opt, 0x10B); W32(file, opt + 16, entryRva); W32(file, opt + 28, ImageBase); W32(file, opt + 32, 0x1000); W32(file, opt + 36, 0x200);
+        W16(file, opt, 0x10B); W32(file, opt + 16, entryRva); W32(file, opt + 28, imageBase); W32(file, opt + 32, 0x1000); W32(file, opt + 36, 0x200);
         W16(file, opt + 40, 4); W16(file, opt + 48, 4);
         var lastRva = sections[^1].rva + (uint)((sections[^1].Item3.Length + 0xFFF) & ~0xFFF);
         W32(file, opt + 56, lastRva); W32(file, opt + 60, headerSize); W16(file, opt + 68, 2); W32(file, opt + 92, 16);
@@ -131,7 +139,7 @@ public sealed class PeFixtureBuilder
             {
                 var hint = DelayRva + (uint)cursor; cursor += 2; Encoding.ASCII.GetBytes(x.Name + "\0").CopyTo(buf, cursor); cursor += x.Name.Length + 1;
                 W32(buf, 0x600 + i * 4, hint);
-                W32(buf, 0x500 + i * 4, ImageBase + TextRva + x.InitialCodeOffset);
+                W32(buf, 0x500 + i * 4, imageBase + TextRva + x.InitialCodeOffset);
             }
             d++;
         }

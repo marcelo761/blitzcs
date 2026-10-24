@@ -133,6 +133,13 @@ internal static class BinaryBindingGenerator
 
     private static string Literal(string value) => SymbolDisplay.FormatLiteral(value, quote: true);
 
+    /// <summary>
+    /// The shared framework is never part of the closure. In a framework-dependent app its assemblies are not next to the runtime assembly (so the file check
+    /// already skipped them); in a self-contained app (the Windows deployment) they are, and copying or loading them from there is wrong.
+    /// </summary>
+    private static bool IsFrameworkAssembly(string name) =>
+        name is "mscorlib" or "netstandard" or "WindowsBase" || name.StartsWith("System.", StringComparison.Ordinal) || name == "System" || name.StartsWith("Microsoft.", StringComparison.Ordinal);
+
     private static void CopyRuntimeClosure(Assembly root, string stagingDirectory)
     {
         Directory.CreateDirectory(stagingDirectory);
@@ -144,7 +151,7 @@ internal static class BinaryBindingGenerator
             if (!seen.Add(assembly.GetName().Name!)) continue;
             File.Copy(assembly.Location, Path.Combine(stagingDirectory, Path.GetFileName(assembly.Location)), overwrite: true);
             foreach (var reference in assembly.GetReferencedAssemblies())
-                if (reference.Name is not null && File.Exists(Path.Combine(directory, reference.Name + ".dll")))
+                if (reference.Name is not null && !IsFrameworkAssembly(reference.Name) && File.Exists(Path.Combine(directory, reference.Name + ".dll")))
                     pending.Enqueue(Assembly.LoadFrom(Path.Combine(directory, reference.Name + ".dll")));
         }
     }

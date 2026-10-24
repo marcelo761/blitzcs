@@ -36,8 +36,7 @@ public sealed class LinkingFloatConventionTests : IDisposable
 
     private string RunProgram()
     {
-        var info = new ProcessStartInfo(Environment.ProcessPath ?? "dotnet") { RedirectStandardOutput = true, RedirectStandardError = true };
-        info.ArgumentList.Add(Path.Combine(root, "out", "main.dll"));
+        var info = GeneratedProgramRunner.Create(Path.Combine(root, "out", "main.dll"));
         using var process = Process.Start(info)!;
         var text = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
         process.WaitForExit();
@@ -52,7 +51,7 @@ public sealed class LinkingFloatConventionTests : IDisposable
 
     private void Lib(PeFixtureBuilder builder) => File.WriteAllBytes(Path.Combine(root, "lib.dll"), builder.Build());
 
-    private const uint Data = PeFixtureBuilder.ImageBase + PeFixtureBuilder.DataRva;
+    private static readonly uint Data = PeFixtureBuilder.ImageBase + PeFixtureBuilder.DataRva;
 
     [Fact]
     public void FloatReturnsFromCdeclAndStdcallExportsRoundTripThroughSt0()

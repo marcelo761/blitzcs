@@ -9,9 +9,9 @@ public sealed class TargetOsBasePolicyTests
     private const string Win = BinaryTargets.WindowsX64;
 
     private static PeImage Relocatable() =>
-        PeReader.Read(new PeFixtureBuilder().WithCode([0xC3]).WithData(new byte[0x100]).Export("f", 0).Relocate(PeFixtureBuilder.DataRva).Build());
+        PeReader.Read(new PeFixtureBuilder().WithImageBase(PeFixtureBuilder.LowBase).WithCode([0xC3]).WithData(new byte[0x100]).Export("f", 0).Relocate(PeFixtureBuilder.DataRva).Build());
 
-    private static PeImage Stripped() => PeReader.Read(new PeFixtureBuilder().WithCode([0xC3]).Export("f", 0).Build());
+    private static PeImage Stripped() => PeReader.Read(new PeFixtureBuilder().WithImageBase(PeFixtureBuilder.LowBase).WithCode([0xC3]).Export("f", 0).Build());
 
     [Fact]
     public void Low_preferred_bases_are_moved_into_the_windows_image_window()
@@ -63,14 +63,14 @@ public sealed class TargetOsBasePolicyTests
         Assert.Contains("windows-x64", error.Message);
         Assert.Contains("0x20000000", error.Message);
         // the same image is fine on Linux
-        Assert.Equal(PeFixtureBuilder.ImageBase, ModuleBaseAllocator.Allocate([("old.dll", Stripped())], null, BinaryTargets.LinuxSysV)[0].Base);
+        Assert.Equal(PeFixtureBuilder.LowBase, ModuleBaseAllocator.Allocate([("old.dll", Stripped())], null, BinaryTargets.LinuxSysV)[0].Base);
     }
 
     [Fact]
     public void Linux_policy_is_unchanged()
     {
         var plan = ModuleBaseAllocator.Allocate([("a.dll", Relocatable()), ("b.dll", Relocatable())], null, BinaryTargets.LinuxSysV);
-        Assert.Equal(PeFixtureBuilder.ImageBase, plan[0].Base);
+        Assert.Equal(PeFixtureBuilder.LowBase, plan[0].Base);
         Assert.NotEqual(plan[0].Base, plan[1].Base);
         Assert.All(plan, m => Assert.True(m.Base < 0x40000000 || m.Base >= 0x80000000));
     }

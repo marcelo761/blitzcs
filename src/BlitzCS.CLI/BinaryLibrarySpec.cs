@@ -92,14 +92,17 @@ internal sealed record BinaryLibrarySpec(string Path)
         throw new ArgumentException($"Binary library '{label}': exportConventions['{export}'] must be \"cdecl\" or \"stdcall:<argument count>\" (register conventions cannot be bridged between libraries).");
     }
 
-    /// <summary>Runs the opt-in preprocessor for <c>unpack</c> libraries (loaded by name from the compiler directory, only on request).</summary>
-    internal BinaryLibrarySpec Preprocess(string workDirectory)
+    /// <summary>
+    /// Runs the opt-in preprocessor for <c>unpack</c> libraries (loaded by name from the compiler directory, only on request). <paramref name="loadBase"/> is the guest base
+    /// the build policy chose for the target BEFORE unpacking (null = preferred base); the derived image is valid for exactly that base.
+    /// </summary>
+    internal BinaryLibrarySpec Preprocess(string workDirectory, uint? loadBase = null)
     {
         if (!Unpack) return this;
         if (!File.Exists(Path)) throw new FileNotFoundException($"Binary library '{FileName}' does not exist.", Path);
         if (!BinaryBuild.IsPe32X86(Path)) throw new ArgumentException($"Binary library '{FileName}' is not a PE32 x86 image.");
         var preprocessor = LoadPreprocessor("unpack");
-        try { return this with { Preprocessed = preprocessor.Preprocess(Path, workDirectory) }; }
+        try { return this with { Preprocessed = preprocessor.Preprocess(Path, workDirectory, loadBase) }; }
         catch (InvalidOperationException error) { throw new InvalidOperationException($"Binary library '{FileName}': {error.Message}", error); }
     }
 

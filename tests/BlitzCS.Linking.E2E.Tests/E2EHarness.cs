@@ -33,8 +33,7 @@ public abstract class E2EBase : IDisposable
 
     protected string Run()
     {
-        var info = new ProcessStartInfo(Environment.ProcessPath ?? "dotnet") { RedirectStandardOutput = true, RedirectStandardError = true };
-        info.ArgumentList.Add(Path.Combine(Root, "out", "main.dll"));
+        var info = BlitzCS.BinaryCompiler.Tests.Support.GeneratedProgramRunner.Create(Path.Combine(Root, "out", "main.dll"));
         using var process = Process.Start(info)!;
         var errorTask = process.StandardError.ReadToEndAsync();
         var text = process.StandardOutput.ReadToEnd() + errorTask.Result;
@@ -42,14 +41,11 @@ public abstract class E2EBase : IDisposable
         return text.Replace("\r\n", "\n");
     }
 
-    protected static string? RealDirectory()
-    {
-        var dir = Environment.GetEnvironmentVariable("BLITZCS_REAL_PE32_DIR");
-        return string.IsNullOrEmpty(dir) ? null : dir;
-    }
-
     protected static string RepoFile(string relative)
     {
+        // BLITZCS_REPO_ROOT is set by scripts/wine/run-tests.sh: the published test folder is copied outside the repository there.
+        if (Environment.GetEnvironmentVariable("BLITZCS_REPO_ROOT") is { Length: > 0 } configured && File.Exists(Path.Combine(configured, "BlitzCS.slnx")))
+            return Path.Combine(configured, relative);
         var dir = AppContext.BaseDirectory;
         while (dir is not null && !File.Exists(Path.Combine(dir, "BlitzCS.slnx"))) dir = Path.GetDirectoryName(dir);
         return Path.Combine(dir ?? throw new InvalidOperationException("repository root not found"), relative);

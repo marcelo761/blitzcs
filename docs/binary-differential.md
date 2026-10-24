@@ -71,15 +71,21 @@ tools/x86_oracle/build_all_exe.sh <out>                                         
   `PEB.ImageBaseAddress` = 0x10000000).
 * Test plumbing: `OracleRunner` uses the ELF oracle on Linux x86-64 and, on Windows (also Wine), the prebuilt flat images and `<lib>.oracle.exe` from the
   directory named by `BLITZCS_ORACLE_DIR` (fallback `x86_oracle-prebuilt` next to the test assembly). Without them the oracle tests skip with the reason.
-  `OracleDifferential.LoadImage` moves the fixture to 0x30000000 on Windows (the low 512 MiB cannot be reserved there); the oracle EXE still runs at 0x10000000.
+  `OracleDifferential.BuildFixture` links the oracle fixtures at 0x10000000 (`PeFixtureBuilder.OracleBase`: the library code holds absolute addresses at that base) on every host; `OracleDifferential.LoadImage` then moves the fixture to 0x60000000 on Windows (`HostPlatform.DefaultHighGuestBase`; the low 512 MiB cannot be reserved there): by `Rebase` when the library has relocations, else by patching the header's ImageBase. The oracle EXE itself still runs at 0x10000000. Every other fixture of the test suite (`PeFixtureBuilder.ImageBase`) is built directly at a base valid on the host: 0x10000000 on Linux (byte-identical to before), 0x60000000 on Windows.
 * Equivalence: for all 16 library/driver pairs the stdout transcript of the EXE under Wine is byte-identical to the ELF oracle's (see "Findings" below).
 
 ### Findings from the Windows oracle
 
-* **x87 precision control.** A 32-bit Windows thread starts with FPCW 0x027F (53-bit precision); Linux starts with 0x037F (64-bit). The `fp`, `regconv` and
-  `ret_abi` transcripts differ (double rounding in x87 results) unless the control word is pinned. Drivers therefore load `ORACLE_FPCW` (default 0x037F, the
-  contract) at start on both hosts; `ORACLE_FPCW=0x27F tools/x86_oracle/build.sh ...` pins Windows' value instead (verified: ELF and EXE then agree at 0x27F too,
-  and differ from the 0x37F transcript). The translated guest must pick the same precision; on win-x64 the .NET process runs with 0x027F, which is why the
-  translated `fp`/`regconv`/`ret_abi` vectors diverge from the 0x37F oracle until the runtime sets/emulates 64-bit precision (or the contract adopts 0x27F).
+* **x87 precision control: each host's guest is compared with that host's oracle.** A 32-bit Windows thread starts with FPCW 0x027F (53-bit precision);
+  Linux starts with 0x037F (64-bit). The guest inherits the control word of the .NET thread that calls it, exactly like an original x86 process of the same OS,
+  so the translated guest is *right* on both hosts and the oracle must run at the same natural value:
+  * the **ELF oracle** (Linux) pins 0x037F (`oracle_init` in `drivers/common.h`);
+  * the **PE32 oracle EXE** (Windows/Wine) does **not** pin: it runs at the natural Windows value 0x027F;
+  * `ORACLE_FPCW=<cw>` at build time (`build.sh`) pins *either* oracle explicitly, e.g. `ORACLE_FPCW=0x37F` forces the Linux value on the EXE.
+  Consequently the EXE and ELF transcripts for `fp`, `regconv` and `ret_abi` (x87 results with double rounding) **legitimately differ**; the other 13 pairs stay
+  byte-identical. The translated guest on each host matches the oracle of the SAME host: on Linux `fp`/`regconv`/`ret_abi` are identical to the ELF oracle at
+  0x37F, and under Wine the same differentials (`OracleDifferentialTests`, `ConvRegisterDifferentialTests`, `ReturnDifferentialTests`, `RebaseDifferentialTests`)
+  are identical to the EXE oracle at 0x27F. Tests that observe the host control word (`ReturnAbiTests.GuestSeesTheHostControlStateOnEveryCall`,
+  `FpuControlWordAndMxcsrAreRestoredAfterTheGuestChangesThem`) expect `HostPlatform.NaturalX87ControlWord` (0x37F Linux, 0x27F Windows).
 * **Latent library bug found.** `o_pusha` (lib/exotic.c) used an `%esp`-relative output operand inside a `pushal`/`popal` pair, so the result was written to
   the wrong stack slot (0 on Linux, stale data on Windows). It now returns through a global, which makes the Linux and Windows transcripts agree.

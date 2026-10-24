@@ -16,4 +16,11 @@ public interface IBinaryPreprocessor
     string Id { get; }
 
     BinaryPreprocessResult Preprocess(string inputPath, string workDirectory);
+
+    /// <summary>
+    /// Same, for a host target that cannot map the input at its preferred base (windows-x64 needs every image at or above 0x20000000): <paramref name="loadBase"/> is the
+    /// guest base the build policy chose BEFORE preprocessing, and the derived image must be valid for exactly that base. Null = the preferred base.
+    /// The default implementation ignores the base, so existing preprocessors keep working.
+    /// </summary>
+    BinaryPreprocessResult Preprocess(string inputPath, string workDirectory, uint? loadBase) => Preprocess(inputPath, workDirectory);
 }

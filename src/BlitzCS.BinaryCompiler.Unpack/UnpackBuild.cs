@@ -61,9 +61,14 @@ public sealed class UnpackPreprocessor(UnpackOptions? options = null) : IBinaryP
 {
     public string Id => "unpack";
 
-    public BinaryPreprocessResult Preprocess(string inputPath, string workDirectory)
+    public BinaryPreprocessResult Preprocess(string inputPath, string workDirectory) => Preprocess(inputPath, workDirectory, null);
+
+    /// <summary>The stub runs mapped at <paramref name="loadBase"/> (null: the options' own LoadBase, else the preferred base); the derived image is fixed at that base.</summary>
+    public BinaryPreprocessResult Preprocess(string inputPath, string workDirectory, uint? loadBase)
     {
-        var (path, lineage, hit) = UnpackBuild.Prepare(inputPath, workDirectory, options ?? new UnpackOptions());
+        var unpack = options ?? new UnpackOptions();
+        if (loadBase is not null) unpack = unpack with { LoadBase = loadBase };
+        var (path, lineage, hit) = UnpackBuild.Prepare(inputPath, workDirectory, unpack);
         return new BinaryPreprocessResult(path, lineage.Token,
             [new BinaryDiagnostic(DiagnosticSeverity.Info, "UNPACK_PREPROCESSED", $"Library unpacked into a derived image ({(hit ? "reused" : "new")}, derived from {lineage.DerivedFromSha256[..16]}).")]);
     }

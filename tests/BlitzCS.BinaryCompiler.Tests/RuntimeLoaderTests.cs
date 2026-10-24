@@ -15,16 +15,32 @@ public sealed class RuntimeLoaderTests
     internal static DictionaryGuestImportResolver Resolver(Func<uint, uint>? hook = null) =>
         new DictionaryGuestImportResolver().Add("HOST.DLL", "hook", GuestImportBuilder.Stdcall(hook ?? (x => x)));
 
-    private static List<(ulong Start, ulong End, string Perms)> Maps() =>
-        File.ReadAllLines("/proc/self/maps").Select(l =>
+    /// <summary>Mappings overlapping [start, end) as (start, end, perms) with perms in the /proc/self/maps spelling ("r-xp"): read from /proc on Linux, through VirtualQuery (platform layer) on Windows.</summary>
+    private static List<(ulong Start, ulong End, string Perms)> Maps(ulong start = 0, ulong end = ulong.MaxValue)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var found = new List<(ulong, ulong, string)>();
+            for (var cursor = start; cursor < end;)
+            {
+                var part = PlatformMemory.Current.QueryRanges(cursor, end);
+                if (part.Count == 0) break;
+                // description: "<committed|reserved> <rwx-flags>[ (copy-on-write)] <image|mapped|private>"
+                foreach (var r in part) found.Add((r.Start, r.End, r.Description.Split(' ')[1] + "p"));
+                cursor = part.Max(r => r.End);
+            }
+            return found;
+        }
+        return File.ReadAllLines("/proc/self/maps").Select(l =>
         {
             var parts = l.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var range = parts[0].Split('-');
             return (Convert.ToUInt64(range[0], 16), Convert.ToUInt64(range[1], 16), parts[1]);
         }).ToList();
+    }
 
     private static string PermsAt(ulong address) =>
-        Maps().FirstOrDefault(m => address >= m.Start && address < m.End).Perms ?? "unmapped";
+        Maps(address, address + 1).FirstOrDefault(m => address >= m.Start && address < m.End).Perms ?? "unmapped";
 
     [Fact]
     public void Load_MapsImageWithSectionProtectionsAndNeverRwx()
@@ -39,7 +55,7 @@ public sealed class RuntimeLoaderTests
         var host = (ulong)m.HostImageBase;
         Assert.Equal("r-xp", PermsAt(host));            // host code
         Assert.Equal("rw-p", PermsAt(host + 0x1000));   // host data
-        foreach (var (start, end, perms) in Maps().Where(x => (x.Start >= b && x.Start < b + g.Artifact.GuestImageSize + 0x10000) || (x.Start >= host && x.Start < host + 0x2000)))
+        foreach (var (start, end, perms) in Maps(b, b + g.Artifact.GuestImageSize + 0x10000).Concat(Maps(host, host + 0x2000)).Where(x => (x.Start >= b && x.Start < b + g.Artifact.GuestImageSize + 0x10000) || (x.Start >= host && x.Start < host + 0x2000)))
             Assert.False(perms.StartsWith("rwx"), $"RWX mapping {start:X}-{end:X}");
         // IAT slot holds the guest address of import stub 0
         Assert.Equal(g.Image.ImageBase + g.Artifact.ImportStubBaseRva, m.Memory.ReadUInt32(g.Image.ImageBase + g.Image.Imports[0].IatRva));
@@ -179,7 +195,9 @@ public sealed class RuntimeLoaderTests
         using var m = Load(g);
         var writer = m.Bind("writer", GuestCallingConvention.Cdecl, 2);
         var buf = m.Memory.Allocate(64);
-        Assert.True(buf.Address < 0x80000000u);
+        // Scratch buffers live in the runtime's low arena: the MAP_32BIT zone (below 0x80000000) on Linux, the 0x78000000..4 GiB arena on Windows.
+        if (OperatingSystem.IsWindows()) { Assert.True(buf.Address >= 0x78000000u); Assert.True((ulong)buf.Address + 64 <= 0x1_0000_0000UL); }
+        else Assert.True(buf.Address < 0x80000000u);
         writer.Call(buf.Address + 8, 0x01020304);
         var bytes = buf.ToArray();
         Assert.Equal(new byte[] { 4, 3, 2, 1 }, bytes[8..12]);
@@ -263,12 +281,26 @@ public sealed class RuntimeLoaderTests
     [Fact]
     public void RunawayNesting_ThrowsGuestStackExceptionInsteadOfCrashing()
     {
-        var g = FakeGuest.Create();
-        GuestFunction? callimp = null;
-        using var m = Load(g, x => x <= 1 ? 0 : callimp!.Call(x + 1), new GuestModuleOptions { StackSize = 64 * 1024, StackReserve = 16 * 1024 });
-        callimp = m.Bind("callimp", GuestCallingConvention.Cdecl, 1);
-        var ex = Assert.Throws<GuestImportException>(() => callimp.Call(2));
-        Assert.IsType<GuestStackException>(ex.InnerException);
+        // Every guest -> import -> guest nesting level also costs native stack (the EnterGuest frame, shadow space on Win64, the managed call chain). The guest-stack budget
+        // (64 KiB here) is what must stop the recursion; a Windows thread has a 1 MiB stack by default (Linux 8 MiB), so run on a thread whose native stack is large enough
+        // for the whole budget on every host. Without it the test would measure the native stack of the runner instead of the budget check.
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var g = FakeGuest.Create();
+                GuestFunction? callimp = null;
+                using var m = Load(g, x => x <= 1 ? 0 : callimp!.Call(x + 1), new GuestModuleOptions { StackSize = 64 * 1024, StackReserve = 16 * 1024 });
+                callimp = m.Bind("callimp", GuestCallingConvention.Cdecl, 1);
+                var ex = Assert.Throws<GuestImportException>(() => callimp.Call(2));
+                Assert.IsType<GuestStackException>(ex.InnerException);
+            }
+            catch (Exception e) { failure = e; }
+        }, 64 * 1024 * 1024);
+        thread.Start();
+        thread.Join();
+        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     [Fact]

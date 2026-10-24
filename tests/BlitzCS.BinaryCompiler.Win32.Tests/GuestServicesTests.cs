@@ -13,7 +13,7 @@ namespace BlitzCS.BinaryCompiler.Win32.Tests;
 [Collection("GuestRuntime")]
 public sealed class GuestServicesTests : IDisposable
 {
-    private const uint Base = Win32PeBuilder.ImageBase;
+    private static readonly uint Base = Win32PeBuilder.ImageBase;
     private readonly Win32ImportResolver resolver = new();
     private readonly GuestModule module;
 

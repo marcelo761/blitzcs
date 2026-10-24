@@ -34,11 +34,12 @@ public sealed class DispatchOptimizationTests
     }
 
     [Theory]
-    [InlineData(0x12345678u)]        // outside the image
-    [InlineData(DataVa)]             // inside the image but not translated code
-    [InlineData(DataVa + 0x7FFC)]    // inside the SizeOfImage window, untranslated
-    public void ReturnToUntranslatedAddressTrapsInsteadOfExecuting(uint target)
+    [InlineData(0x12345678u, false)]        // outside the image
+    [InlineData(0u, true)]                  // DataVa: inside the image but not translated code
+    [InlineData(0x7FFCu, true)]             // DataVa + 0x7FFC: inside the SizeOfImage window, untranslated
+    public void ReturnToUntranslatedAddressTrapsInsteadOfExecuting(uint value, bool relativeToData)
     {
+        var target = relativeToData ? DataVa + value : value;
         // A trap abandons the call and raises; falling through to the translated "mov eax,7" would yield 7.
         var code = Asm(a => { var g = a.CreateLabel(); a.call(g); a.mov(eax, 7); a.ret(); a.Label(ref g); a.pop(ecx); a.push(target); a.ret(); });
         Assert.Throws<BlitzCS.BinaryCompiler.Runtime.GuestTrapException>(() => Run(code));

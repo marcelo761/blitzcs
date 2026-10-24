@@ -6,7 +6,8 @@
 #       with the library at the SAME absolute addresses (see oracle.ld) and an import slot area at 0x10003400.
 #   <out>/<name>.oracle.exe                           : (only with ORACLE_EXE=1) the SAME lib object + the driver compiled with -DORACLE_WIN32, linked
 #       with oracle_win.ld and converted by make_pe.py to a PE32 console EXE (ImageBase 0x10000000) that runs on Windows or Wine.
-#   ORACLE_FPCW=0x27F builds the drivers with the Windows default x87 control word (53-bit precision) instead of the Linux one (0x37F, default).
+#   x87 control word: the ELF oracle pins 0x37F (Linux default); the PE32 oracle does not pin and runs at the natural Windows value 0x27F (53-bit precision).
+#   ORACLE_FPCW=<cw> pins BOTH oracles to an explicit value (e.g. 0x37F to force the Linux value on the EXE).
 # usage: [ORACLE_EXE=1] build.sh <lib.c> <driver.c> <out-dir>   (driver.c may be '-' to skip the oracle)
 # A first line of the form  // FLAGS: <gcc flags>  in lib.c adds compiler flags (used for both lib and driver).
 set -euo pipefail

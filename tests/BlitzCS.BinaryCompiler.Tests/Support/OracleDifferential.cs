@@ -46,7 +46,7 @@ internal static class OracleDifferential
         var code = (byte[])a.Code.Clone(); var data = a.Data.Length >= 16 ? (byte[])a.Data.Clone() : new byte[0x100];
         if (mutation is { CodeOffset: >= 0 } m) code[m.CodeOffset] ^= m.CodeXor;
         if (mutation is { DataOffset: >= 0 } d) data[d.DataOffset] ^= d.DataXor;
-        var fx = new PeFixtureBuilder().WithCode(code).WithData(data);
+        var fx = new PeFixtureBuilder().WithImageBase(PeFixtureBuilder.OracleBase).WithCode(code).WithData(data);
         foreach (var (name, off) in a.Exports) fx.Export(name, off);
         if (a.Name == "cb") foreach (var (dll, name) in CallbackImports) fx.Import(dll, name);
         foreach (var r in a.Relocs) fx.Relocate(r);
@@ -70,7 +70,7 @@ internal static class OracleDifferential
         var art = OracleRunner.Build(lib);
         var oracle = oracleOverride ?? OracleRunner.Run(lib);
         var image = LoadImage(art, mutation, loadBase);
-        var delta = unchecked(image.ImageBase - PeFixtureBuilder.ImageBase);
+        var delta = unchecked(image.ImageBase - PeFixtureBuilder.OracleBase);
         var dataVa = image.ImageBase + PeFixtureBuilder.DataRva;
         var dataRelocs = art.Relocs.Where(r => r >= PeFixtureBuilder.DataRva && r + 4 <= PeFixtureBuilder.DataRva + (uint)oracle.DataLength).ToArray();
         var tr = X64Translator.Translate(image, new BinaryCompilerOptions(profile), "diff-" + lib);

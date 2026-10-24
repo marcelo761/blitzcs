@@ -1,6 +1,7 @@
 using BlitzCS.BinaryCompiler.CodeGen;
 using BlitzCS.BinaryCompiler.Runtime;
 using BlitzCS.BinaryCompiler.Win32;
+using BlitzCS.Testing;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -15,13 +16,12 @@ public sealed class EaxTests(ITestOutputHelper output)
 {
     private const string Path = "C:\\WINDOWS\\system32\\eax.dll";
 
-    private static (PeImage, TranslationArtifact)? Load()
+    private static (PeImage, TranslationArtifact) Load()
     {
-        var dir = Environment.GetEnvironmentVariable("BLITZCS_REAL_PE32_DIR");
-        var file = string.IsNullOrEmpty(dir) ? null : System.IO.Path.Combine(dir, "eax.dll");
-        if (file is null || !File.Exists(file)) return null;
-        var image = PeReader.Read(File.ReadAllBytes(file));
-        return (image, X64Translator.Translate(image, new BinaryCompilerOptions(OptimizationProfile.Release), "real-eax"));
+        var file = RealLibraries.PathOf("eax.dll");   // the callers are [RealLibraryFact]s: skipped at discovery when the file is absent
+        var original = PeReader.Read(File.ReadAllBytes(file));
+        var (image, loadBase) = HostBase.Fit(original);   // Windows: rebased into the host's image window
+        return (image, X64Translator.Translate(original, new BinaryCompilerOptions(OptimizationProfile.Release, LoadBase: loadBase), "real-eax"));
     }
 
     private static GuestModule Open((PeImage Image, TranslationArtifact Artifact) lib, Win32ImportResolver r)
@@ -31,10 +31,10 @@ public sealed class EaxTests(ITestOutputHelper output)
         return m;
     }
 
-    [Fact]
+    [RealLibraryFact("eax.dll")]
     public void RegisterAndUnregisterServerLeaveWellFormedKeysAndThenAnEmptyRegistry()
     {
-        if (Load() is not { } lib) return;
+        var lib = Load();
         using var resolver = new Win32ImportResolver();
         using var module = Open(lib, resolver);
         var reg = module.Bind("DllRegisterServer", GuestCallingConvention.Stdcall, 0);
@@ -70,10 +70,10 @@ public sealed class EaxTests(ITestOutputHelper output)
         Assert.All(left, e => Assert.Null(e.ValueName));
     }
 
-    [Fact]
+    [RealLibraryFact("eax.dll")]
     public void DllCanUnloadNowAndGetClassObjectBehaveLikeComServers()
     {
-        if (Load() is not { } lib) return;
+        var lib = Load();
         using var resolver = new Win32ImportResolver();
         using var module = Open(lib, resolver);
         var canUnload = module.Bind("DllCanUnloadNow", GuestCallingConvention.Stdcall, 0);

@@ -7,6 +7,17 @@ using static Iced.Intel.AssemblerRegisters;
 
 namespace BlitzCS.BinaryCompiler.Tests;
 
+/// <summary>[Fact] that builds samples/BinaryLinking/binlib.c with bash and the 32-bit gcc toolchain; skipped with the reason where that toolchain is not usable (the Windows run has none).</summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class Binlib32FactAttribute : FactAttribute
+{
+    public Binlib32FactAttribute()
+    {
+        Skip = HostPlatform.LinuxOnlyReason("building samples/BinaryLinking/binlib.c needs bash and the 32-bit gcc toolchain (the Windows run has no C toolchain; the same end-to-end path is covered there by the other Linking tests)")
+            ?? (OracleRunner.UnavailableReason is { } r ? "32-bit C toolchain unavailable: " + r : null);
+    }
+}
+
 /// <summary>Transparent linking: an unchanged .bb calls exports of an unchanged PE32 DLL through the generated binding.</summary>
 [Collection("GuestRuntime")]
 public sealed class LinkingTests : IDisposable
@@ -24,13 +35,14 @@ public sealed class LinkingTests : IDisposable
 
     private static string RepoRoot()
     {
+        if (Environment.GetEnvironmentVariable("BLITZCS_REPO_ROOT") is { Length: > 0 } configured && File.Exists(Path.Combine(configured, "BlitzCS.slnx"))) return configured;
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "BlitzCS.slnx"))) directory = directory.Parent;
         return directory?.FullName ?? throw new InvalidOperationException("Repository root not found.");
     }
 
     /// <summary>Builds samples/BinaryLinking/binlib.c as a PE32 DLL; null when the 32-bit C toolchain is unavailable.</summary>
-    private byte[]? BuildBinlib()
+    private byte[] BuildBinlib()
     {
         var repo = RepoRoot();
         var output = Path.Combine(root, "c-build");
@@ -42,7 +54,7 @@ public sealed class LinkingTests : IDisposable
         using var process = Process.Start(info)!;
         process.StandardOutput.ReadToEnd(); process.StandardError.ReadToEnd();
         process.WaitForExit();
-        if (process.ExitCode != 0) return null;
+        if (process.ExitCode != 0) throw new InvalidOperationException($"build.sh failed for binlib.c although the 32-bit toolchain probe passed (exit {process.ExitCode})");
         var builder = new PeFixtureBuilder().WithCode(File.ReadAllBytes(Path.Combine(output, "binlib.code.bin")));
         var data = File.ReadAllBytes(Path.Combine(output, "binlib.data.bin"));
         if (data.Length > 0) builder.WithData(data.Concat(new byte[0x100]).ToArray());
@@ -64,8 +76,7 @@ public sealed class LinkingTests : IDisposable
 
     private string RunProgram(string name = "main.dll")
     {
-        var info = new ProcessStartInfo(Environment.ProcessPath ?? "dotnet") { RedirectStandardOutput = true, RedirectStandardError = true };
-        info.ArgumentList.Add(Path.Combine(root, "out", name));
+        var info = GeneratedProgramRunner.Create(Path.Combine(root, "out", name));
         using var process = Process.Start(info)!;
         var stdout = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
         process.WaitForExit();
@@ -87,11 +98,10 @@ public sealed class LinkingTests : IDisposable
         File.WriteAllBytes(Path.Combine(root, "lib.dll"), builder.Build());
     }
 
-    [Fact]
+    [Binlib32Fact]
     public void SampleProgramCallsTheUnchangedDllEndToEnd()
     {
         var dll = BuildBinlib();
-        if (dll is null) return; // 32-bit C toolchain unavailable on this machine
         var repo = RepoRoot();
         File.WriteAllBytes(Path.Combine(root, "binlib.dll"), dll);
         var source = File.ReadAllText(Path.Combine(repo, "samples/BinaryLinking/main.bb"));

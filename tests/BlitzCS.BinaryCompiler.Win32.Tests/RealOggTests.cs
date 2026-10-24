@@ -1,6 +1,7 @@
 using BlitzCS.BinaryCompiler.CodeGen;
 using BlitzCS.BinaryCompiler.Runtime;
 using BlitzCS.BinaryCompiler.Win32;
+using BlitzCS.Testing;
 using Xunit;
 
 namespace BlitzCS.BinaryCompiler.Win32.Tests;
@@ -28,22 +29,21 @@ public sealed class RealOggTests
         return c;
     }
 
-    private static (PeImage Image, TranslationArtifact Artifact)? Load()
+    private static (PeImage Image, TranslationArtifact Artifact) Load()
     {
-        var dir = Environment.GetEnvironmentVariable("BLITZCS_REAL_PE32_DIR");
-        var path = string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "ogg.dll");
-        if (path is null || !File.Exists(path)) return null;
-        var image = PeReader.Read(File.ReadAllBytes(path));
-        return (image, X64Translator.Translate(image, new BinaryCompilerOptions(OptimizationProfile.Release), "real-ogg"));
+        var path = RealLibraries.PathOf("ogg.dll");   // the callers are [RealLibraryFact]s: skipped at discovery when the file is absent
+        var original = PeReader.Read(File.ReadAllBytes(path));
+        var (image, loadBase) = HostBase.Fit(original);   // Windows: rebased into the host's image window
+        return (image, X64Translator.Translate(original, new BinaryCompilerOptions(OptimizationProfile.Release, LoadBase: loadBase), "real-ogg"));
     }
 
     private static GuestModule Open((PeImage Image, TranslationArtifact Artifact) lib, Win32ImportResolver resolver) =>
         GuestModule.Load(lib.Artifact, lib.Image, resolver, new GuestModuleOptions { RunEntryPoint = true, AllowUnboundImports = true });
 
-    [Fact]
+    [RealLibraryFact("ogg.dll")]
     public void CrtStartupRunsAndBitPackerMatchesTheFormatDefinition()
     {
-        if (Load() is not { } lib) return;
+        var lib = Load();
         Assert.DoesNotContain(lib.Artifact.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
         using var resolver = new Win32ImportResolver();
         using var module = Open(lib, resolver); // DllMain(DLL_PROCESS_ATTACH) runs the real CRT initialisation
@@ -82,10 +82,10 @@ public sealed class RealOggTests
         }
     }
 
-    [Fact]
+    [RealLibraryFact("ogg.dll")]
     public void StreamPageSyncRoundTripThroughTheLibraryMatchesIndependentCrc()
     {
-        if (Load() is not { } lib) return;
+        var lib = Load();
         using var resolver = new Win32ImportResolver();
         using var module = Open(lib, resolver);
         GuestFunction Fn(string n, int args) => module.Bind(n, GuestCallingConvention.Cdecl, args);

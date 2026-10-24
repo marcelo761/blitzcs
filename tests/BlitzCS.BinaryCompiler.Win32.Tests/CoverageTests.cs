@@ -1,12 +1,12 @@
 using BlitzCS.BinaryCompiler;
 using BlitzCS.BinaryCompiler.Win32;
+using BlitzCS.Testing;
 using Xunit;
 
 namespace BlitzCS.BinaryCompiler.Win32.Tests;
 
 public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
 {
-    private static readonly string? RealDir = Environment.GetEnvironmentVariable("BLITZCS_REAL_PE32_DIR") is { Length: > 0 } d && Directory.Exists(d) ? d : null;
 
     [Fact]
     public void EveryApiHasAConsistentDefinition()
@@ -74,12 +74,11 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         Assert.Throws<Win32UsageException>(() => w.R.Call(other.Mem, World.K, "GetProcessHeap")); // one resolver serves one memory
     }
 
-    private static PeImage Load(string file) => PeReader.Read(File.ReadAllBytes(Path.Combine(RealDir!, file)));
+    private static PeImage Load(string file) => PeReader.Read(File.ReadAllBytes(RealLibraries.PathOf(file)));
 
-    [Fact]
+    [RealLibraryFact("ogg.dll", "vorbis.dll", "vorbisFile.dll", "eax.dll")]
     public void RealLibrariesBlockersAreExactlyTheKnownGaps()
     {
-        if (RealDir is null || !new[] { "ogg.dll", "vorbis.dll", "vorbisFile.dll", "eax.dll" }.All(f => File.Exists(Path.Combine(RealDir, f)))) return; // BLITZCS_REAL_PE32_DIR not set (or incomplete): nothing to analyse
         using var r = new Win32ImportResolver();
         foreach (var f in new[] { "ogg.dll", "vorbis.dll", "vorbisFile.dll", "eax.dll" })
         {

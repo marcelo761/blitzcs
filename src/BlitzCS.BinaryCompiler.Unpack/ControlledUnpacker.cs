@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,9 +20,16 @@ public sealed record UnpackOptions
     public bool AcceptEntrySectionExit { get; init; }
     /// <summary>Accept an OEP that is only Low confidence. Default false.</summary>
     public bool AcceptLowConfidence { get; init; }
+    /// <summary>
+    /// Address at which the packed image is mapped while the stub runs (64 KiB aligned, image plus its footprint below 4 GiB). Null = the image's preferred base.
+    /// With another base the sandbox applies the packed file's OWN base relocations exactly as the Windows loader would, and passes the base as the module handle
+    /// (DllMain's hinstDLL, GetModuleHandle(NULL), PEB.ImageBaseAddress). Packers process their packed relocation table themselves when they are loaded away from the
+    /// preferred base, so the dump is correct for this base and the derived image carries it as its ImageBase. It is part of the lineage digest: a different base is a different derived image.
+    /// </summary>
+    public uint? LoadBase { get; init; }
 
     public string Digest() => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-        $"max={MaxInstructions};min={MinWrittenBytes};exit={AcceptEntrySectionExit};low={AcceptLowConfidence}"))).ToLowerInvariant()[..16];
+        $"max={MaxInstructions};min={MinWrittenBytes};exit={AcceptEntrySectionExit};low={AcceptLowConfidence};base={(LoadBase is { } b ? b.ToString("X8") : "preferred")}"))).ToLowerInvariant()[..16];
 }
 
 /// <summary>Where a derived image came from. Stored beside the derived file and mixed into its cache key.</summary>
@@ -60,7 +68,7 @@ public sealed record UnpackResult(byte[]? DerivedPe, UnpackReport Report, IReadO
 /// </summary>
 public static class ControlledUnpacker
 {
-    public const string Version = "1.0.0";
+    public const string Version = "1.1.0";
 
     private const uint StackBase = 0x7A000000, StackSize = 0x100000, TebBase = 0x7FFDE000;
 
@@ -88,13 +96,26 @@ public static class ControlledUnpacker
         if (packed.Machine != 0x14C || packed.SizeOfImage == 0 || packed.EntryPointRva == 0 || packed.Sections.Count == 0)
             return Fail("UNPACK_NOT_APPLICABLE", "The image is not a PE32 (x86) with sections and a non-zero entry point; there is no stub to run.");
 
+        // The base the stub runs at. A base other than the preferred one needs the packed file's own relocations, applied like the Windows loader does.
+        var loadBase = options.LoadBase ?? packed.ImageBase;
+        if (loadBase == 0 || loadBase % 0x10000 != 0 || (ulong)loadBase + packed.SizeOfImage > 0x1_0000_0000UL)
+            return Fail("UNPACK_BAD_LOAD_BASE", $"LoadBase 0x{loadBase:X8} must be non-zero, 64 KiB aligned and leave room for the image (0x{packed.SizeOfImage:X} bytes) below 4 GiB.");
+        if (loadBase != packed.ImageBase && packed.Relocations.Count == 0)
+            return Fail("UNPACK_LOAD_BASE_NO_RELOCS", $"LoadBase 0x{loadBase:X8} differs from the preferred base 0x{packed.ImageBase:X8} but the packed file has no base relocations, so the Windows loader could not map it there either. A stripped image is fixed at its preferred base.");
+
         SandboxMemory mem = new();
         try
         {
             var mapped = packed.MapImage();
             var size = (uint)((mapped.Length + 4095) & ~4095);
             Array.Resize(ref mapped, (int)size);
-            image = mem.Add(new SandboxRegion("image", packed.ImageBase, mapped, true));
+            if (loadBase != packed.ImageBase)
+            {
+                PeRelocator.Apply(packed, mapped, loadBase);
+                // The loader also stores the actual base in the in-memory optional header; a stub that reads ImageBase from its own header sees the load address.
+                BinaryPrimitives.WriteUInt32LittleEndian(mapped.AsSpan((int)BinaryPrimitives.ReadUInt32LittleEndian(mapped.AsSpan(0x3C)) + 24 + 28), loadBase);
+            }
+            image = mem.Add(new SandboxRegion("image", loadBase, mapped, true));
             var stack = mem.Add(new SandboxRegion("stack", StackBase, new byte[StackSize], false));
             var teb = new byte[0x2000];
             const uint pebOffset = 0x1000;
@@ -104,7 +125,7 @@ public static class ControlledUnpacker
             foreach (var (lo, hi, what) in new[] { (0x7C000000u, 0x7E000000u, "sandbox loader zone"), (0x40000000u, 0x41000000u, "sandbox heap start") })
                 if (image.Base < hi && lo < image.End) return Fail("UNPACK_ADDRESS_CONFLICT", $"The image range 0x{image.Base:X8}-0x{image.End:X8} overlaps the {what}.");
 
-            loader = new GuestLoaderSandbox(mem, packed.ImageBase);
+            loader = new GuestLoaderSandbox(mem, loadBase);
             cpu = new IA32Emulator(mem, TebBase);
             // TEB/PEB: only the fields stubs legitimately use are populated (SEH list head, stack bounds, self pointer, PEB pointer).
             mem.WriteBytes(TebBase, new byte[4]);
@@ -115,7 +136,7 @@ public static class ControlledUnpacker
             mem.Write(TebBase + 0x20, 4, 0x1000);
             mem.Write(TebBase + 0x24, 4, 0x1004);
             mem.Write(TebBase + 0x30, 4, pebAddress);
-            mem.Write(pebAddress + 8, 4, packed.ImageBase);
+            mem.Write(pebAddress + 8, 4, loadBase);
             Array.Clear(image.Written); // sandbox setup is not an unpacker write
 
             // The stub's own import table: bound exactly like the loader binds it.
@@ -123,16 +144,16 @@ public static class ControlledUnpacker
             foreach (var imp in packed.Imports)
             {
                 var t = loader.Thunk(imp.Dll, imp.Name ?? "#" + imp.Ordinal, false);
-                mem.Write(packed.ImageBase + imp.IatRva, 4, t);
+                mem.Write(loadBase + imp.IatRva, 4, t);
                 stubSlots.Add(imp.IatRva);
             }
             Array.Clear(image.Written);
             image.BytesWritten = 0;
 
             cpu.Esp = StackBase + StackSize - 0x200;
-            if (packed.IsDll) { cpu.Push(0); cpu.Push(1); cpu.Push(packed.ImageBase); }
+            if (packed.IsDll) { cpu.Push(0); cpu.Push(1); cpu.Push(loadBase); }
             cpu.Push(GuestLoaderSandbox.ExitAddress);
-            cpu.Eip = packed.ImageBase + packed.EntryPointRva;
+            cpu.Eip = loadBase + packed.EntryPointRva;
 
             int SectionOf(uint rva)
             {
@@ -233,16 +254,16 @@ public static class ControlledUnpacker
 
             if (oep is null) return Fail("UNPACK_NO_OEP", "No original entry point was identified.");
             if (confidence == OepConfidence.Low && !options.AcceptLowConfidence)
-                return Fail("UNPACK_LOW_CONFIDENCE_OEP", $"Control entered generated code at 0x{oep:X} but only {image.BytesWritten} byte(s) had been written (< {options.MinWrittenBytes}); refusing a Low-confidence OEP.", packed.ImageBase + oep, OepConfidence.Low);
+                return Fail("UNPACK_LOW_CONFIDENCE_OEP", $"Control entered generated code at 0x{oep:X} but only {image.BytesWritten} byte(s) had been written (< {options.MinWrittenBytes}); refusing a Low-confidence OEP.", image.Base + oep, OepConfidence.Low);
 
             // Evidence that the dump is meaningful: exported code must now exist in memory.
             var exportable = packed.Exports.Where(e => e.ForwarderTarget is null).ToList();
             var populated = exportable.Count(e => e.Rva < image.Data.Length && image.Data[e.Rva] != 0 && (SectionOf(e.Rva) is var si && si >= 0 && (packed.Sections[si].RawSize == 0 || image.Written[(int)(e.Rva >> 12)])));
             evidence.Add($"{populated}/{exportable.Count} export target(s) contain bytes produced by the run");
             if (exportable.Count > 0 && populated == 0)
-                return Fail("UNPACK_EXPORTS_NOT_POPULATED", "None of the exports points into memory the stub produced; the transfer was not the original entry point.", packed.ImageBase + oep, OepConfidence.Low);
+                return Fail("UNPACK_EXPORTS_NOT_POPULATED", "None of the exports points into memory the stub produced; the transfer was not the original entry point.", image.Base + oep, OepConfidence.Low);
 
-            var built = DerivedPeWriter.Build(packed, image.Data, oep.Value, loader, stubSlots, entrySection, diags);
+            var built = DerivedPeWriter.Build(packed, image.Data, oep.Value, loadBase, loader, stubSlots, entrySection, diags);
             if (built is null)
                 return new UnpackResult(null, MakeReport(true, oep, confidence, populated, exportable.Count, 0, 0, 0, 0, "UNPACK_REBUILD_FAILED"), diags, null);
 

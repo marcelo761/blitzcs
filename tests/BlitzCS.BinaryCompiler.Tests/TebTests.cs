@@ -12,7 +12,7 @@ namespace BlitzCS.BinaryCompiler.Tests;
 [Collection("GuestRuntime")]
 public sealed class TebTests
 {
-    private const uint Hook = PeFixtureBuilder.ImageBase + PeFixtureBuilder.IdataRva + 0x400;
+    private static readonly uint Hook = PeFixtureBuilder.ImageBase + PeFixtureBuilder.IdataRva + 0x400;
 
     private static GuestModule Load(Built b, IGuestImportResolver? resolver = null, GuestModuleOptions? options = null)
         => GuestModule.Load(b.Artifact, b.Image, resolver ?? new DictionaryGuestImportResolver(), options ?? new GuestModuleOptions { RunEntryPoint = false });
@@ -448,15 +448,8 @@ public sealed class TebTests
         Assert.False(IsMappedInProcess(peb));
     }
 
-    private static bool IsMappedInProcess(ulong address)
-    {
-        foreach (var line in File.ReadAllLines("/proc/self/maps"))
-        {
-            var range = line.Split(' ', 2)[0].Split('-');
-            if (address >= Convert.ToUInt64(range[0], 16) && address < Convert.ToUInt64(range[1], 16)) return true;
-        }
-        return false;
-    }
+    /// <summary>True when any mapping of this process covers the address (/proc/self/maps on Linux, VirtualQuery on Windows, through the platform layer).</summary>
+    private static bool IsMappedInProcess(ulong address) => BlitzCS.BinaryCompiler.Runtime.PlatformMemory.Current.QueryRanges(address, address + 1).Count > 0;
 
     [Fact]
     public void ReleaseAndDebugProfilesProduceTheSameTebBehaviour()

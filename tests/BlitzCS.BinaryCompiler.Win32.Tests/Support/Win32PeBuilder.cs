@@ -9,7 +9,8 @@ namespace BlitzCS.BinaryCompiler.Win32.Tests;
 /// </summary>
 public sealed class Win32PeBuilder
 {
-    public const uint ImageBase = 0x10000000;
+    /// <summary>Fixture base: 0x10000000 on Linux; on Windows x64 (also under Wine) a base inside the image window, in its upper part (the process' own heaps grow from the bottom).</summary>
+    public static readonly uint ImageBase = OperatingSystem.IsWindows() ? 0x60000000u : 0x10000000u;
     public const uint TextRva = 0x1000, DataRva = 0x2000, IdataRva = 0x3000, EdataRva = 0x4000, RelocRva = 0x5000;
 
     private byte[] code = [0xC3];

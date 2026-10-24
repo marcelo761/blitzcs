@@ -14,12 +14,36 @@ internal static class BinaryTranslationStep
     internal const string TargetEnvironmentVariable = "BLITZCS_BINARY_TARGET";
 
     /// <summary>Artifacts are target specific. Precedence: --target, the catalog's binaryTarget, BLITZCS_BINARY_TARGET, then windows-x64 (the primary target).</summary>
-    internal static string ResolveTarget(ExternalCatalogResult catalog, string? requested)
+    internal static string ResolveTarget(ExternalCatalogResult catalog, string? requested) => ResolveTarget(catalog.BinaryTarget, requested);
+
+    internal static string ResolveTarget(string? catalogTarget, string? requested)
     {
         if (requested is not null) return BinaryTargets.Normalize(requested);
-        if (catalog.BinaryTarget is not null) return catalog.BinaryTarget;
+        if (catalogTarget is not null) return catalogTarget;
         var fromEnvironment = Environment.GetEnvironmentVariable(TargetEnvironmentVariable);
         return string.IsNullOrWhiteSpace(fromEnvironment) ? BinaryTargets.WindowsX64 : BinaryTargets.Normalize(fromEnvironment);
+    }
+
+    /// <summary>
+    /// The guest base each library must be unpacked at, decided BEFORE any packer stub runs. Linux targets and libraries that are not unpacked: null (preferred base).
+    /// windows-x64: the library set is planned with <see cref="ModuleBaseAllocator"/> exactly like the build does for translation, and a packed library whose preferred base is
+    /// not usable there (below 0x20000000) or taken by a sibling is unpacked mapped at the planned base. The derived image is then fixed at that base, which
+    /// <see cref="Prepare"/> keeps (an image without relocations is placed first and never moved). Throws <see cref="PeRebaseException"/> when the packed file has no relocations and cannot move.
+    /// </summary>
+    internal static IReadOnlyList<uint?> PlanUnpackBases(IReadOnlyList<BinaryLibrarySpec> specs, string targetOs)
+    {
+        var bases = new uint?[specs.Count];
+        if (!specs.Any(spec => spec.Unpack) || !ModuleBaseAllocator.IsWindowsTarget(targetOs)) return bases;
+        foreach (var spec in specs)
+        {
+            if (!File.Exists(spec.Path)) throw new FileNotFoundException($"Binary library '{spec.FileName}' does not exist.", spec.Path);
+            if (!BinaryBuild.IsPe32X86(spec.Path)) throw new ArgumentException($"Binary library '{spec.Path}' is not a PE32 x86 image.");
+        }
+        var images = specs.Select(spec => PeReader.Read(File.ReadAllBytes(spec.Path))).ToArray();
+        var plan = ModuleBaseAllocator.Allocate([.. specs.Select((spec, i) => (spec.FileName, images[i]))], null, targetOs);
+        for (var i = 0; i < specs.Count; i++)
+            if (specs[i].Unpack && plan[i].Base != images[i].ImageBase) bases[i] = plan[i].Base;
+        return bases;
     }
 
     /// <summary>

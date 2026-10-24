@@ -1,5 +1,7 @@
 using BlitzCS.BinaryCompiler.CodeGen;
 using BlitzCS.BinaryCompiler.Runtime;
+using BlitzCS.BinaryCompiler.Tests.Support;
+using BlitzCS.Testing;
 using Xunit;
 
 namespace BlitzCS.BinaryCompiler.Tests;
@@ -12,11 +14,18 @@ namespace BlitzCS.BinaryCompiler.Tests;
 [Collection("GuestRuntime")]
 public sealed class RealLibraryTests
 {
-    private static string? OggPath()
+    /// <summary>
+    /// Reads ogg.dll (preferred base 0x10000000, with relocations). On Windows x64 that base cannot be mapped (BC_BASE_UNUSABLE_ON_TARGET), so the image is rebased to a base
+    /// the host reports free and the translator is told the same <c>LoadBase</c>. Linux keeps the preferred base: image and options are unchanged.
+    /// </summary>
+    private static (PeImage Original, PeImage Image, BinaryCompilerOptions Options) LoadOgg(string name)
     {
-        var dir = Environment.GetEnvironmentVariable("BLITZCS_REAL_PE32_DIR");
-        var path = string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "ogg.dll");
-        return path is not null && File.Exists(path) ? path : null;
+        var original = PeReader.Read(File.ReadAllBytes(RealLibraries.PathOf("ogg.dll")));
+        var options = new BinaryCompilerOptions(OptimizationProfile.Release);
+        if (!HostPlatform.RequiresHighGuestBase || original.ImageBase >= PlatformMemory.Current.MinimumImageBase) return (original, original, options);
+        var loadBase = HostPlatform.FreeBase(0x50000000, ModuleBaseAllocator.Footprint(original));
+        Assert.True(loadBase >= PlatformMemory.Current.MinimumImageBase, $"{name}: no host-valid base found");
+        return (original, original.Rebase(loadBase), options with { LoadBase = loadBase });
     }
 
     private static readonly uint[] CrcTable = BuildCrcTable();
@@ -41,13 +50,11 @@ public sealed class RealLibraryTests
         return crc;
     }
 
-    [Fact]
+    [RealLibraryFact("ogg.dll")]
     public void OggEntryPointTranslatesAndStopsOnlyAtTheMissingWin32Imports()
     {
-        var path = OggPath();
-        if (path is null) return;
-        var image = PeReader.Read(File.ReadAllBytes(path));
-        var artifact = X64Translator.Translate(image, new BinaryCompilerOptions(OptimizationProfile.Release), "real-ogg-main");
+        var (original, image, options) = LoadOgg("real-ogg-main");
+        var artifact = X64Translator.Translate(original, options, "real-ogg-main");
         var errors = artifact.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         Assert.True(errors.Count == 0, "translation errors: " + string.Join("; ", errors.Take(8).Select(e => $"{e.Code}@{e.GuestRva:X}: {e.Message}")));
         // DllMain(DLL_PROCESS_ATTACH) runs the CRT start-up, which needs heap and critical-section services: with unbound imports the guest
@@ -57,15 +64,11 @@ public sealed class RealLibraryTests
         Assert.Contains("unbound import", ex.ToString());
     }
 
-    [Fact]
+    [RealLibraryFact("ogg.dll")]
     public void OggPageFunctionsMatchAnIndependentReference()
     {
-        var path = OggPath();
-        if (path is null) return; // no local copy of the library: nothing to validate
-        var dll = File.ReadAllBytes(path);
-        var image = PeReader.Read(dll);
-        var options = new BinaryCompilerOptions(OptimizationProfile.Release);
-        var artifact = X64Translator.Translate(image, options, "real-ogg");
+        var (original, image, options) = LoadOgg("real-ogg");
+        var artifact = X64Translator.Translate(original, options, "real-ogg");
         // The CRT start-up code reaches the TEB through fs: (SEH prolog, stack bounds); that is modelled now, so no fs:/gs: diagnostic remains.
         Assert.DoesNotContain(artifact.Diagnostics, d => d.Code is "BC_SEGMENT_OVERRIDE" or "BC_FS_UNSUPPORTED_OFFSET");
         using var module = GuestModule.Load(artifact, image, new DictionaryGuestImportResolver(),
