@@ -10,8 +10,8 @@ internal static class ExternalCatalog
     internal static ExternalCatalogResult Load(string catalogPath, string? target = null)
     {
         catalogPath = Path.GetFullPath(catalogPath);
-        using var document = JsonDocument.Parse(File.ReadAllText(catalogPath));
-        var root = document.RootElement;
+        var document = ExternalCatalogDocument.Read(catalogPath);
+        var root = document.Root;
         var functions = new List<ExternalFunction>();
         var signatures = new List<ExternalFunctionSignature>();
         var items = root.GetProperty("functions").EnumerateArray().ToArray();
@@ -91,18 +91,29 @@ internal static class ExternalCatalog
                 defaults = values.Select((value, index) => ReadDefault(value,
                     parameters[parameters.Length - values.Length + index])).ToArray();
             }
-            var signature = new ExternalFunctionSignature(Read(item, "name"), returnType, parameters, defaults);
+            var signature = new ExternalFunctionSignature(Read(item, "name"), returnType, parameters, defaults)
+            { Contract = ReadContract(item) };
             if (function is not null && (function.Signature.ReturnType != signature.ReturnType || !function.Signature.ParameterTypes.SequenceEqual(signature.ParameterTypes)))
                 throw new ArgumentException($"External method '{function.Name}' does not match its declared signature.");
             signatures.Add(signature);
             if (function is not null) functions.Add(function);
         }
-        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs, binaryTarget);
+        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs, binaryTarget, document.InputPaths);
         }
         catch { staging?.Dispose(); throw; }
         finally { context.Dispose(); }
     }
 
+
+    private static ExternalApiContract? ReadContract(JsonElement item)
+    {
+        if (!item.TryGetProperty("contract", out var contract) || contract.ValueKind == JsonValueKind.Null) return null;
+        if (contract.ValueKind != JsonValueKind.Object) throw new ArgumentException("External function contract must be an object.");
+        string? Field(string key) => contract.TryGetProperty(key, out var value) && value.ValueKind != JsonValueKind.Null
+            ? value.ValueKind == JsonValueKind.String ? value.GetString() : throw new ArgumentException($"External contract '{key}' must be a string or null.") : null;
+        return new ExternalApiContract(Field("provider")!, Field("resolution")!, Field("symbol")!,
+            Field("profile"), Field("callingConvention"), Field("source"));
+    }
 
     private static bool PathEquals(string a, string b) =>
         string.Equals(a, b, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
@@ -256,7 +267,8 @@ internal sealed record ExternalCatalogResult(
     IReadOnlyList<BinaryBinding>? BinaryBindings = null,
     IDisposable? Staging = null,
     IReadOnlyList<BinaryLibrarySpec>? LibrarySpecs = null,
-    string? BinaryTarget = null) : IDisposable
+    string? BinaryTarget = null,
+    IReadOnlyList<string>? InputPaths = null) : IDisposable
 {
     public void Dispose() => Staging?.Dispose();
 }

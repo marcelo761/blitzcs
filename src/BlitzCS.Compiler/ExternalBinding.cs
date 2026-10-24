@@ -31,7 +31,7 @@ internal sealed partial class SemanticAnalysis
         }
         var target = externals.TryGetBinding(call.Name, out var implementation) ? implementation.Target : string.Empty;
         if (implementation is null)
-            UnboundExternalCalls.Add(new(call.Name, call.Position.File ?? sourcePath, call.Position.Line, call.Position.Column));
+            UnboundExternalCalls.Add(new(call.Name, call.Position.File ?? sourcePath, call.Position.Line, call.Position.Column) { Contract = signature.Contract });
         return new(target, converted, true, result);
     }
 }

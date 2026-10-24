@@ -4,7 +4,14 @@ using Microsoft.CodeAnalysis.CSharp;
 namespace BlitzCS.Compiler;
 
 public enum ExternalValueType { Integer, Float, String, Void }
-public sealed record UnboundExternalCall(string Name, string SourcePath, int Line, int Column);
+public sealed record UnboundExternalCall(string Name, string SourcePath, int Line, int Column)
+{
+    public ExternalApiContract? Contract { get; init; }
+    public string MissingImplementationMessage => $"External function '{Name}' has a declared signature but no implementation." +
+        (Contract is { } contract
+            ? $" Required runtime provider '{contract.Provider}' (profile '{contract.Profile ?? "unspecified"}', resolution '{contract.Resolution}', symbol '{contract.Symbol}'). Supply a matching managed or binary binding through --externals; declaration validation does not establish runtime support."
+            : "");
+}
 
 /// <summary>A callable BASIC signature independent of any executable implementation.</summary>
 /// <remarks>Void is permitted only as a return type for external commands.
@@ -15,6 +22,7 @@ public sealed record UnboundExternalCall(string Name, string SourcePath, int Lin
 public sealed class ExternalFunctionSignature
 {
     public string Name { get; }
+    public ExternalApiContract? Contract { get; init; }
     public ExternalValueType ReturnType { get; }
     public IReadOnlyList<ExternalValueType> ParameterTypes { get; }
 

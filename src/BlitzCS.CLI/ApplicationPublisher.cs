@@ -60,6 +60,7 @@ internal static class ApplicationPublisher
             var stage = Path.Combine(workspace, "input");
             var assemblyPath = Path.Combine(stage, name + ".dll");
             var binaries = BinaryTranslationStep.Prepare(catalog, assemblyPath, error, target);
+            binaries.ValidateInputs(inputs.Concat(catalog.Functions.ReferencePaths).Concat(catalog.NativeLibraries));
             const string startup = """
                 internal static class BlitzStartup
                 {

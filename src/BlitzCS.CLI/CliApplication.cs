@@ -66,7 +66,7 @@ public static class CliApplication
                     : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
                 var unbound = BasicCompiler.CheckSemantics(File.ReadAllText(sourcePath), sourcePath, semanticCatalog.Functions);
                 foreach (var call in unbound)
-                    output.WriteLine($"{call.SourcePath}({call.Line},{call.Column}): external function '{call.Name}' has a declared signature but no implementation.");
+                    output.WriteLine($"{call.SourcePath}({call.Line},{call.Column}): {call.MissingImplementationMessage}");
                 output.WriteLine($"Semantic validation succeeded; {unbound.Count} external call(s) lack implementations.");
                 return 0;
             }
@@ -86,7 +86,7 @@ public static class CliApplication
                     destination = Path.Combine(Path.GetDirectoryName(destination) ?? ".", name);
                 }
                 ApplicationPublisher.Build(code, destination, name, applicationTarget, packageCatalog,
-                    args.Length == 4 ? inputs.Append(args[3]) : inputs, output, error, assets, graphical);
+                    inputs.Concat(packageCatalog.InputPaths ?? []), output, error, assets, graphical);
                 return 0;
             }
             if (packageOutput is not null || assets is not null || graphical)
@@ -95,11 +95,13 @@ public static class CliApplication
             using var catalog = args.Length == 6
                 ? ExternalCatalog.Load(args[5], target)
                 : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
-            var binaries = BinaryTranslationStep.Prepare(catalog, outputPath, error, target);
             var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions, out var sourceInputs);
+            var binaries = BinaryTranslationStep.Prepare(catalog, outputPath, error, target);
+            binaries.ValidateInputs(sourceInputs.Concat(catalog.InputPaths ?? [])
+                .Concat(catalog.Functions.ReferencePaths).Concat(catalog.NativeLibraries));
             DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram",
                 referencePaths: catalog.Functions.ReferencePaths, nativeLibraryPaths: catalog.NativeLibraries,
-                inputPaths: args.Length == 6 ? sourceInputs.Append(args[5]) : sourceInputs);
+                inputPaths: sourceInputs.Concat(catalog.InputPaths ?? []));
             binaries.Publish(output);
             output.WriteLine(outputPath);
             return 0;

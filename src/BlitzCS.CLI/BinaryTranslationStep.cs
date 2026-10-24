@@ -178,6 +178,37 @@ internal sealed record PendingBinary(string Library, string Target, byte[] Bytes
 
 internal sealed class PreparedBinaries(List<PendingBinary> pending)
 {
+    /// <summary>Validate every binary publication path before the managed emitter writes any output.</summary>
+    internal void ValidateInputs(IEnumerable<string> inputs)
+    {
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var protectedPaths = new HashSet<string>(inputs.Select(DotNetEmitter.CanonicalPath), comparer);
+        var targets = new HashSet<string>(comparer);
+        foreach (var item in pending)
+        {
+            protectedPaths.Add(DotNetEmitter.CanonicalPath(item.Library));
+            protectedPaths.Add(DotNetEmitter.CanonicalPath(item.Spec.EffectivePath));
+            AddTarget(item.Target);
+            AddTarget(item.Target + ".tmp");
+            if (item.Spec.Preprocessed is { } derived)
+            {
+                protectedPaths.Add(DotNetEmitter.CanonicalPath(Path.ChangeExtension(derived.DerivedPath, ".lineage.json")));
+                var directory = Path.GetDirectoryName(item.Target)!;
+                AddTarget(Path.Combine(directory, Path.GetFileName(item.Library) + TranslatedLibrary.DerivedExtension));
+                AddTarget(Path.Combine(directory, Path.GetFileName(item.Library) + TranslatedLibrary.LineageExtension));
+            }
+        }
+        if (targets.Any(protectedPaths.Contains))
+            throw new ArgumentException("Binary output cannot overwrite compiler or external input files.");
+
+        void AddTarget(string path)
+        {
+            if (!targets.Add(DotNetEmitter.CanonicalPath(path)))
+                throw new ArgumentException("Binary outputs must have distinct paths.");
+            if (Directory.Exists(path)) throw new ArgumentException("Binary output cannot overwrite a directory.");
+        }
+    }
+
     internal void Publish(TextWriter output)
     {
         foreach (var (library, target, bytes, result, spec) in pending)
