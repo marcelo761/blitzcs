@@ -46,4 +46,22 @@ public sealed class TrapReportingTests
         Assert.Contains("packed or self-modifying", error.Message);
         Assert.Throws<GuestLoadException>(() => GuestModule.Load(artifact, packed, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false }));
     }
+
+    [Fact]
+    public void ExportOfDataInANonExecutableSectionIsNotAnError()
+    {
+        // vorbis.dll-style data exports: a table exported from .data must not be treated as a code root.
+        var bytes = new PeFixtureBuilder().WithCode([0xC3]).Export("_f", 0).Build();
+        var image = PeReader.Read(bytes);
+        var data = image.Sections.Single(x => x.Name == ".data");
+        var withDataExport = new PeImage
+        {
+            Bytes = image.Bytes, Sha256 = image.Sha256, Machine = image.Machine, IsDll = image.IsDll, ImageBase = image.ImageBase,
+            SizeOfImage = image.SizeOfImage, EntryPointRva = 0, Sections = image.Sections, Imports = image.Imports,
+            Exports = [.. image.Exports, new PeExport("_table", 2, data.VirtualAddress + 8, null)],
+            Relocations = image.Relocations, Tls = image.Tls, Diagnostics = image.Diagnostics,
+        };
+        var artifact = BlitzCS.BinaryCompiler.CodeGen.X64Translator.Translate(withDataExport, new BinaryCompilerOptions(), "k");
+        Assert.DoesNotContain(artifact.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+    }
 }

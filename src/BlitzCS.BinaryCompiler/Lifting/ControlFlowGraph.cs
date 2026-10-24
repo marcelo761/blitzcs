@@ -105,6 +105,8 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
     {
         if (IsExec(rva)) { Enqueue(rva, true); return; }
         var section = image.Sections.FirstOrDefault(s => rva >= s.VirtualAddress && rva < s.VirtualAddress + Math.Max(s.VirtualSize, s.RawSize));
+        // An export or entry that lies in a non-executable section is data (tables, variables), not a code root.
+        if (section is { IsExecutable: false } && section.RawSize != 0) return;
         var detail = section is { RawSize: 0 }
             ? $"lies in section '{section.Name}', which has no data in the file; code there is produced at run time (packed or self-modifying image) and cannot be translated ahead of time"
             : "does not lie in file-backed executable memory";
