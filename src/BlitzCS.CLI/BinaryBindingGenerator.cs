@@ -67,7 +67,14 @@ internal static class BinaryBindingGenerator
         var libraries = Libraries(bindings);
         var useWin32 = UsesWin32(specs);
         if (useWin32)
-            text.Append($"internal sealed class Win32Environment : {rt}IBinaryHostEnvironment\n{{\n    public {rt}IGuestImportResolver CreateResolver(string moduleName) => new global::BlitzCS.BinaryCompiler.Win32.Win32ImportResolver();\n}}\n");
+            text.Append($"internal sealed class Win32Environment(bool appFiles, global::BlitzCS.BinaryCompiler.Win32.WaveOutBackendKind audio, string? audioRecord) : {rt}IBinaryHostEnvironment\n{{\n"
+                + "    // fileRoot \"app\": the guest's file system is the directory this binding (and so the library and its artifact) was installed in.\n"
+                + "    // audio: the waveOut backend chosen in the catalog; Default lets the Win32 component decide (host device on Windows, no devices elsewhere).\n"
+                + $"    public {rt}IGuestImportResolver CreateResolver(string moduleName) => new global::BlitzCS.BinaryCompiler.Win32.Win32ImportResolver(\n"
+                + "        new global::BlitzCS.BinaryCompiler.Win32.Win32Options\n        {\n"
+                + "            SandboxRoot = appFiles ? global::System.IO.Path.GetDirectoryName(typeof(Win32Environment).Assembly.Location) : null,\n"
+                + "            WaveOut = audio,\n"
+                + "            WaveOutRecordPath = audioRecord is null ? null : global::System.IO.Path.Combine(global::System.IO.Path.GetDirectoryName(typeof(Win32Environment).Assembly.Location)!, audioRecord),\n        });\n}\n");
         text.Append("internal static class Registry\n{\n");
         for (var k = 0; k < specs.Count; k++)
         {
@@ -79,7 +86,7 @@ internal static class BinaryBindingGenerator
             foreach (var b in bindings.Where(b => b.LibraryPath == spec.Path && b.Convention is GuestCallingConvention.Cdecl or GuestCallingConvention.Stdcall && !spec.ExportConventions.ContainsKey(b.Export)).DistinctBy(b => b.Export))
                 conventions.Append($"[{Literal(b.Export)}] = {(b.Convention == GuestCallingConvention.Cdecl ? rt + "ExportSignature.Cdecl" : $"{rt}ExportSignature.Stdcall({b.Parameters.Count})")}, ");
             text.Append($"    internal static readonly {rt}BinaryLibrary L{k} = {rt}BinaryLibrary.For(typeof(Registry).Assembly, {Literal(spec.FileName)}, new {rt}BinaryLibraryOptions\n    {{\n");
-            if (spec.Win32 != false) text.Append($"        Environment = new Win32Environment(), EnvironmentRequired = {(spec.Win32 == true ? "true" : "false")},\n");
+            if (spec.Win32 != false) text.Append($"        Environment = new Win32Environment({(spec.AppFileRoot ? "true" : "false")}, {WaveOutKind(spec.Audio)}, {(spec.AudioRecord is null ? "null" : Literal(spec.AudioRecord))}), EnvironmentRequired = {(spec.Win32 == true ? "true" : "false")},\n");
             text.Append($"        RunEntryPoint = {(spec.RunEntryPoint ? "true" : "false")}, AllowUnboundImports = {(spec.UnboundImportsAreErrors ? "false" : "true")},\n");
             if (spec.DefaultCdecl || conventions.Length > 0)
                 text.Append($"        Conventions = new {rt}ExportConventions {{ {(spec.DefaultCdecl ? "Default = global::BlitzCS.BinaryCompiler.GuestCallingConvention.Cdecl, " : "")}Exports = new global::System.Collections.Generic.Dictionary<string, {rt}ExportSignature> {{ {conventions}}} }},\n");
@@ -119,6 +126,12 @@ internal static class BinaryBindingGenerator
         }
         return text.ToString();
     }
+
+    /// <summary>The Win32 component's <c>WaveOutBackendKind</c> a catalog <c>audio</c> value selects (null: its default).</summary>
+    private static string WaveOutKind(string? audio) => "global::BlitzCS.BinaryCompiler.Win32.WaveOutBackendKind." + audio switch
+    {
+        "host" => "HostWinmm", "virtual" => "VirtualSink", "none" => "None", _ => "Default"
+    };
 
     private static int IndexOfSpec(IReadOnlyList<BinaryLibrarySpec> specs, string path)
     {

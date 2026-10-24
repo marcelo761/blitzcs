@@ -294,6 +294,13 @@ public sealed class Win32Options
     public Action<string>? CallTrace { get; init; }
     /// <summary>Receives OutputDebugStringA text (what an attached debugger would see). Null: no debugger is attached and the text is dropped, as on Windows.</summary>
     public Action<string>? DebugOutput { get; init; }
+
+    /// <summary>waveOut backend (see docs/binary-audio.md). Default: HostWinmm on a Windows host (including Wine), None elsewhere. The environment variable BLITZCS_AUDIO=host|virtual|none overrides it.</summary>
+    public WaveOutBackendKind WaveOut { get; init; } = WaveOutBackendKind.Default;
+    /// <summary>VirtualSink: records every consumed buffer to this RIFF WAV file. HostWinmm: records every buffer written. Ignored (with a diagnostic) for the None backend.</summary>
+    public string? WaveOutRecordPath { get; init; }
+    /// <summary>Receives the PCM the guest played (see <see cref="WaveOutWrite"/>), on the backend's threads.</summary>
+    public WaveOutObserver? WaveOutObserver { get; init; }
 }
 
 /// <summary>Per-process emulation state shared by the services. One instance must serve exactly one guest module.</summary>
@@ -318,6 +325,12 @@ public sealed class Win32Context : IDisposable
     }
 
     public Win32Options Options { get; }
+
+    private IDisposable[] disposables = [];
+    private readonly object disposablesGate = new();
+
+    /// <summary>Registers an object to dispose together with this context (after the handle table).</summary>
+    internal void AddDisposable(IDisposable d) { lock (disposablesGate) disposables = [.. disposables, d]; }
 
     private Exception? processFault;
 
@@ -394,6 +407,7 @@ public sealed class Win32Context : IDisposable
         Files.Dispose();
         Process.Dispose();
         foreach (var v in handles.Values) (v as IDisposable)?.Dispose();
+        foreach (var d in Interlocked.Exchange(ref disposables, []).Reverse()) d.Dispose();
         lastError.Dispose();
     }
 }

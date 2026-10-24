@@ -84,6 +84,11 @@ vezes com opções é erro de ambiguidade; dois arquivos com o mesmo nome també
 | `defaultConvention` | nenhum | só `"cdecl"`: exports sem decoração e sem entrada própria |
 | `exportConventions` | vazio | `{"export": "cdecl" \| "stdcall:N", "#ordinal": ...}`; contradizer `binary.convention` ou a contagem de parâmetros é erro |
 | `unpack` | `false` | ver `docs/binary-unpack.md` |
+| `fileRoot` | `"none"` | `"app"`: as APIs de arquivo da biblioteca veem o diretório da aplicação (onde ficam a DLL, o `.bcx` e os `--assets`) como `C:\` e diretório de trabalho; `..` não sai dele. `"none"`: todo acesso a arquivos falha com ACCESS_DENIED |
+| `audio` | ausente | backend waveOut do ambiente Win32: `"host"` (winmm do sistema, só Windows), `"virtual"` (sumidouro em processo, tempo real), `"none"` (sem dispositivos); ausente = padrão do componente (host no Windows, nenhum nos demais); `BLITZCS_AUDIO` sobrepõe em tempo de execução. Ver `docs/binary-audio.md` |
+| `audioRecord` | ausente | nome relativo (sem unidade nem `..`) sob o diretório da aplicação que recebe um WAV com tudo que a biblioteca tocou |
+
+`fileRoot`, `audio` e `audioRecord` configuram o ambiente Win32; combiná-los com `"win32": false` é erro de build. Exemplo completo com a FMOD 3.75 original: `samples/FmodAudio`.
 
 A política de imports ausentes: se um import ausente é alcançável só se sabe em tempo de execução, então o build
 avisa (com `Win32ImportResolver.Analyze` e a checagem dos irmãos) e a chamada falha nomeando `dll!nome`.

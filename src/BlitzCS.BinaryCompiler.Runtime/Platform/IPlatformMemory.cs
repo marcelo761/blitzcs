@@ -42,7 +42,7 @@ public static class PlatformMemory
 {
     private static IPlatformMemory? current;
 
-    public static IPlatformMemory Current => current ??= Create();
+    public static IPlatformMemory Current => LazyInitializer.EnsureInitialized(ref current, Create)!;
 
     private static IPlatformMemory Create()
     {

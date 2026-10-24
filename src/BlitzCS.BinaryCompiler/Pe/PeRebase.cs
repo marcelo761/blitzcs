@@ -95,8 +95,10 @@ public static class ModuleBaseAllocator
     /// 64 KiB early because of the inter-module gap.
     /// </summary>
     public static readonly IReadOnlyList<(uint Start, uint End)> WindowsReserved = [(0, 0x1FFF0000), (0x70000000, 0xFFFFFFFF)];
-    public const uint WindowsMinimumBase = 0x20000000, WindowsImageWindowEnd = 0x70000000;
-    private static readonly (uint Start, uint End)[] WindowsSearchWindows = [(0x20000000, 0x70000000)];
+    public const uint WindowsMinimumBase = 0x20000000, WindowsImageWindowEnd = 0x70000000, WindowsPreferredStart = 0x50000000;
+    // The upper half of the window first: the CLR and Wine grow their own heaps upward from 0x20000000 (measured: 0x30A20000 after a long run),
+    // so a base chosen at the bottom collides with them at random. The lower half stays as the fallback.
+    private static readonly (uint Start, uint End)[] WindowsSearchWindows = [(WindowsPreferredStart, WindowsImageWindowEnd), (WindowsMinimumBase, WindowsPreferredStart)];
 
     /// <summary>True when <paramref name="targetOs"/> (null = the running OS) is the Windows x64 target.</summary>
     public static bool IsWindowsTarget(string? targetOs) => (BinaryTargets.TryNormalize(targetOs) ?? BinaryTargets.Host) == BinaryTargets.WindowsX64;

@@ -149,6 +149,44 @@ public sealed class GuestModuleSet : IDisposable
         if (errors is not null) throw new AggregateException("One or more modules failed to dispose.", errors);
     }
 
+    /// <summary>
+    /// Process-exit disposal (see <see cref="GuestModule.TryDispose"/>): modules are detached in reverse load order as in <see cref="Dispose"/>, but a module whose guest code is still
+    /// running after <paramref name="graceMilliseconds"/> (and so every module it keeps alive) is left to the operating system instead of blocking the exit. Neither its DllMain detach
+    /// nor its host environment (which would unmap memory under the running thread) is touched.
+    /// </summary>
+    internal void DisposeAtProcessExit(int graceMilliseconds)
+    {
+        if (disposed) return;
+        disposed = true;
+        var abandoned = new HashSet<Entry>();
+        foreach (var e in entries.Where(x => x.Module is not null).OrderByDescending(x => x.LoadOrder).ToList())
+        {
+            var module = e.Module!;
+            try
+            {
+                if (module.DependentCount != 0 || !TryRelease(e, module, graceMilliseconds)) abandoned.Add(e);
+            }
+            catch (Exception error) when (error is GuestException or InvalidOperationException or ObjectDisposedException) { abandoned.Add(e); }
+        }
+        foreach (var e in entries)
+            if (!abandoned.Contains(e) && e.Host is IDisposable d)
+            {
+                try { d.Dispose(); }
+                catch (Exception error) when (error is GuestException or InvalidOperationException or ObjectDisposedException) { }
+            }
+        entries.Clear();
+    }
+
+    private bool TryRelease(Entry e, GuestModule module, int graceMilliseconds)
+    {
+        if (!module.TryDispose(graceMilliseconds)) return false;
+        e.Module = null;
+        foreach (var other in entries.Where(o => o != e && o.Module is not null)) { other.Module!.Memory.UnlinkPeer(module.Memory); module.Memory.UnlinkPeer(other.Module.Memory); }
+        foreach (var dep in e.Dependencies) dep.Module?.RemoveDependent();
+        e.Dependencies = [];
+        return true;
+    }
+
     private void Release(Entry e)
     {
         var module = e.Module;

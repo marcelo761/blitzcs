@@ -1,0 +1,232 @@
+{
+  "binaryLibraries": [
+    {
+      "path": "fmod.dll",
+      "unpack": true,
+      "win32": true,
+      "runEntryPoint": true,
+      "fileRoot": "app",
+      "exportConventions": {
+        "_FSOUND_GetVersion@0": "stdcall:0",
+        "_FSOUND_SetOutput@4": "stdcall:1",
+        "_FSOUND_SetDriver@4": "stdcall:1",
+        "_FSOUND_GetNumDrivers@0": "stdcall:0",
+        "_FSOUND_Init@12": "stdcall:3",
+        "_FSOUND_Close@0": "stdcall:0",
+        "_FSOUND_Sample_Load@20": "stdcall:5",
+        "_FSOUND_Sample_Free@4": "stdcall:1",
+        "_FSOUND_PlaySound@8": "stdcall:2",
+        "_FSOUND_StopSound@4": "stdcall:1",
+        "_FSOUND_IsPlaying@4": "stdcall:1",
+        "_FSOUND_SetVolume@8": "stdcall:2",
+        "_FSOUND_GetError@0": "stdcall:0",
+        "_FSOUND_GetOutput@0": "stdcall:0",
+        "_FSOUND_GetMixer@0": "stdcall:0",
+        "_FSOUND_Sample_GetLength@4": "stdcall:1",
+        "_FSOUND_Sample_GetMode@4": "stdcall:1"
+      }
+    }
+  ],
+  "functions": [
+    {
+      "name": "FSOUND_GetVersion",
+      "parameters": [],
+      "returnType": "Float",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_GetVersion@0",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_SetOutput",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_SetOutput@4",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_SetDriver",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_SetDriver@4",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_GetNumDrivers",
+      "parameters": [],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_GetNumDrivers@0",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_Init",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Init@12",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_Close",
+      "parameters": [],
+      "returnType": "Void",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Close@0",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_Sample_Load",
+      "parameters": [
+        "Integer",
+        "String",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Sample_Load@20",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_Sample_Free",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Void",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Sample_Free@4",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_PlaySound",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_PlaySound@8",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_StopSound",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_StopSound@4",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_IsPlaying",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_IsPlaying@4",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_SetVolume",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_SetVolume@8",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_GetError",
+      "parameters": [],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_GetError@0",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_GetOutput",
+      "parameters": [],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_GetOutput@0",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_GetMixer",
+      "parameters": [],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_GetMixer@0",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_Sample_GetLength",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Sample_GetLength@4",
+        "convention": "stdcall"
+      }
+    },
+    {
+      "name": "FSOUND_Sample_GetMode",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Sample_GetMode@4",
+        "convention": "stdcall"
+      }
+    }
+  ]
+}

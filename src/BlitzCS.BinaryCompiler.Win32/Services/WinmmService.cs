@@ -5,7 +5,8 @@ using BlitzCS.BinaryCompiler.Runtime;
 namespace BlitzCS.BinaryCompiler.Win32;
 
 /// <summary>
-/// WINMM for a machine WITHOUT multimedia hardware. Device enumeration is real and says so: waveOutGetNumDevs, waveInGetNumDevs and mixerGetNumDevs return 0. Consequently
+/// WINMM. waveOut* is implemented by <see cref="WaveOutApi"/> over a pluggable backend (HostWinmm / VirtualSink / None, see docs/binary-audio.md); with the None backend the machine has NO multimedia hardware.
+/// waveIn and mixer stay hardware-less: waveInGetNumDevs and mixerGetNumDevs return 0. Consequently, for the None backend and for waveIn/mixer
 /// (MMSYSERR_* values from mmsystem.h): any call that takes a device id fails - WAVE_MAPPER (0xFFFFFFFF) with MMSYSERR_NODRIVER (6), a numbered device with MMSYSERR_BADDEVICEID (2);
 /// waveOutOpen/waveInOpen/mixerOpen can therefore never produce a handle, so every call taking a wave/mixer handle fails with MMSYSERR_INVALHANDLE (5) for ANY value. Mixer calls
 /// taking a HMIXEROBJ look at the MIXER_OBJECTF_* type bits: HANDLE -> INVALHANDLE, any id-based type -> BADDEVICEID. No audio is ever played or recorded. mciSendCommandA and
@@ -37,18 +38,15 @@ public sealed class WinmmService : Win32Service
 
     protected override void Define()
     {
-        Std(W, "waveOutGetNumDevs", 0, _ => 0);
+        WaveOutApi.Define((name, argc, handler) => Std(W, name, argc, handler));
         Std(W, "waveInGetNumDevs", 0, _ => 0);
         Std(W, "mixerGetNumDevs", 0, _ => 0);
-        Std(W, "waveOutGetDevCapsA", 3, c => DeviceError(c[0]));
         Std(W, "waveInGetDevCapsA", 3, c => DeviceError(c[0]));
-        Std(W, "waveOutOpen", 6, c => DeviceError(c[1]));
         Std(W, "waveInOpen", 6, c => DeviceError(c[1]));
         Std(W, "mixerOpen", 5, c => BadDeviceId);
         foreach (var (name, argc) in new[]
         {
-            ("waveOutClose", 1), ("waveOutReset", 1), ("waveOutPrepareHeader", 3), ("waveOutUnprepareHeader", 3), ("waveOutWrite", 3), ("waveOutGetPosition", 3),
-            ("waveInClose", 1), ("waveInReset", 1), ("waveInStart", 1), ("waveInAddBuffer", 3), ("waveInPrepareHeader", 3), ("waveInUnprepareHeader", 3), ("mixerClose", 1),
+                        ("waveInClose", 1), ("waveInReset", 1), ("waveInStart", 1), ("waveInAddBuffer", 3), ("waveInPrepareHeader", 3), ("waveInUnprepareHeader", 3), ("mixerClose", 1),
         })
             Std(W, name, argc, _ => InvalHandle);
         foreach (var name in new[] { "mixerGetLineInfoA", "mixerGetLineControlsA", "mixerGetControlDetailsA", "mixerSetControlDetails" })

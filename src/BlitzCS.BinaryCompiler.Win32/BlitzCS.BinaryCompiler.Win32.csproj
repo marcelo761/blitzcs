@@ -3,6 +3,7 @@
     <AssemblyName>BlitzCS.BinaryCompiler.Win32</AssemblyName>
     <RootNamespace>BlitzCS.BinaryCompiler.Win32</RootNamespace>
     <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../BlitzCS.BinaryCompiler.Runtime/BlitzCS.BinaryCompiler.Runtime.csproj" />

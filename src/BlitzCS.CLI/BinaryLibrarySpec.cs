@@ -8,7 +8,8 @@ namespace BlitzCS.CLI;
 /// <summary>
 /// One binary library of a catalog and its options. A <c>binaryLibraries</c> entry is either a path string (all defaults) or an object:
 /// <c>path</c>, <c>unpack</c>, <c>win32</c> (true/false; absent = auto), <c>runEntryPoint</c> (default true), <c>defaultConvention</c> ("cdecl"),
-/// <c>exportConventions</c> ({"name": "cdecl" | "stdcall:N"}) and <c>unboundImports</c> ("fault" default, or "error"). Unknown keys are rejected.
+/// <c>exportConventions</c> ({"name": "cdecl" | "stdcall:N"}), <c>unboundImports</c> ("fault" default, or "error") and <c>fileRoot</c> ("none" default: the library's
+/// file APIs are refused; "app": the library sees the directory the application is installed in as its "C:\" and working directory). Unknown keys are rejected.
 /// </summary>
 internal sealed record BinaryLibrarySpec(string Path)
 {
@@ -21,6 +22,12 @@ internal sealed record BinaryLibrarySpec(string Path)
     public bool DefaultCdecl { get; init; }
     public IReadOnlyDictionary<string, ExportSignature> ExportConventions { get; init; } = new Dictionary<string, ExportSignature>(StringComparer.Ordinal);
     public bool UnboundImportsAreErrors { get; init; }
+    /// <summary>true (<c>"fileRoot": "app"</c>): the Win32 environment maps the guest's file system into the application directory; false: file APIs fail with ERROR_ACCESS_DENIED.</summary>
+    public bool AppFileRoot { get; init; }
+    /// <summary>The <c>audio</c> option, validated and normalized ("host", "virtual" or "none"); null = the Win32 component's default backend.</summary>
+    public string? Audio { get; init; }
+    /// <summary>The <c>audioRecord</c> option: a relative path (no drive, no "..") beneath the application directory, or null.</summary>
+    public string? AudioRecord { get; init; }
     public bool Explicit { get; init; }
     public BinaryPreprocessResult? Preprocessed { get; init; }
 
@@ -28,7 +35,7 @@ internal sealed record BinaryLibrarySpec(string Path)
     public string EffectivePath => Preprocessed?.DerivedPath ?? Path;
     public string FileName => System.IO.Path.GetFileName(Path);
 
-    private static readonly string[] Keys = ["path", "unpack", "win32", "runEntryPoint", "defaultConvention", "exportConventions", "unboundImports"];
+    private static readonly string[] Keys = ["path", "unpack", "win32", "runEntryPoint", "defaultConvention", "exportConventions", "unboundImports", "fileRoot", "audio", "audioRecord"];
 
     internal static BinaryLibrarySpec Parse(JsonElement entry, string catalogDirectory)
     {
@@ -65,6 +72,27 @@ internal sealed record BinaryLibrarySpec(string Path)
                 "fault" => false, "error" => true,
                 _ => throw new ArgumentException($"Binary library '{label}': unboundImports must be \"fault\" or \"error\".")
             } : throw new ArgumentException($"Binary library '{label}': unboundImports must be \"fault\" or \"error\".");
+        var appFileRoot = false;
+        if (entry.TryGetProperty("fileRoot", out var rootElement) && rootElement.ValueKind != JsonValueKind.Null)
+            appFileRoot = rootElement.ValueKind == JsonValueKind.String ? rootElement.GetString() switch
+            {
+                "none" => false, "app" => true,
+                _ => throw new ArgumentException($"Binary library '{label}': fileRoot must be \"none\" or \"app\".")
+            } : throw new ArgumentException($"Binary library '{label}': fileRoot must be \"none\" or \"app\".");
+        string? audio = null;
+        if (entry.TryGetProperty("audio", out var audioElement) && audioElement.ValueKind != JsonValueKind.Null)
+            audio = audioElement.ValueKind == JsonValueKind.String && audioElement.GetString() is "host" or "virtual" or "none" ? audioElement.GetString()
+                : throw new ArgumentException($"Binary library '{label}': audio must be \"host\", \"virtual\" or \"none\".");
+        string? audioRecord = null;
+        if (entry.TryGetProperty("audioRecord", out var recordElement) && recordElement.ValueKind != JsonValueKind.Null)
+        {
+            var text = recordElement.ValueKind == JsonValueKind.String ? recordElement.GetString() : null;
+            if (string.IsNullOrWhiteSpace(text) || System.IO.Path.IsPathRooted(text) || text.Contains(':') || text.Split('/', '\\').Contains(".."))
+                throw new ArgumentException($"Binary library '{label}': audioRecord must be a relative file name beneath the application directory (no drive, no \"..\").");
+            audioRecord = text;
+        }
+        if ((appFileRoot || audio is not null || audioRecord is not null) && Bool("win32") == false)
+            throw new ArgumentException($"Binary library '{label}': fileRoot, audio and audioRecord configure the Win32 environment, which \"win32\": false disables.");
         var conventions = new Dictionary<string, ExportSignature>(StringComparer.Ordinal);
         if (entry.TryGetProperty("exportConventions", out var map) && map.ValueKind != JsonValueKind.Null)
         {
@@ -79,7 +107,7 @@ internal sealed record BinaryLibrarySpec(string Path)
         return new BinaryLibrarySpec(path)
         {
             Explicit = true, Unpack = Bool("unpack") ?? false, Win32 = Bool("win32"), RunEntryPoint = Bool("runEntryPoint") ?? true,
-            DefaultCdecl = defaultCdecl, ExportConventions = conventions, UnboundImportsAreErrors = unbound,
+            DefaultCdecl = defaultCdecl, ExportConventions = conventions, UnboundImportsAreErrors = unbound, AppFileRoot = appFileRoot, Audio = audio, AudioRecord = audioRecord,
         };
     }
 

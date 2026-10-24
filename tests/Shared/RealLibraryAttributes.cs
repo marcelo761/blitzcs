@@ -80,3 +80,10 @@ public sealed class RequiresToolFactAttribute : FactAttribute
 {
     public RequiresToolFactAttribute(params string[] tools) { Skip = tools.Select(RealLibraries.ToolSkipReason).FirstOrDefault(r => r is not null); }
 }
+
+/// <summary>[Fact] that only makes sense on a Windows host (a real Windows or Wine): skipped with the reason elsewhere, so a Linux run never reports it as a meaningless pass.</summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class RequiresWindowsFactAttribute : FactAttribute
+{
+    public RequiresWindowsFactAttribute(string reason = "needs a Windows host (Windows or Wine) with the system winmm.dll") { if (!OperatingSystem.IsWindows()) Skip = reason + "; this host is not Windows"; }
+}

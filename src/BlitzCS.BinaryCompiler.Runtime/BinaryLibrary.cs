@@ -52,7 +52,7 @@ public sealed class BinaryLibrary
 
     static BinaryLibrary()
     {
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => DisposeAll();
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => DisposeAll(ExitGraceMilliseconds);
     }
 
     private static Encoding CreateEncoding()
@@ -143,10 +143,18 @@ public sealed class BinaryLibrary
 
     internal static Encoding Ansi => Windows1252;
 
-    /// <summary>Disposes every open module (also runs at process exit). Later calls fail with a clear error.</summary>
-    public static void DisposeAll()
+    /// <summary>
+    /// How long process exit waits for a module's in-flight guest calls. A library that started its own worker thread (FMOD's mixer, for one) keeps that thread inside the module
+    /// until the program stops it; programs routinely end without doing so, and the operating system then ends the thread with the process.
+    /// </summary>
+    private const int ExitGraceMilliseconds = 250;
+
+    /// <summary>Disposes every open module, waiting for running calls. Later calls fail with a clear error. (Process exit uses a bounded variant, see <see cref="ExitGraceMilliseconds"/>.)</summary>
+    public static void DisposeAll() => DisposeAll(Timeout.Infinite);
+
+    private static void DisposeAll(int graceMilliseconds)
     {
-        foreach (var group in Groups.Values) group.Dispose();
+        foreach (var group in Groups.Values) group.Dispose(graceMilliseconds);
     }
 
     private sealed class LibraryGroup : IDisposable
@@ -212,13 +220,19 @@ public sealed class BinaryLibrary
             return options.Environment.CreateResolver(library.Name);
         }
 
-        public void Dispose()
+        public void Dispose() => Dispose(Timeout.Infinite);
+
+        public void Dispose(int graceMilliseconds)
         {
             lock (gate)
             {
                 disposed = true;
                 foreach (var member in members.Values) { member.SetModule(null); lock (member.memoryGate) member.allocations.Clear(); }
-                try { set?.Dispose(); }
+                try
+                {
+                    if (graceMilliseconds == Timeout.Infinite) set?.Dispose();
+                    else set?.DisposeAtProcessExit(graceMilliseconds);
+                }
                 catch (Exception error) when (error is GuestException or AggregateException) { }
                 set = null;
             }

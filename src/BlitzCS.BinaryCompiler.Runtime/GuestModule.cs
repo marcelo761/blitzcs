@@ -564,17 +564,24 @@ public sealed unsafe partial class GuestModule : IDisposable
         lifetime.ExitReadLock();
     }
 
-    public void Dispose()
+    public void Dispose() => TryDispose(Timeout.Infinite);
+
+    /// <summary>
+    /// Disposes the module, waiting at most <paramref name="millisecondsTimeout"/> for in-flight calls to finish. Returns false (and changes nothing) when a call is still running
+    /// after that time: a guest thread that never leaves the module (a mixer or worker loop started by the library) would otherwise make disposal wait forever.
+    /// Only process exit uses a finite timeout: Windows ends the other threads of an exiting process, a managed host cannot, so the module is abandoned to the operating system.
+    /// </summary>
+    internal bool TryDispose(int millisecondsTimeout)
     {
-        if (disposed) return;
+        if (disposed) return true;
         if (threadState.IsValueCreated && threadState.Value!.Holds != 0)
             throw new InvalidOperationException("A guest module cannot be disposed from inside one of its active calls or imports.");
         if (DependentCount != 0)
             throw new InvalidOperationException($"The guest module at 0x{ImageBase:X8} still has {DependentCount} live dependent module(s) bound to its exports; dispose them first (or dispose the GuestModuleSet).");
-        lifetime.EnterWriteLock();
+        if (!lifetime.TryEnterWriteLock(millisecondsTimeout)) return false;
         try
         {
-            if (disposed) return;
+            if (disposed) return true;
             initializing = true; // detach notifications must not trigger DLL_THREAD_ATTACH for the disposing thread
             if (tlsProcessAttached)
             {
@@ -595,6 +602,7 @@ public sealed unsafe partial class GuestModule : IDisposable
                 catch (Exception error) { DetachError ??= error; }
             }
             Teardown();
+            return true;
         }
         finally { lifetime.ExitWriteLock(); }
     }

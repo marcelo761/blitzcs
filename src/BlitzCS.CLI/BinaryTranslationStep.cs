@@ -75,6 +75,9 @@ internal static class BinaryTranslationStep
             var library = spec.Path;
             var options = new BinaryCompilerOptions(profile, TargetOs: targetOs, LoadBase: bases is not null && bases[i].Base != images[i].ImageBase ? bases[i].Base : null);
             var result = BinaryBuild.Translate(spec.EffectivePath, options, cacheDirectory, spec.Preprocessed is { } pre ? [pre.LineageToken] : null);
+            // Defence in depth: the artifact that is about to be published must be for the target this build selected, whatever the cache returned.
+            if (!string.Equals(result.Artifact.TargetOs ?? BinaryTargets.LinuxSysV, targetOs, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Binary library '{Path.GetFileName(library)}': the translation targets '{result.Artifact.TargetOs ?? BinaryTargets.LinuxSysV}' but this build targets '{targetOs}'; clear the binary cache ('{cacheDirectory}').");
             var errors = result.Artifact.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
             if (errors.Length > 0)
                 throw new InvalidOperationException($"Binary library '{Path.GetFileName(library)}' contains unsupported constructs:{Environment.NewLine}"

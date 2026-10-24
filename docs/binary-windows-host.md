@@ -33,7 +33,7 @@ Fixed `VirtualAlloc` at addresses below `0x20000000` fails under Wine, and the l
 | Range | Use |
 | --- | --- |
 | `0 - 0x1FFFFFFF` | never used |
-| `0x20000000 - 0x6FFFFFFF` | guest images (`ModuleBaseAllocator` with `TargetOs = windows-x64`; 64 KiB aligned, deterministic scan, 64 KiB gap between modules) |
+| `0x20000000 - 0x6FFFFFFF` | guest images (`ModuleBaseAllocator` with `TargetOs = windows-x64`; the upper half `0x50000000 - 0x6FFFFFFF` is used first because the CLR and Wine grow their own heaps upward from `0x20000000` (a base near the bottom collided with them at random during long runs), the lower half is the fallback; 64 KiB aligned, deterministic scan, 64 KiB gap between modules) |
 | `0x70000000 - 0x77FFFFFF` | unused buffer |
 | `0x78000000 - 0xFFFEFFFF` | runtime arenas: guest stacks (with a `PAGE_NOACCESS` guard page), TEB/PEB/TLS blocks, scratch buffers. Found at run time by walking `VirtualQuery` for free, 64 KiB-aligned runs |
 

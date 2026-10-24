@@ -155,11 +155,12 @@ public sealed class MsvcrtRuntimeHostTests
 public sealed class WinmmTests
 {
     private const string W = "WINMM.dll";
+    private static readonly Win32Options NoAudio = new() { WaveOut = WaveOutBackendKind.None };
 
     [Fact]
     public void ThereAreNoDevices()
     {
-        using var w = new World();
+        using var w = new World(NoAudio);
         Assert.Equal(0u, w.Call(W, "waveOutGetNumDevs"));
         Assert.Equal(0u, w.Call(W, "waveInGetNumDevs"));
         Assert.Equal(0u, w.Call(W, "mixerGetNumDevs"));
@@ -168,7 +169,7 @@ public sealed class WinmmTests
     [Fact]
     public void DeviceIdCallsFailWithBadDeviceIdOrNoDriverForTheMapper()
     {
-        using var w = new World();
+        using var w = new World(NoAudio);
         var p = w.Buf(64);
         Assert.Equal(2u, w.Call(W, "waveOutGetDevCapsA", 0, p, 52));
         Assert.Equal(6u, w.Call(W, "waveOutGetDevCapsA", 0xFFFFFFFF, p, 52));
@@ -186,7 +187,7 @@ public sealed class WinmmTests
      InlineData("waveInAddBuffer", 3), InlineData("waveInPrepareHeader", 3), InlineData("waveInUnprepareHeader", 3), InlineData("mixerClose", 1)]
     public void HandleCallsFailWithInvalidHandle(string api, int argc)
     {
-        using var w = new World();
+        using var w = new World(NoAudio);
         var args = Enumerable.Repeat(0x1234u, argc).ToArray();
         Assert.Equal(5u, w.Call(W, api, args));
     }
@@ -195,7 +196,7 @@ public sealed class WinmmTests
     [InlineData("mixerGetLineInfoA"), InlineData("mixerGetLineControlsA"), InlineData("mixerGetControlDetailsA"), InlineData("mixerSetControlDetails")]
     public void MixerObjectTypeSelectsTheError(string api)
     {
-        using var w = new World();
+        using var w = new World(NoAudio);
         Assert.Equal(5u, w.Call(W, api, 1, 0, 0x80000000));   // MIXER_OBJECTF_HANDLE
         Assert.Equal(2u, w.Call(W, api, 0, 0, 0));            // MIXER_OBJECTF_MIXER (device id)
         Assert.Equal(2u, w.Call(W, api, 0, 0, 0x10000000));   // WAVEOUT id
@@ -204,7 +205,7 @@ public sealed class WinmmTests
     [Fact]
     public void TimeGetTimeIsMonotonicMilliseconds()
     {
-        using var w = new World();
+        using var w = new World(NoAudio);
         var a = w.Call(W, "timeGetTime");
         Thread.Sleep(25);
         Assert.InRange(w.Call(W, "timeGetTime") - a, 20u, 2000u);
@@ -213,14 +214,14 @@ public sealed class WinmmTests
     [Fact]
     public void KillingAnUnknownTimerIsInvalidParam()
     {
-        using var w = new World();
+        using var w = new World(NoAudio);
         Assert.Equal(11u, w.Call(W, "timeKillEvent", 77));
     }
 
     [Fact]
     public void TimerRequiresAGuestAndRejectsEventModes()
     {
-        using var w = new World();
+        using var w = new World(NoAudio);
         Assert.Throws<Win32UsageException>(() => w.Call(W, "timeSetEvent", 10, 1, 0x1000, 0, 0));
     }
 

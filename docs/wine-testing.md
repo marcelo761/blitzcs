@@ -107,6 +107,11 @@ the difference is exactly the real-library tests, now SKIPPED with a reason (ear
 * 5 x `Win32IntegrationTests` that need the native x86 comparison library (Linux x64 only).
 * `RealPackedSampleTests.Real_sample_unpacks_translates_and_a_trivial_export_runs`: the preferred-base variant; on Windows `Real_sample_unpacked_at_a_chosen_base_runs_like_the_native_original` runs the same sequence with the stub mapped at a host-valid base.
 
+The FMOD demo (`samples/FmodAudio`, `tests/BlitzCS.Linking.E2E.Tests/FmodDemoTests.cs`) runs under Wine as part of `BlitzCS.Linking.E2E.Tests` when `BLITZCS_PACKED_SAMPLE` is set (about 6 s for the NOSOUND demo, 3.5 s for the
+WINMM/virtual-sink variant). With the packed sample set and `BLITZCS_REAL_PE32_DIR` unset, the last full Wine run (2026-10-24) reported BinaryCompiler.Tests 378 passed / 8 skipped, Win32.Tests 217 / 16, Unpack.Tests 26 / 1 and
+Linking.E2E.Tests 33 / 4 (the skips are the missing real-library directory, the opt-in package test and one known gap). The default Windows package of the demo is covered by `FmodDemoTests.TheDefaultWindowsApplicationPackageRunsTheDemo`
+(`BLITZCS_TEST_PUBLISH=1 BLITZCS_TEST_WINE=1`, Linux host). Findings from this work, including what Wine hides on a real Windows host: `docs/windows-integration-audit.md`.
+
 Loader tests: `RuntimeLoaderTests` run on both hosts. `FakeGuest` assembles the same loader contract for SysV (Linux) and for Win64 (`EnterGuest(rcx, edx, r8)`, RDI/RSI callee-saved, import thunk argument in ECX with shadow space); protections are read through `/proc/self/maps` on Linux and `VirtualQuery` (platform layer) on Windows.
 Real-library tests (ogg, vorbis, vorbisFile, eax, and the FMOD unpacker) run under Wine when the DLL directory is passed through `BLITZCS_REAL_PE32_DIR` / `BLITZCS_PACKED_SAMPLE`
 (skipped with a reason otherwise, see the top of this document). The libraries prefer 0x10000000, which windows-x64 cannot map, so the tests rebase them first (`PeImage.Rebase` with a base from

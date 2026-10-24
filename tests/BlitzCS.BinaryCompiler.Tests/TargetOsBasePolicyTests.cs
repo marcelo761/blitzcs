@@ -25,9 +25,16 @@ public sealed class TargetOsBasePolicyTests
             Assert.True(m.Moved);
         });
         Assert.Equal(3, plan.Select(m => m.Base).Distinct().Count());
-        Assert.Equal(0x20000000u, plan[0].Base);
+        Assert.Equal(ModuleBaseAllocator.WindowsPreferredStart, plan[0].Base);   // the quiet upper half of the window first
         var ordered = plan.OrderBy(m => m.Base).ToArray();
         for (var i = 1; i < ordered.Length; i++) Assert.True(ordered[i].Base >= ordered[i - 1].Base + ordered[i - 1].Footprint);
+    }
+
+    [Fact]
+    public void The_lower_half_of_the_window_is_the_fallback_when_the_upper_half_is_reserved()
+    {
+        var plan = ModuleBaseAllocator.Allocate([("a.dll", Relocatable())], [(ModuleBaseAllocator.WindowsPreferredStart, ModuleBaseAllocator.WindowsImageWindowEnd)], Win);
+        Assert.InRange(plan[0].Base, ModuleBaseAllocator.WindowsMinimumBase, ModuleBaseAllocator.WindowsPreferredStart - 1);
     }
 
     [Fact]
@@ -50,7 +57,7 @@ public sealed class TargetOsBasePolicyTests
     [Fact]
     public void RequiredBase_gives_the_single_library_base()
     {
-        Assert.Equal(0x20000000u, ModuleBaseAllocator.RequiredBase("one.dll", Relocatable(), Win));
+        Assert.Equal(ModuleBaseAllocator.WindowsPreferredStart, ModuleBaseAllocator.RequiredBase("one.dll", Relocatable(), Win));
         Assert.Null(ModuleBaseAllocator.RequiredBase("one.dll", Relocatable(), BinaryTargets.LinuxSysV));
     }
 
