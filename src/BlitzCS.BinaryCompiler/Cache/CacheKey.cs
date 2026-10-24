@@ -20,6 +20,7 @@ public static class CacheKey
             var originalBase = image.RebasedFrom?.OriginalImageBase ?? image.ImageBase;
             var targetBase = options.LoadBase ?? image.ImageBase;
             if (originalBase != targetBase) { w.Write("rebase"); w.Write(originalBase); w.Write(targetBase); }
+            if (options.DynamicStubs != 0) { w.Write("dynamic-stubs"); w.Write(options.DynamicStubs); }   // written only when non-zero: keys of artifacts without a pool keep their shape
             var deps = (dependencySha256 ?? []).Select(d => d.ToLowerInvariant()).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
             w.Write(deps.Count);
             foreach (var d in deps) w.Write(d);

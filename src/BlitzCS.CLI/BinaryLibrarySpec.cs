@@ -28,6 +28,17 @@ internal sealed record BinaryLibrarySpec(string Path)
     public string? Audio { get; init; }
     /// <summary>The <c>audioRecord</c> option: a relative path (no drive, no "..") beneath the application directory, or null.</summary>
     public string? AudioRecord { get; init; }
+    /// <summary>The <c>com</c> option: true = the library hands guest function pointers / COM vtables to host code, so translate with a dynamic stub pool; false = never; null = only when it imports LoadLibrary/GetProcAddress.</summary>
+    public bool? Com { get; init; }
+    /// <summary>The <c>dynamicStubs</c> option: an explicit pool size (0..8192) overriding <see cref="Com"/>.</summary>
+    public int? DynamicStubs { get; init; }
+    public const int DefaultDynamicStubs = 512;
+    private static readonly string[] DynamicLoadImports = ["LoadLibraryA", "LoadLibraryW", "LoadLibraryExA", "LoadLibraryExW", "GetProcAddress"];
+
+    /// <summary>The dynamic stub pool size to translate <paramref name="image"/> with (BinaryCompilerOptions.DynamicStubs).</summary>
+    public int EffectiveDynamicStubs(PeImage image) =>
+        DynamicStubs ?? (Com == false ? 0
+            : Com == true || image.Imports.Any(i => string.Equals(i.Dll, "kernel32.dll", StringComparison.OrdinalIgnoreCase) && i.Name is { } n && DynamicLoadImports.Contains(n, StringComparer.Ordinal)) ? DefaultDynamicStubs : 0);
     public bool Explicit { get; init; }
     public BinaryPreprocessResult? Preprocessed { get; init; }
 
@@ -35,7 +46,7 @@ internal sealed record BinaryLibrarySpec(string Path)
     public string EffectivePath => Preprocessed?.DerivedPath ?? Path;
     public string FileName => System.IO.Path.GetFileName(Path);
 
-    private static readonly string[] Keys = ["path", "unpack", "win32", "runEntryPoint", "defaultConvention", "exportConventions", "unboundImports", "fileRoot", "audio", "audioRecord"];
+    private static readonly string[] Keys = ["path", "unpack", "win32", "runEntryPoint", "defaultConvention", "exportConventions", "unboundImports", "fileRoot", "audio", "audioRecord", "com", "dynamicStubs"];
 
     internal static BinaryLibrarySpec Parse(JsonElement entry, string catalogDirectory)
     {
@@ -93,6 +104,10 @@ internal sealed record BinaryLibrarySpec(string Path)
         }
         if ((appFileRoot || audio is not null || audioRecord is not null) && Bool("win32") == false)
             throw new ArgumentException($"Binary library '{label}': fileRoot, audio and audioRecord configure the Win32 environment, which \"win32\": false disables.");
+        int? dynamicStubs = null;
+        if (entry.TryGetProperty("dynamicStubs", out var stubsElement) && stubsElement.ValueKind != JsonValueKind.Null)
+            dynamicStubs = stubsElement.ValueKind == JsonValueKind.Number && stubsElement.TryGetInt32(out var stubCount) && stubCount is >= 0 and <= BinaryCompilerOptions.MaxDynamicStubs ? stubCount
+                : throw new ArgumentException($"Binary library '{label}': dynamicStubs must be an integer between 0 and {BinaryCompilerOptions.MaxDynamicStubs}.");
         var conventions = new Dictionary<string, ExportSignature>(StringComparer.Ordinal);
         if (entry.TryGetProperty("exportConventions", out var map) && map.ValueKind != JsonValueKind.Null)
         {
@@ -108,6 +123,7 @@ internal sealed record BinaryLibrarySpec(string Path)
         {
             Explicit = true, Unpack = Bool("unpack") ?? false, Win32 = Bool("win32"), RunEntryPoint = Bool("runEntryPoint") ?? true,
             DefaultCdecl = defaultCdecl, ExportConventions = conventions, UnboundImportsAreErrors = unbound, AppFileRoot = appFileRoot, Audio = audio, AudioRecord = audioRecord,
+            Com = Bool("com"), DynamicStubs = dynamicStubs,
         };
     }
 

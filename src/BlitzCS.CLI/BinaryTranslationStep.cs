@@ -73,7 +73,7 @@ internal static class BinaryTranslationStep
         {
             var spec = specs[i];
             var library = spec.Path;
-            var options = new BinaryCompilerOptions(profile, TargetOs: targetOs, LoadBase: bases is not null && bases[i].Base != images[i].ImageBase ? bases[i].Base : null);
+            var options = new BinaryCompilerOptions(profile, TargetOs: targetOs, LoadBase: bases is not null && bases[i].Base != images[i].ImageBase ? bases[i].Base : null) { DynamicStubs = spec.EffectiveDynamicStubs(images[i]) };
             var result = BinaryBuild.Translate(spec.EffectivePath, options, cacheDirectory, spec.Preprocessed is { } pre ? [pre.LineageToken] : null);
             // Defence in depth: the artifact that is about to be published must be for the target this build selected, whatever the cache returned.
             if (!string.Equals(result.Artifact.TargetOs ?? BinaryTargets.LinuxSysV, targetOs, StringComparison.Ordinal))

@@ -7,7 +7,7 @@ public sealed class ArtifactFormatException(string message) : Exception(message)
 
 public sealed class ArtifactSerializer
 {
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
     private static readonly byte[] Magic = "BCSA"u8.ToArray();
     private const int MaxString = 1 << 20;
 
@@ -30,6 +30,7 @@ public sealed class ArtifactSerializer
             foreach (var d in a.Diagnostics) { w.Write((int)d.Severity); Str(w, d.Code); Str(w, d.Message); w.Write(d.GuestRva.HasValue); w.Write(d.GuestRva ?? 0u); }
             w.Write(a.RebasedFromImageBase.HasValue); w.Write(a.RebasedFromImageBase ?? 0u);
             Str(w, BinaryTargets.Normalize(a.TargetOs ?? BinaryTargets.LinuxSysV));
+            w.Write(a.DynamicStubs);
         }
         var body = ms.ToArray();
         var res = new byte[body.Length + 32];
@@ -90,8 +91,10 @@ public sealed class ArtifactSerializer
         }
         var rebased = r.ReadBoolean(); var rebasedBase = r.ReadUInt32();
         var target = BinaryTargets.TryNormalize(ReadStr()) ?? throw new ArtifactFormatException("Unknown artifact target OS.");
+        var dynamicStubs = r.ReadInt32();
+        if (dynamicStubs is < 0 or > BinaryCompilerOptions.MaxDynamicStubs) throw new ArtifactFormatException("Bad dynamic stub count.");
         if (Remaining() != 0) throw new ArtifactFormatException("Trailing bytes in artifact.");
-        return new TranslationArtifact(fv, src, key, gb, gs, host, code, disp, thunk, ctx, enter, exit, stubs, map, exports, imports, diags, rebased ? rebasedBase : null, target);
+        return new TranslationArtifact(fv, src, key, gb, gs, host, code, disp, thunk, ctx, enter, exit, stubs, map, exports, imports, diags, rebased ? rebasedBase : null, target, dynamicStubs);
     }
 
     private static void Str(BinaryWriter w, string s) { var b = Encoding.UTF8.GetBytes(s); w.Write(b.Length); w.Write(b); }

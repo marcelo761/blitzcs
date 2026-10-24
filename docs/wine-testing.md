@@ -49,6 +49,21 @@ case-insensitive), `--threads` (default 1; with more, xunit runs different `[Col
   `WINEDEBUG=-all`, `WINEDLLOVERRIDES=mshtml=d` (do not disable `mscoree`: Wine needs it to load IL-only assemblies), `PATH`/`LD_LIBRARY_PATH` of the Wine,
   `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`, `DISPLAY`.
 
+## Choosing the Wine build
+
+The default is Proton 11.0 (`scripts/wine/env.sh` looks for it in the Steam library). Proton-CachyOS Latest is installed at
+`$HOME/.local/share/Steam/compatibilitytools.d/Proton-CachyOS Latest-x86_64_v3/files`. Select it with `BLITZCS_WINE_ROOT` (the directory that contains `bin/wine`)
+and give it its own prefix with `BLITZCS_WINE_PREFIX`, so the two builds never share one `WINEPREFIX`:
+
+```
+BLITZCS_WINE_ROOT="$HOME/.local/share/Steam/compatibilitytools.d/Proton-CachyOS Latest-x86_64_v3/files" \
+BLITZCS_WINE_PREFIX="$HOME/.cache/blitzcs/wineprefix-cachyos" scripts/wine/run-tests.sh
+```
+
+Both builds pass the same suites (see the Proton-CachyOS note in `docs/windows-integration-audit.md`). Do not run audible tests on Proton-CachyOS, such as
+`WaveToneTests.HostWinmmPlaysA440HzTone` (opt-in with `BLITZCS_AUDIO_TONE_TEST=1`) or the host audio tests (`WaveHostWinmmTests`, `HostDirectSoundTests`), until
+`docs/wine-audio-routing.md` states that the audio routing is verified: with `PULSE_SINK` set, the audio of that build reached the machine's real default sink.
+
 ## The Windows x86 oracle
 
 Oracle tests compare the translated guest with real IA-32 execution. On Linux that is the ELF32 oracle built by `tools/x86_oracle/build.sh`; on Windows

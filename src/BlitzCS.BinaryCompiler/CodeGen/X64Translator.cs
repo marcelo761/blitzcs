@@ -47,6 +47,8 @@ public sealed class X64Translator
         ArgumentNullException.ThrowIfNull(options);
         var targetOs = BinaryTargets.Normalize(options.TargetOs);
         var abi = HostAbis.For(targetOs);
+        if (options.DynamicStubs is < 0 or > BinaryCompilerOptions.MaxDynamicStubs)
+            throw new ArgumentOutOfRangeException(nameof(options), options.DynamicStubs, $"DynamicStubs must be between 0 and {BinaryCompilerOptions.MaxDynamicStubs}.");
         if (options.LoadBase is { } loadBase && loadBase != image.ImageBase) image = image.Rebase(loadBase);
         var mapped = image.MapImage();
         var cfg = ControlFlowGraph.Build(image, mapped);
@@ -54,7 +56,7 @@ public sealed class X64Translator
 
         var exitRva = (image.SizeOfImage + 15u) & ~15u;
         var stubBase = exitRva + 16;
-        var importCount = (uint)image.Imports.Count;
+        var importCount = (uint)image.Imports.Count + (uint)options.DynamicStubs;  // real imports followed by the dynamic stub pool (0 = none: layout unchanged)
         var tableEntries = stubBase + 16 * importCount + 16;
         var ctxRel = 0u;
         var thunkRel = 64u;
@@ -76,9 +78,11 @@ public sealed class X64Translator
             if (attempt == 6) throw new InvalidOperationException("Host code layout did not reach a fixed point.");
         }
 
+        int ImportBodyCount() => image.Imports.Count + options.DynamicStubs;
+
         (X64CodeGen, CodeEmitter.Result) Generate(ulong dataBase, Func<ulong, uint>? previousOffsets, CodeEmitter? seed)
         {
-            var g = new X64CodeGen(image, cfg, release, dataBase, thunkRel, boundRel, tableRel, tableEntries, exitRva, stubBase, abi) { PreviousOffsets = previousOffsets };
+            var g = new X64CodeGen(image, cfg, release, dataBase, thunkRel, boundRel, tableRel, tableEntries, exitRva, stubBase, abi, options.DynamicStubs) { PreviousOffsets = previousOffsets };
             g.EmitRuntime();
             g.EmitGuestCode();
             return (g, g.E.Encode(seed));
@@ -99,7 +103,7 @@ public sealed class X64Translator
         }
         addressMap.Sort((a, b) => a.GuestRva.CompareTo(b.GuestRva));
         SetEntry(exitRva, enc.OffsetOf(gen.ExitCommonLabel));
-        for (var k = 0; k < image.Imports.Count; k++) SetEntry(stubBase + 16u * (uint)k, enc.OffsetOf(gen.ImportBodyLabels[k]));
+        for (var k = 0; k < ImportBodyCount(); k++) SetEntry(stubBase + 16u * (uint)k, enc.OffsetOf(gen.ImportBodyLabels[k]));
         // Clamp vector: every lane = last valid index; that entry stays 0 (trap).
         for (var lane = 0; lane < 4; lane++)
             BinaryPrimitives.WriteUInt32LittleEndian(host.AsSpan(codeSize + (int)boundRel + 4 * lane), tableEntries - 1);
@@ -139,6 +143,6 @@ public sealed class X64Translator
         return new TranslationArtifact(
             ArtifactSerializer.CurrentVersion, image.Sha256, cacheKey, image.ImageBase, image.SizeOfImage, host, codeSize,
             (uint)(codeSize + tableRel), (uint)(codeSize + thunkRel), (uint)(codeSize + ctxRel), enc.OffsetOf(gen.EnterLabel),
-            exitRva, stubBase, addressMap, exports, image.Imports, diagnostics, image.RebasedFrom?.OriginalImageBase, targetOs);
+            exitRva, stubBase, addressMap, exports, image.Imports, diagnostics, image.RebasedFrom?.OriginalImageBase, targetOs, options.DynamicStubs);
     }
 }

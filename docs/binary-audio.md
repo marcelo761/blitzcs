@@ -89,3 +89,8 @@ scripts/wine/audio-capture.sh --out artifacts/audio/tone.wav -- env BLITZCS_AUDI
     scripts/wine/run-tests.sh BlitzCS.BinaryCompiler.Win32.Tests --filter WaveToneTests
 python3 tools/audio/analyze_wav.py artifacts/audio/tone.wav --expect-freq 440 --freq-tolerance 3
 ```
+
+## DirectSound
+
+FMOD's `FSOUND_OUTPUT_DSOUND` (2) plays through the host's native dsound.dll (Windows or Wine) via adapted COM contracts, with no software engine; see `docs/binary-com.md`.
+The waveOut selection above (`audio`, `BLITZCS_AUDIO`) does not affect it; `Win32Options.DirectSound` (Default/Host/None) does.

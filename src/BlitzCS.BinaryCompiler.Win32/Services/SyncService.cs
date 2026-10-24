@@ -135,9 +135,17 @@ public sealed class SyncService : Win32Service
         Std(K, "DeleteCriticalSection", 1, c =>
         {
             var cs = Get(c, c[0], "DeleteCriticalSection");
+            // Windows defines deleting a section that ANOTHER thread owns or waits for as undefined (refused here, before blocking on its gate); deleting one the calling thread
+            // itself still owns is harmless there and the original FMOD does exactly that while closing DirectSound, so the ownership the emulation recorded is simply dropped.
+            if (Volatile.Read(ref cs.Depth) != 0 && Volatile.Read(ref cs.Owner) != Environment.CurrentManagedThreadId)
+                throw new Win32UsageException($"DeleteCriticalSection on the CRITICAL_SECTION 0x{c[0]:X8}, which another thread owns.");
             lock (cs.Gate)
             {
-                if (cs.Depth != 0) throw new Win32UsageException($"DeleteCriticalSection on the held CRITICAL_SECTION 0x{c[0]:X8}.");
+                if (cs.Depth != 0)
+                {
+                    for (; cs.Depth > 0; cs.Depth--) Monitor.Exit(cs.Gate);
+                    cs.Owner = 0;
+                }
                 c.Ctx.Sync.CriticalSections.TryRemove(c[0], out _);
             }
             return 0;

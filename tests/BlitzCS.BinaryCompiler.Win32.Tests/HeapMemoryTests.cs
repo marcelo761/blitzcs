@@ -320,8 +320,10 @@ public sealed class VirtualMemoryTests
     }
 
     [Fact]
-    public void VirtualProtectIsNotImplementedBecauseItCannotBeEnforced()
+    public void VirtualProtectAndQueryAreImplementedWithEnforcedSemantics()
     {
-        Assert.DoesNotContain(Win32ImportResolver.Coverage.Implemented, a => a.Name == "VirtualProtect");
+        // enforced semantics are covered by MemoryProtectionTests
+        Assert.Contains(Win32ImportResolver.Coverage.Implemented, a => a.Name == "VirtualProtect");
+        Assert.Contains(Win32ImportResolver.Coverage.Implemented, a => a.Name == "VirtualQuery");
     }
 }

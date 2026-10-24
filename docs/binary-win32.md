@@ -28,7 +28,7 @@ An API that no service registers is absent: `Resolve` returns null, so `GuestMod
 | Service | APIs |
 |---|---|
 | Kernel32.Heap | GetProcessHeap, HeapCreate, HeapDestroy, HeapAlloc, HeapReAlloc, HeapFree, HeapSize, HeapValidate, GlobalAlloc/GlobalFree and LocalAlloc/LocalFree (fixed memory only; `GMEM_MOVEABLE` fails with ERROR_NOT_SUPPORTED) |
-| Kernel32.Memory | VirtualAlloc, VirtualFree |
+| Kernel32.Memory | VirtualAlloc, VirtualFree, VirtualProtect, VirtualQuery (protection semantics below) |
 | Kernel32.Sync | InitializeCriticalSection, InitializeCriticalSectionAndSpinCount, DeleteCriticalSection, EnterCriticalSection, TryEnterCriticalSection, LeaveCriticalSection, InterlockedIncrement/Decrement/Exchange/ExchangeAdd/CompareExchange, CreateEventA, SetEvent, ResetEvent, CreateMutexA, ReleaseMutex, WaitForSingleObject |
 | Kernel32.Tls | TlsAlloc, TlsFree, TlsGetValue, TlsSetValue |
 | Kernel32.Process | GetLastError, SetLastError, GetCurrentProcess/Thread/ProcessId/ThreadId, Sleep, GetTickCount, QueryPerformanceCounter/Frequency, ExitProcess, TerminateProcess, GetVersion, GetVersionExA, GetCommandLineA, GetEnvironmentStrings(W), FreeEnvironmentStringsA/W, GetEnvironmentVariableA, GetStartupInfoA, GetModuleFileNameA, GetModuleHandleA, LoadLibraryA, FreeLibrary, GetProcAddress, SetUnhandledExceptionFilter, IsBadReadPtr/WritePtr/CodePtr |
@@ -51,9 +51,25 @@ ERROR_ALREADY_EXISTS).
   honoured; a fixed-size heap (non-zero maximum) enforces its limit; `HeapFree(NULL)` succeeds; freeing a foreign or already freed pointer, which
   is undefined on Windows, fails with ERROR_INVALID_PARAMETER; blocks of 256 KiB or more get their own region which is unmapped when freed.
   Approximation: every heap is serialised, `HEAP_NO_SERIALIZE` is accepted but ignored.
-- **VirtualAlloc/VirtualFree**: reserve and commit happen together (reserved pages are accessible); `MEM_DECOMMIT` zero-fills; granularity is
-  4 KiB; a non-NULL address is only honoured inside a region this service allocated; page protections are validated but not enforced.
-  `VirtualProtect` is deliberately not implemented because it cannot be enforced without a runtime hook.
+- **VirtualAlloc/VirtualFree**: reserve and commit happen together (reserved pages are accessible); `MEM_DECOMMIT` zero-fills (and makes the pages read-write
+  again); granularity is 4 KiB; a non-NULL address is only honoured inside a region this service allocated. The initial protection is applied to the pages.
+- **VirtualProtect / VirtualQuery** (truthful, per page; `GuestMemory.TryQueryPage/TryProtect` over `IPlatformMemory.Protect`):
+  * Guest data (VirtualAlloc, heap and other scratch buffers, and the non-code pages of the translated image such as `.data`, `.rdata`, headers): `PAGE_NOACCESS`,
+    `READONLY`, `READWRITE` and `EXECUTE_*` are honoured; the old protection of the first page is returned through `lpflOldProtect`; `PAGE_WRITECOPY` behaves as `READWRITE`
+    (the memory is private, so no copy ever happens; VirtualQuery reports what was requested); `PAGE_NOCACHE`/`PAGE_WRITECOMBINE` are accepted and have no effect.
+    The managed accessors (`GuestMemory.Read/Write`) apply the same rules, so a host write into a read-only page throws `GuestMemoryException`; a guest write is a hardware fault.
+  * `PAGE_EXECUTE*` on guest data is recorded (VirtualQuery reports it) but the host never maps it executable (W^X): the page stays readable, and writable when requested.
+    Jumping into it ends in the ordinary "untranslated target" trap (`GuestTrapException`, kind 1, with the address), never in native execution.
+  * Pages of translated code (every page of an executable section of a translated image): a request that makes them writable (`READWRITE`, `WRITECOPY`, `EXECUTE_READWRITE`,
+    `EXECUTE_WRITECOPY`) throws `Win32SelfModifyingCodeException` (a `Win32UsageException`; the guest call fails with `GuestImportException` whose inner exception it is) naming the
+    module, the page range and the requested protection. `READONLY`, `EXECUTE` and `EXECUTE_READ` are no-ops that report `PAGE_EXECUTE_READ` as the old protection; `PAGE_NOACCESS`
+    on code is refused with `Win32UsageException` because it cannot be enforced.
+  * `PAGE_GUARD` is refused with `Win32UsageException` (a guard-page violation cannot be delivered to guest exception handling). Runtime-owned memory (stacks, TEB/PEB) is refused likewise.
+  * Failures like Windows, with nothing changed: size 0, unknown protection bits or invalid combinations -> `ERROR_INVALID_PARAMETER` (87); an unmapped page, a range past 4 GiB or a
+    range spanning two allocations -> `ERROR_INVALID_ADDRESS` (487); `lpflOldProtect` NULL or unwritable -> `ERROR_NOACCESS` (998). The range is widened to whole pages.
+  * `VirtualQuery` fills the 28-byte 32-bit `MEMORY_BASIC_INFORMATION`: `BaseAddress` is the page, `AllocationBase` the start of the allocation, `RegionSize` the run of pages with the same
+    protection, `State` `MEM_COMMIT` or `MEM_FREE`, `Type` `MEM_IMAGE` for the translated image else `MEM_PRIVATE`. `AllocationProtect` is the protection of the allocation's first page
+    now, not at allocation time (approximation). Length < 28 -> `ERROR_BAD_LENGTH` (24).
 - **Critical sections**: the 24-byte structure stays in guest memory (LockCount/RecursionCount/OwningThread are mirrored); the lock itself is a
   host monitor keyed by the structure address. **Interlocked** operations are atomic with respect to each other only, not to guest `LOCK`
   instructions on the same word.
@@ -127,7 +143,7 @@ the windowing and winmm imports of fmod.dll remain intentionally absent.
 
 1. (open) A guest-callable stub address for a bound import (so `GetProcAddress(kernel32, "HeapAlloc")` can answer; see `Win32Context.SetExportStubAddressProvider`).
 2. (done, see above) Calling back into guest code by address. `atexit`/`_onexit` still need the process-exit sequence.
-3. Page protection control on `GuestMemory` regions (needed for `VirtualProtect` and real decommit).
+3. (done for VirtualProtect/VirtualQuery) Page protection control on `GuestMemory` regions. Real decommit (unmapping) is still open.
 4. Atomic read-modify-write on guest words, so Interlocked APIs are atomic against guest `LOCK` instructions.
 5. Structured exception support (`RtlUnwind`, `RaiseException`, `SetUnhandledExceptionFilter` delivery; study in `binary-seh.md`) and the TEB TLS array (see above).
 6. (done, see above) x87 arguments. `_ftol2` / `_CIsin` family are not registered (not imported by the samples).

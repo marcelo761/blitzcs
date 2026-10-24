@@ -149,7 +149,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         var len = (long)a.HostImage.Length;
         if (a.EnterGuestOffset >= a.CodeSize) throw new GuestLoadException("EnterGuestOffset lies outside the code area.");
         if (a.ContextOffset < a.CodeSize || a.ContextOffset + 64L > len) throw new GuestLoadException("ContextOffset must lie inside the RW data area.");
-        if (a.ImportThunkTableOffset < a.CodeSize || a.ImportThunkTableOffset + 8L * a.Imports.Count > len)
+        if (a.ImportThunkTableOffset < a.CodeSize || a.ImportThunkTableOffset + 8L * (a.Imports.Count + a.DynamicStubs) > len)
             throw new GuestLoadException("ImportThunkTableOffset must lie inside the RW data area.");
         if (a.ExitGuestRva < a.GuestImageSize || a.ImportStubBaseRva < a.GuestImageSize)
             throw new GuestLoadException("ExitGuestRva and ImportStubBaseRva must be synthetic RVAs at or above SizeOfImage.");
@@ -187,7 +187,7 @@ public sealed unsafe partial class GuestModule : IDisposable
 
         // 2. Guest image at the fixed base.
         var ps = (uint)PlatformMemory.Current.PageSize;
-        var end = Math.Max(artifact.GuestImageSize, Math.Max(artifact.ExitGuestRva + 1UL, artifact.ImportStubBaseRva + 16UL * (uint)Math.Max(1, bound.Length)));
+        var end = Math.Max(artifact.GuestImageSize, Math.Max(artifact.ExitGuestRva + 1UL, artifact.ImportStubBaseRva + 16UL * (uint)Math.Max(1, bound.Length + artifact.DynamicStubs)));
         var size = (end + ps - 1) / ps * ps;
         if ((ulong)artifact.GuestImageBase + size > uint.MaxValue)
             throw new GuestAddressSpaceException("Guest image plus synthetic region does not fit below 4 GiB.");
@@ -223,6 +223,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         Marshal.Copy(artifact.HostImage, 0, hostMap, artifact.HostImage.Length);
         for (var i = 0; i < bound.Length; i++)
             *(nint*)(hostMap + (nint)artifact.ImportThunkTableOffset + 8 * i) = bound[i].FunctionPointer;
+        InitializeStubPool();
         PlatformMemory.Current.Protect(hostMap, (nuint)artifact.CodeSize, MemoryProtection.ReadExecute);
 
         // 4. TLS callbacks (DLL_PROCESS_ATTACH), then DllMain(hinst, DLL_PROCESS_ATTACH, 0)
@@ -284,8 +285,9 @@ public sealed unsafe partial class GuestModule : IDisposable
             p = q + 1;
         }
         var writable = new bool[pageCount];
-        for (var p = 0; p < pageCount; p++) writable[p] = (prot[p] & W) != 0;
-        Memory.Add(new GuestRegion((ulong)guestMap, (ulong)guestMap + guestMapLength, writable));
+        var executable = new bool[pageCount];
+        for (var p = 0; p < pageCount; p++) { writable[p] = (prot[p] & W) != 0; executable[p] = (prot[p] & X) != 0; }
+        Memory.Add(new GuestRegion((ulong)guestMap, (ulong)guestMap + guestMapLength, writable) { Kind = GuestPageKind.ImageData, PageExecutable = executable, Owner = $"translated module at base 0x{artifact.GuestImageBase:X8} (SHA-256 {image.Sha256[..Math.Min(12, image.Sha256.Length)]})" });
     }
 
     /// <summary>Looks an export up by name. Convention comes from the caller, else from the artifact; Unknown is never guessed.</summary>
@@ -531,7 +533,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         if (map == 0) throw new GuestAddressSpaceException($"Cannot allocate {size} byte(s) of guest scratch memory in low memory (OS error {errno}).");
         var buffer = new GuestBuffer(this, map, length, size);
         lock (resourceLock) buffers[buffer] = (map, length);
-        Memory.Add(new GuestRegion((ulong)map, (ulong)map + (ulong)size, null));
+        Memory.Add(new GuestRegion((ulong)map, (ulong)map + (ulong)size, null) { Kind = GuestPageKind.Buffer });
         return buffer;
     }
 

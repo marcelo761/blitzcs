@@ -42,4 +42,9 @@ if [ ! -e "$WINEPREFIX/system.reg" ]; then
   wineboot -i >/dev/null 2>&1 || wineboot -u >/dev/null 2>&1 || true
   wineserver -w 2>/dev/null || true
 fi
+# Opt-in (default unchanged): BLITZCS_WINE_AUDIO_DRIVER=pulse selects winepulse.drv, which honours PULSE_SINK. Proton-CachyOS otherwise loads
+# winepipewire.drv, which ignores PULSE_SINK (see docs/wine-audio-routing.md).
+if [ -n "${BLITZCS_WINE_AUDIO_DRIVER:-}" ]; then
+  wine reg add 'HKCU\Software\Wine\Drivers' /v Audio /d "$BLITZCS_WINE_AUDIO_DRIVER" /f >/dev/null 2>&1 || echo "wine/env.sh: could not set the Wine audio driver to $BLITZCS_WINE_AUDIO_DRIVER" >&2
+fi
 unset -f _blitz_find_wine; unset W _d _xv

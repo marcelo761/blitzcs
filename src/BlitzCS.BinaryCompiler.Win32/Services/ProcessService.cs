@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using BlitzCS.BinaryCompiler.Runtime;
 using System.Text;
 
 namespace BlitzCS.BinaryCompiler.Win32;
@@ -39,6 +40,22 @@ internal sealed class ProcessState(Win32Context ctx)
             lock (gate) { if (modules.ContainsKey(dll)) continue; }
             Register(dll, nextSystemHandle, "C:\\WINDOWS\\system32\\" + dll, null);
             nextSystemHandle += 0x10000;
+        }
+    }
+
+    private readonly Dictionary<(string, string), uint> stubs = [];
+
+    /// <summary>The guest-callable address of an emulated API: one dynamic stub per (dll, name), created on first request and reused afterwards (GetProcAddress of the same function twice returns the same pointer).</summary>
+    public uint StubFor(GuestModule module, Win32Api api)
+    {
+        lock (gate)
+        {
+            var key = (Win32Registry.NormalizeDll(api.Dll), api.Name);
+            if (stubs.TryGetValue(key, out var existing)) return existing;
+            var context = ctx;
+            var address = module.AllocateStub(call => Win32ImportResolver.Invoke(context, api, call), api.Convention == Win32Convention.Stdcall ? 4u * (uint)api.ArgCount : 0u);
+            stubs[key] = address;
+            return address;
         }
     }
 
@@ -232,6 +249,13 @@ public sealed class ProcessService : Win32Service
             var export = c[1] < 0x10000 ? "#" + c[1] : c.Mem.ReadAnsiString(c[1], 1024);
             if (module.Exports.TryGetValue(export, out var address)) return address;
             if (c.Ctx.Process.IsSystem(module) && c[1] >= 0x10000 && c.Ctx.Process.ExportStubAddress?.Invoke(module.Name, export) is { } stub) return stub;
+            if (c.Ctx.Process.IsSystem(module) && c[1] >= 0x10000 && c.Ctx.ApiLookup?.Invoke(module.Name, export) is { } api)
+            {
+                // An emulated export becomes a guest-callable function pointer: a dynamic stub of the running module bound to the same handler as the import.
+                var guestModule = GuestModule.Current;
+                if (guestModule is not null && guestModule.StubCapacity > 0) return c.Ctx.Process.StubFor(guestModule, api);
+                c.Ctx.Options.DebugOutput?.Invoke($"GetProcAddress({module.Name}!{export}): the function exists but this module was translated without a dynamic stub pool, so it has no callable address (re-translate with DynamicStubs > 0).");
+            }
             return c.Ctx.Fail(Win32Error.ProcNotFound);
         });
         Std(K, "SetUnhandledExceptionFilter", 1, c => c.Ctx.Process.ExchangeUnhandledFilter(c[0]));

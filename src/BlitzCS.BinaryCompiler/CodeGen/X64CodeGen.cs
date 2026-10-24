@@ -27,6 +27,7 @@ internal sealed partial class X64CodeGen
     private readonly HostAbi abi;
     private readonly ulong dataBase;
     private readonly uint tableOffset, boundOffset, thunkOffset, tableEntries, exitRva, stubBaseRva;
+    private readonly int dynamicStubs;
     public readonly CodeEmitter E = new();
     public readonly List<BinaryDiagnostic> Diagnostics = [];
     private readonly bool flagsDeadAtDispatchTargets;
@@ -49,12 +50,12 @@ internal sealed partial class X64CodeGen
     private readonly HashSet<uint> labeled = [];
     private readonly SortedSet<uint> reportedTargets = [];
 
-    public X64CodeGen(PeImage image, ControlFlowGraph cfg, bool release, ulong dataBase, uint thunkOffset, uint boundOffset, uint tableOffset, uint tableEntries, uint exitRva, uint stubBaseRva, HostAbi abi = HostAbi.SysV)
+    public X64CodeGen(PeImage image, ControlFlowGraph cfg, bool release, ulong dataBase, uint thunkOffset, uint boundOffset, uint tableOffset, uint tableEntries, uint exitRva, uint stubBaseRva, HostAbi abi = HostAbi.SysV, int dynamicStubs = 0)
     {
         this.abi = abi;
         this.image = image; this.cfg = cfg; this.release = release; this.dataBase = dataBase;
         this.thunkOffset = thunkOffset; this.boundOffset = boundOffset; this.tableOffset = tableOffset; this.tableEntries = tableEntries;
-        this.exitRva = exitRva; this.stubBaseRva = stubBaseRva;
+        this.exitRva = exitRva; this.stubBaseRva = stubBaseRva; this.dynamicStubs = dynamicStubs;
         instrMap = new Dictionary<uint, GuestInstruction>(cfg.Instructions);
         entrySet = [.. cfg.FunctionEntries];
         foreach (var d in cfg.Diagnostics) if (d.Code == "CFG_JUMP_TABLE" && d.GuestRva is { } at) tableJumps.Add(at);
@@ -250,7 +251,7 @@ internal sealed partial class X64CodeGen
         EmitDispatchPreservingFlags();
 
         var importExt = E.NewLabel();
-        for (var k = 0; k < image.Imports.Count; k++)
+        for (var k = 0; k < image.Imports.Count + dynamicStubs; k++)
         {
             var body = E.NewLabel(); ImportBodyLabels.Add(body);
             E.Place(body);

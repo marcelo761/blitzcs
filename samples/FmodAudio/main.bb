@@ -3,10 +3,11 @@
 ; fmod.json declares the FSOUND functions and the library; this program has no compiler- or library-specific code.
 ; assets\tone.wav (44.1 kHz, 16-bit, mono) is installed next to the program: the library reads it by the relative name below.
 
-; FSOUND_OUTPUTTYPES: 0 = no sound (FMOD's silent mixer), 1 = Windows Multimedia (waveOut, the real sound device).
+; FSOUND_OUTPUTTYPES: 0 = no sound (FMOD's silent mixer), 1 = Windows Multimedia (waveOut, the real sound device), 2 = DirectSound (the host's own dsound.dll).
 Const FSOUND_OUTPUT_NOSOUND = 0
 Const FSOUND_OUTPUT_WINMM = 1
-Const OUTPUT_TYPE = FSOUND_OUTPUT_NOSOUND   ; the single switch: FSOUND_OUTPUT_WINMM plays through the host sound device
+Const FSOUND_OUTPUT_DSOUND = 2
+Const OUTPUT_TYPE = FSOUND_OUTPUT_NOSOUND   ; the single switch: FSOUND_OUTPUT_WINMM or FSOUND_OUTPUT_DSOUND play through the host sound device
 
 Const FSOUND_FREE = -1                      ; Sample_Load / PlaySound: take any free sample slot / channel
 Const FSOUND_NORMAL = 304                   ; FSOUND_16BITS (16) + FSOUND_MONO (32) + FSOUND_SIGNED (256)

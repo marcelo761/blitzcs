@@ -35,6 +35,7 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         foreach (var s in Services) s.Register(registry);
         Context = new Win32Context(options ?? new Win32Options());
         Context.Process.RegisterSystem(registry.All.Select(a => a.Dll));
+        Context.ApiLookup = (dll, name) => registry.Find(dll, name, null);
     }
 
     /// <summary>The standard composition. Each service can be omitted or replaced independently.</summary>
@@ -48,6 +49,7 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         new MsvcrtRuntimeService(),
         new Kernel32ExtraService(),
         new WinmmService(),
+        new DirectSoundService(),
         new WinsockCoreService(),
     ];
 
@@ -74,9 +76,9 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
             : GuestImportBuilder.CdeclCall(call => Invoke(ctx, api, call));
     }
 
-    private static uint Invoke(Win32Context ctx, Win32Api api, GuestCall guest)
+    internal static uint Invoke(Win32Context ctx, Win32Api api, GuestCall guest)
     {
-        ctx.Options.CallTrace?.Invoke($"[{Environment.CurrentManagedThreadId}] {api.Dll}!{api.Name}");
+        ctx.Trace?.Invoke($"[{Environment.CurrentManagedThreadId}] {api.Dll}!{api.Name}");
         ctx.ThrowIfPoisoned();
         var mem = ctx.Bind(guest.Memory);
         Span<uint> args = stackalloc uint[api.ArgCount];
@@ -93,7 +95,7 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         var api = registry.Find(dll, name, null) ?? throw new KeyNotFoundException($"{dll}!{name} is not implemented.");
         if (args.Length < api.ArgCount || (!api.Variadic && args.Length != api.ArgCount))
             throw new ArgumentException($"{api} takes {api.ArgCount} argument(s), got {args.Length}.");
-        Context.Options.CallTrace?.Invoke($"[{Environment.CurrentManagedThreadId}] {api.Dll}!{api.Name}");
+        Context.Trace?.Invoke($"[{Environment.CurrentManagedThreadId}] {api.Dll}!{api.Name}");
         Context.ThrowIfPoisoned();
         Context.BindForHost(memory);
         var captured = args;

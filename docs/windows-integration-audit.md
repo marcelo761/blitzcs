@@ -21,9 +21,9 @@ Status: **fixed** (changed in this pass, with a test), **open** (reported, owner
 | F-08 | - | ok | Native call sites classified (table below): no guest handle, pointer or struct reaches a 64-bit OS API unadapted |
 | F-09 | - | ok | NativeInterop's PE preflight never sees `binaryLibraries`; a PE32 file in a 64-bit process is refused with a clear message |
 | F-10 | Medium | open (Win32) | The file sandbox refuses every reparse point: cloud-sync placeholders and linked folders on a real Windows host (risk) |
-| F-11 | High (audio) | open (A1) | The virtual sink snapshots a waveOut buffer at `waveOutWrite`; FMOD rewrites its looped buffer in place, so the recording is silent. One-line change verified |
-| F-12 | High (demo) | fixed (`PrecededByFlowEnd`, compiler 0.7.0) | `FSOUND_Close` with WINMM output trapped on an untranslated code address (a function that follows a `jmp`) |
-| F-13 | Medium | root cause fixed (unpacker); the FPU mixer itself reports a named limitation | `FSOUND_SetMixer(5)` (FPU mixer) crashed the process: three code dwords were taken for import slots and rewritten (see below) |
+| F-11 | High (audio) | fixed (the virtual sink reads guest buffers when they are consumed) | The virtual sink snapshotted a waveOut buffer at `waveOutWrite`; FMOD rewrites its looped buffer in place, so the recording was silent |
+| F-12 | High (demo) | fixed (`PrecededByFlowEnd`) | `FSOUND_Close` with WINMM output trapped on an untranslated code address (a function that follows a `jmp`) |
+| F-13 | Medium | fixed (unpacker); the FPU mixer is refused by name as self-modifying code | `FSOUND_SetMixer(5)` (FPU mixer) crashed the process: three code dwords were taken for import slots and rewritten (see below) |
 | F-14 | Medium | open (risk) | A hardware fault in guest code is fatal and cannot be reported: the OS cannot dispatch it from the guest stack |
 | F-15 | - | risk | Control Flow Guard: no `SetProcessValidCallTargets` is needed (default for executable pages); the packaged exe is CFG-enabled |
 | F-16 | - | risk | CET shadow stacks: the packaged exe and the runtime are `CETCOMPAT`; the translated code keeps call/return balanced by construction; unverified on hardware |
@@ -68,6 +68,60 @@ paths are refused; `..` cannot leave the package directory (`Win32EnvironmentOpt
 * F-04: `PlatformMemory.Current` uses `LazyInitializer.EnsureInitialized` (`IPlatformMemory.cs:45`); the old `??=` could create two `WindowsPlatformMemory` instances with separate `MapLow` locks.
 * F-05: `BinaryCache.DefaultRoot` returns the temp directory when `Environment.GetFolderPath(UserProfile)` is empty instead of the relative path `.cache`.
 
+### F-11 The virtual sink recorded silence for FMOD's WINMM output (High for audio)
+
+Setup: `Const OUTPUT_TYPE = FSOUND_OUTPUT_WINMM`, catalog `"audio": "virtual", "audioRecord": "fmod-output.wav"`. Everything worked up to the recording: output type 1, `FSOUND_Init` = 1, the
+channel played and finished after one second (the sink consumes buffers at real-time rate), `waveOutOpen` format 44.1 kHz/16-bit/stereo. The recording had the right duration
+(1.86 s, 81920 frames in 20 passes of 4096 frames) and was **all zeros** (`tools/audio/analyze_wav.py`: peak 0.0000).
+
+Cause: `VirtualSinkBackend` copied the guest buffer once at `waveOutWrite`, and a looped header's later passes re-emitted that snapshot. FMOD's WINMM
+driver keeps one looped buffer and keeps writing the mix into it while the device "plays" it (as a real driver reads the memory when it plays it). Evidence for the diagnosis: the sample bytes
+inside FMOD are exact (a `FSOUND_Sample_Lock` read-back equals the 440 Hz sine, first values 0, 1026, 2049, ...), and with the sink re-reading the guest buffer at the end of each pass
+(`it.Data = it.Buffer.ReadData()` before `MakeWrite`, tried in a scratch copy before the change was made) the same program recorded a tone: 2 channels, 44.1 kHz, peak -9.06 dBFS, dominant frequency **440.03 Hz**.
+
+Fix: `VirtualSinkBackend` (`src/BlitzCS.BinaryCompiler.Win32/Audio/VirtualSinkBackend.cs`) reads the guest memory in slices of at most 10 ms at the moment each slice is consumed, so every loop pass
+is read again. The recorder and the slice observer receive the slices live; `docs/binary-audio.md` ("Tap contract") states the rule. A buffer the guest frees while queued is completed safely.
+`HostWinmmBackend` still takes a snapshot at `waveOutWrite` when an observer is attached (`HostWinmmBackend.cs`); this does not change the audio a real device plays, because winmm reads the memory itself.
+Test: `FmodDemoTests.TheRecordedWinmmOutputIsTheTone` (now an enabled `[PackedSampleFact]`; it checks the 440 Hz tone in the recording).
+
+### F-12 `FSOUND_Close` with WINMM output (High for the demo; translator)
+
+With WINMM output the program runs to the end and then `FSOUND_Close` throws `GuestTrapException: Guest control flow reached untranslated code at 0x2000FB60 (indirect target not discovered at
+build time)` (`BinaryLibraryException` for `_FSOUND_Close@0`). With NOSOUND, `Close` works. The address is a driver routine whose pointer is stored by an instruction immediate
+(`mov dword [mem], 0x2000FB60` at RVA 0xFA56 of the derived image); the image has no relocation table, so `ControlFlowGraph.DiscoverImmediateRoots` guesses roots and
+`LooksLikeFunctionStart` (`ControlFlowGraph.cs:180-184`) accepts a target only if the previous byte is `ret`/`int3`/`nop` or `ret imm16`. The bytes before 0xFB60 are `... eb e6` (the end of a
+`jmp short`), so the function is rejected.
+
+Fixed: `LooksLikeFunctionStart` now asks `PrecededByFlowEnd`, which decodes the instruction that ends exactly at the candidate (every length 1 to 8) and accepts it when control cannot fall
+through (ret, any jmp, an indirect jmp, int3, ud2) or when the preceding byte is int3/nop padding. A function after a `jmp rel8`/`rel32`/`ret imm16` is now recognised; an address after an ordinary
+instruction is still data. Tests: `CfgPointerRootsTests.FunctionPlacedAfterAnyFlowEndingInstructionIsRecognised` and `AddressAfterAnOrdinaryInstructionIsStillNotAFunctionStart`; the end-to-end
+check is `FmodDemoTests.TheSameProgramDrivesFmodsWinmmOutputThroughTheVirtualSink`, which now runs the program to `FSOUND_Close` and expects `closed`.
+
+### F-13 `FSOUND_SetMixer(FSOUND_MIXER_QUALITY_FPU = 5)` killed the process (root cause fixed in the unpacker)
+
+Reproduced on Linux native (`linux-sysv` target) as SIGSEGV, analysed post-mortem with `gdb` on the core: the faulting instruction was `add [ebx], cl` (`00 0B`) with `rbx = 0`, reached right after a
+`cmp ecx, imm32`, at guest RVA 0x10DB. The bytes at that address in the loaded guest memory differed from the bytes the translator had used (`81 F9 80 10 70 09 10 0B` against
+`81 F9 80 7A 64 09 00 0B`) before any guest code ran, so the loader or the derived image was rewriting code.
+
+Root cause: the derived image declared 164 import slots; three of them lay inside executable code (RVAs 0x10D8, 0x1C5C, 0x22AD8, all `kernel32!LoadLibraryA`). The sandbox's first loader thunk is
+`0x7D000000`, and compiled code such as `cmp ecx, 0x80` + `jge` is `81 F9 80 00 00 00 7D xx`, whose aligned dword `00 00 00 7D` is exactly `0x7D000000`. `DerivedPeWriter` took each such
+dword for a slot and replaced it with a hint/name RVA; the loader then overwrote it again with an import-stub address, corrupting the loop bound and the `jge` that follows. Execution fell into
+bytes that were no longer a jump.
+
+Fix (generic, `DerivedPeWriter`): a thunk-valued dword is an import slot only next to another slot or the zero dword that ends a group, as in a real import table. Isolated look-alikes are left
+unchanged and reported (`UNPACK_ISOLATED_THUNK_IGNORED`). The derived FMOD now has 161 import slots, none in code. Regression: `RealPackedSampleTests` asserts that no slot lies in executable
+memory (it fails with the check disabled: verified by mutation).
+
+What remains true after the fix: the FPU mixer asks `kernel32!VirtualProtect(0x30032000, ..., PAGE_EXECUTE_READWRITE)` on pages of its own code (observed with the FMOD 3.75 sample loaded at
+0x30000000: range `0x30032000-0x30033FFF`, protection `0x40`) so that it can patch itself. That is self-modifying code, which ahead-of-time translation cannot follow: letting it succeed would
+keep running the unpatched translated logic, a silent miscompile. `VirtualProtect` and `VirtualQuery` are now implemented with truthful semantics (`docs/binary-win32.md`), and a request that makes
+translated code writable throws `Win32SelfModifyingCodeException`, so `FSOUND_Init` after `FSOUND_SetMixer(5)` fails with `GuestImportException: ... Win32SelfModifyingCodeException: The guest asked to
+make translated code writable (self-modifying code) ... VirtualProtect on translated module ... requested protection 0x40`. The process and other modules stay usable and the default mixer (MMX, 7, and
+autodetect) is unaffected.
+
+Regression: `RealPackedFpuMixerTests` (SetMixer(5)+Init must either succeed or fail with exactly that exception, then a fresh module loads; the default-mixer path inits, reaches the virtual sink and
+closes) and `MemoryProtectionTests` (hand-assembled guest). Mutation: replacing the throw with a plain `Win32UsageException` fails both.
+
 ## Checked, no defect
 
 ### F-06 Target selection
@@ -92,7 +146,7 @@ PeReader), `BlitzCS.BinaryCompiler.Runtime.dll`, `BlitzCS.BinaryCompiler.Win32.d
 
 | Site | Native API | What is passed | Classification |
 | --- | --- | --- | --- |
-| `Runtime/Platform/WindowsPlatformMemory.cs` | `VirtualAlloc`, `VirtualFree`, `VirtualProtect`, `VirtualQuery`, `FlushInstructionCache` | addresses and sizes the runtime computed (validated artifact base/size, arena scan result) | host-owned values only. A guest `VirtualAlloc` is emulated (`MemoryService.cs`: `GuestMemory.Allocate`), never forwarded |
+| `Runtime/Platform/WindowsPlatformMemory.cs` | `VirtualAlloc`, `VirtualFree`, `VirtualProtect`, `VirtualQuery`, `FlushInstructionCache` | addresses and sizes the runtime computed (validated artifact base/size, arena scan result) | host-owned values only. A guest `VirtualAlloc`/`VirtualProtect` is emulated (`MemoryService.cs`: `GuestMemory.Allocate`, `GuestMemory.TryProtect`), never forwarded; `TryProtect` only issues read/read-write/no-access on data pages |
 | `Runtime/Libc.cs`, `Platform/LinuxPlatformMemory.cs` | `mmap`, `munmap`, `mprotect`, `/proc/self/maps` | same | Linux only; `PlatformMemory.Create` picks by OS, the type is never touched on Windows |
 | `Runtime/GuestModule.cs:389` | indirect call into the translated host image (`EnterGuest`) | host image address, 32-bit guest ESP, host call-context pointer | host-owned |
 | `Runtime/GuestImports.cs` | reverse P/Invoke thunks (`Marshal.GetFunctionPointerForDelegate`) | the guest ESP (uint); arguments are read through bounds-checked `GuestMemory` | guest -> host; no pointer is dereferenced unchecked, exceptions are contained |
@@ -126,50 +180,6 @@ platform object's lock (F-04 made it a singleton). Under ARM64 Windows' x64 emul
 `FileService.cs:97` returns `ERROR_ACCESS_DENIED` for any path component with `FileAttributes.ReparsePoint`. "Links are never followed" is a sound rule on Linux; on a real Windows host the
 attribute is also set on cloud-sync placeholders (OneDrive and similar) and on junction/symlinked folders, so a game installed under such a folder cannot load its assets. Wine has none of
 these. Suggested: refuse only links whose resolved target leaves the sandbox (`FileSystemInfo.ResolveLinkTarget`) and accept cloud placeholders.
-
-### F-11 The virtual sink records silence for FMOD's WINMM output (High for audio; A1)
-
-Setup: `Const OUTPUT_TYPE = FSOUND_OUTPUT_WINMM`, catalog `"audio": "virtual", "audioRecord": "fmod-output.wav"`. Everything works up to the recording: output type 1, `FSOUND_Init` = 1, the
-channel plays and finishes after one second (the sink consumes buffers at real-time rate), `waveOutOpen` format 44.1 kHz/16-bit/stereo. The recording has the right duration
-(1.86 s, 81920 frames in 20 passes of 4096 frames) and is **all zeros** (`tools/audio/analyze_wav.py`: peak 0.0000).
-
-Cause: `VirtualSinkBackend.Write` copies the guest buffer once (`VirtualSinkBackend.cs:119`, `data = b.ReadData()`), and a looped header's later passes re-emit that snapshot. FMOD's WINMM
-driver keeps one looped buffer and keeps writing the mix into it while the device "plays" it (as a real driver reads the memory when it plays it). Evidence for the diagnosis: the sample bytes
-inside FMOD are exact (a `FSOUND_Sample_Lock` read-back equals the 440 Hz sine, first values 0, 1026, 2049, ...), and with the sink changed to re-read the guest buffer at the end of each pass
-(`it.Data = it.Buffer.ReadData()` before `MakeWrite`, tried in a scratch copy, not applied) the same program records a tone: 2 channels, 44.1 kHz, peak -9.06 dBFS, dominant frequency **440.03 Hz**.
-The same snapshot-at-write applies to the observer tap of `HostWinmmBackend`; the audio that reaches a real device is not affected (winmm reads the memory itself).
-`FmodDemoTests.TheRecordedWinmmOutputIsTheTone` is the skipped test to enable once the sink reads buffers when they are consumed.
-
-### F-12 `FSOUND_Close` with WINMM output (High for the demo; translator)
-
-With WINMM output the program runs to the end and then `FSOUND_Close` throws `GuestTrapException: Guest control flow reached untranslated code at 0x2000FB60 (indirect target not discovered at
-build time)` (`BinaryLibraryException` for `_FSOUND_Close@0`). With NOSOUND, `Close` works. The address is a driver routine whose pointer is stored by an instruction immediate
-(`mov dword [mem], 0x2000FB60` at RVA 0xFA56 of the derived image); the image has no relocation table, so `ControlFlowGraph.DiscoverImmediateRoots` guesses roots and
-`LooksLikeFunctionStart` (`ControlFlowGraph.cs:180-184`) accepts a target only if the previous byte is `ret`/`int3`/`nop` or `ret imm16`. The bytes before 0xFB60 are `... eb e6` (the end of a
-`jmp short`), so the function is rejected.
-
-Fixed: `LooksLikeFunctionStart` now asks `PrecededByFlowEnd`, which decodes the instruction that ends exactly at the candidate (every length 1 to 8) and accepts it when control cannot fall
-through (ret, any jmp, an indirect jmp, int3, ud2) or when the preceding byte is int3/nop padding. A function after a `jmp rel8`/`rel32`/`ret imm16` is now recognised; an address after an ordinary
-instruction is still data. Tests: `CfgPointerRootsTests.FunctionPlacedAfterAnyFlowEndingInstructionIsRecognised` and `AddressAfterAnOrdinaryInstructionIsStillNotAFunctionStart`; the end-to-end
-check is `FmodDemoTests.TheSameProgramDrivesFmodsWinmmOutputThroughTheVirtualSink`, which now runs the program to `FSOUND_Close` and expects `closed`.
-
-### F-13 `FSOUND_SetMixer(FSOUND_MIXER_QUALITY_FPU = 5)` killed the process (root cause fixed in the unpacker)
-
-Reproduced on Linux native (`linux-sysv` target) as SIGSEGV, analysed post-mortem with `gdb` on the core: the faulting instruction was `add [ebx], cl` (`00 0B`) with `rbx = 0`, reached right after a
-`cmp ecx, imm32`, at guest RVA 0x10DB. The bytes at that address in the loaded guest memory differed from the bytes the translator had used (`81 F9 80 10 70 09 10 0B` against
-`81 F9 80 7A 64 09 00 0B`) before any guest code ran, so the loader or the derived image was rewriting code.
-
-Root cause: the derived image declared 164 import slots; three of them lay inside executable code (RVAs 0x10D8, 0x1C5C, 0x22AD8, all `kernel32!LoadLibraryA`). The sandbox's first loader thunk is
-`0x7D000000`, and compiled code such as `cmp ecx, 0x80` + `jge` is `81 F9 80 00 00 00 7D xx`, whose aligned dword `00 00 00 7D` is exactly `0x7D000000`. `DerivedPeWriter` took each such
-dword for a slot and replaced it with a hint/name RVA; the loader then overwrote it again with an import-stub address, corrupting the loop bound and the `jge` that follows. Execution fell into
-bytes that were no longer a jump.
-
-Fix (generic, `DerivedPeWriter`): a thunk-valued dword is an import slot only next to another slot or the zero dword that ends a group, as in a real import table. Isolated look-alikes are left
-unchanged and reported (`UNPACK_ISOLATED_THUNK_IGNORED`). The derived FMOD now has 161 import slots, none in code. Regression: `RealPackedSampleTests` asserts that no slot lies in executable
-memory (it fails with the check disabled: verified by mutation).
-
-What remains true after the fix: the FPU mixer path calls `kernel32!VirtualProtect`, which means it patches its own mixer code at run time. That is self-modifying code, which ahead-of-time
-translation cannot follow; the call is refused by name (`GuestImportException: ... unbound import kernel32.dll!VirtualProtect`), not a crash. The default mixer (MMX, 7) is unaffected.
 
 ### F-14 Hardware faults inside guest code are fatal (Medium, risk)
 
@@ -233,6 +243,12 @@ in the published project (the publisher's generated project does not set it toda
 * Guest TLS, the per-thread TEB/PEB pages and the stacks are ordinary `VirtualAlloc` regions in `0x78000000-0xFFFFFFFF`, found by walking `VirtualQuery` and honouring the 64 KiB granularity;
   the system's shared-data page at `0x7FFE0000` is expected to show up as an occupied region and is skipped by the same walk (not observable under Wine here). Guest stacks have a `PAGE_NOACCESS` page below them and an explicit headroom check per call
   (32 KiB); runaway recursion inside one call ends in F-14.
+
+## Proton-CachyOS note
+
+The suites were also run under Proton-CachyOS Latest (see `docs/wine-testing.md`, "Choosing the Wine build"). Results are identical to Proton 11.0: BinaryCompiler.Tests 393/0/4,
+Win32.Tests 264/0/7, Unpack.Tests 28/0/1, Linking.E2E.Tests 37/0/1 (passed/failed/skipped). However, with `PULSE_SINK` set, the audio stream landed on the machine's real default sink, so the
+null-sink capture was silent and the tone was audible on real speakers. See `docs/wine-audio-routing.md` for the routing status.
 
 ## How to reproduce
 

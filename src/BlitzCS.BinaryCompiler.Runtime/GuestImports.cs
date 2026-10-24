@@ -100,6 +100,13 @@ public sealed unsafe class GuestImport
         return new(Marshal.GetFunctionPointerForDelegate(thunk), thunk);
     }
 
+    /// <summary>A thunk with a fixed native signature whose behaviour the caller decides on every call (the dynamic stub pool swaps handlers behind one permanent thunk).</summary>
+    internal static GuestImport CreateIndirect(Func<uint, ulong> dispatch)
+    {
+        NativeThunk thunk = esp => dispatch(esp);
+        return new(Marshal.GetFunctionPointerForDelegate(thunk), thunk);
+    }
+
     internal object? KeepAlive => keepAlive;
 }
 

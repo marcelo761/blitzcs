@@ -21,6 +21,7 @@ public sealed class User32BasicService : Win32Service
     {
         const string U = "USER32.dll";
         Std(U, "GetDesktopWindow", 0, _ => DesktopWindow);
+        Std(U, "GetForegroundWindow", 0, _ => 0);   // no window system, so no window has the focus: NULL is the real answer
         Std(U, "IsWindow", 1, c => c[0] == DesktopWindow ? 1u : 0u);
         Std(U, "IsWindowVisible", 1, c => c[0] == DesktopWindow ? 1u : c.Ctx.Fail(ErrorInvalidWindowHandle));
         Std(U, "MessageBoxA", 4, c =>

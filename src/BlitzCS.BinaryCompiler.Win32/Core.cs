@@ -15,11 +15,24 @@ public static class Win32Error
         NotEnoughMemory = 8, InvalidData = 13, OutOfMemory = 14, NoMoreFiles = 18, NotSupported = 50, FileExists = 80, InvalidParameter = 87,
         InsufficientBuffer = 122, ModNotFound = 126, ProcNotFound = 127, NegativeSeek = 131, BadPathname = 161, AlreadyExists = 183,
         EnvVarNotFound = 203, InvalidAddress = 487, NoMoreItems = 259, InvalidFlags = 1004, NoUnicodeTranslation = 1113, HandleEof = 38,
-        NotOwner = 288, TooManyPosts = 298, InvalidUserBuffer = 1784, NotEnoughQuota = 1816;
+        NotOwner = 288, TooManyPosts = 298, InvalidUserBuffer = 1784, NotEnoughQuota = 1816, BadLength = 24, NoAccess = 998;
 }
 
 /// <summary>Raised when the guest calls the emulated Win32 surface in a way real Windows would answer with a crash or undefined behaviour (for example leaving an unowned critical section). The guest call is abandoned; nothing is silently ignored.</summary>
-public sealed class Win32UsageException(string message) : Exception(message);
+public class Win32UsageException(string message) : Exception(message);
+
+/// <summary>
+/// The guest asked to make translated code writable (VirtualProtect with a writable protection on a page of an executable section), which means it intends to patch its own code.
+/// Ahead-of-time translation cannot follow self-modifying code: succeeding would let the guest write bytes that the translated code never reads. The request is therefore refused by name.
+/// </summary>
+public sealed class Win32SelfModifyingCodeException(string module, uint start, uint end, uint requestedProtection)
+    : Win32UsageException($"The guest asked to make translated code writable (self-modifying code), which ahead-of-time translation cannot honour: VirtualProtect on {module}, range 0x{start:X8}-0x{end:X8}, requested protection 0x{requestedProtection:X}.")
+{
+    public string Module { get; } = module;
+    public uint Start { get; } = start;
+    public uint End { get; } = end;
+    public uint RequestedProtection { get; } = requestedProtection;
+}
 
 /// <summary>ExitProcess/TerminateProcess(self). The host process is never terminated: the guest call is abandoned with this exception (it is the inner exception of the runtime's GuestImportException).</summary>
 public sealed class Win32ExitProcessException(uint exitCode, string api) : Exception($"The guest called {api}({exitCode}); the host process keeps running.")
@@ -47,6 +60,13 @@ public interface IWin32Memory
     bool IsMapped(uint address, uint length);
     /// <summary>Allocates a zeroed, page-granular guest region. Throws on exhaustion.</summary>
     IWin32Allocation Allocate(int size);
+
+    /// <summary>Describes the page containing <paramref name="address"/>. The default (memory without page protection support) reports nothing mapped.</summary>
+    bool TryQueryPage(uint address, out GuestPageInfo info) { info = new GuestPageInfo(GuestPageKind.Unmapped, 0, 0, false, false, 0, null); return false; }
+    /// <summary>Lowest mapped address above <paramref name="address"/>, or 0x100000000.</summary>
+    ulong NextMappedAddress(uint address) => 0x1_0000_0000UL;
+    /// <summary>Changes the host protection of whole pages and records <paramref name="tag"/> (see <see cref="GuestMemory.TryProtect"/>). The default refuses.</summary>
+    bool TryProtect(uint address, uint length, MemoryProtection protection, uint tag, out string? refusal) { refusal = "this memory does not support protection changes"; return false; }
 }
 
 /// <summary>Adapts the runtime's <see cref="GuestMemory"/>.</summary>
@@ -69,6 +89,9 @@ public sealed class GuestMemoryAdapter(GuestMemory memory) : IWin32Memory
     public string ReadAnsiString(uint a, int max = 65536) => Memory.ReadAnsiString(a, max);
     public bool IsMapped(uint a, uint l) => Memory.IsMapped(a, l);
     public IWin32Allocation Allocate(int size) => new Alloc(Memory.Allocate(size));
+    public bool TryQueryPage(uint a, out GuestPageInfo info) => Memory.TryQueryPage(a, out info);
+    public ulong NextMappedAddress(uint a) => Memory.NextMappedAddress(a);
+    public bool TryProtect(uint a, uint l, MemoryProtection p, uint tag, out string? refusal) => Memory.TryProtect(a, l, p, tag, out refusal);
 }
 
 public static class Win32MemoryExtensions
@@ -295,6 +318,9 @@ public sealed class Win32Options
     /// <summary>Receives OutputDebugStringA text (what an attached debugger would see). Null: no debugger is attached and the text is dropped, as on Windows.</summary>
     public Action<string>? DebugOutput { get; init; }
 
+    /// <summary>DirectSound reached through <c>dsound.dll!DirectSoundCreate</c> (see docs/binary-com.md). Default: the host's native dsound on a Windows host (including Wine), unavailable elsewhere (DSERR_NODRIVER). None: always DSERR_NODRIVER.</summary>
+    public DirectSoundBackendKind DirectSound { get; init; } = DirectSoundBackendKind.Default;
+
     /// <summary>waveOut backend (see docs/binary-audio.md). Default: HostWinmm on a Windows host (including Wine), None elsewhere. The environment variable BLITZCS_AUDIO=host|virtual|none overrides it.</summary>
     public WaveOutBackendKind WaveOut { get; init; } = WaveOutBackendKind.Default;
     /// <summary>VirtualSink: records every consumed buffer to this RIFF WAV file. HostWinmm: records every buffer written. Ignored (with a diagnostic) for the None backend.</summary>
@@ -327,6 +353,11 @@ public sealed class Win32Context : IDisposable
     }
 
     public Win32Options Options { get; }
+
+    private static readonly Action<string>? EnvironmentTrace = Environment.GetEnvironmentVariable("BLITZCS_WIN32_TRACE") == "1" ? (m => { Console.Error.WriteLine(m); Console.Error.Flush(); }) : null;
+
+    /// <summary>The call trace sink: <see cref="Win32Options.CallTrace"/>, else standard error when the environment variable BLITZCS_WIN32_TRACE=1 is set (diagnostics of generated programs), else null (free).</summary>
+    public Action<string>? Trace => Options.CallTrace ?? EnvironmentTrace;
 
     private IDisposable[] disposables = [];
     private readonly object disposablesGate = new();
@@ -366,6 +397,9 @@ public sealed class Win32Context : IDisposable
 
     /// <summary>Runtime hook (not available yet): returns a guest-callable address for an emulated export so GetProcAddress can hand it out.</summary>
     public void SetExportStubAddressProvider(Func<string, string, uint?>? provider) => Process.ExportStubAddress = provider;
+
+    /// <summary>Looks an implemented API up by DLL and name (set by the resolver that owns the registry): lets GetProcAddress hand out a callable stub for it.</summary>
+    internal Func<string, string, Win32Api?>? ApiLookup { get; set; }
 
     public uint CurrentThreadId => 1000u + 4u * (uint)Environment.CurrentManagedThreadId;
 

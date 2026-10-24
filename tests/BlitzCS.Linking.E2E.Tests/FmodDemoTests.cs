@@ -228,6 +228,27 @@ public sealed class FmodDemoTests : E2EBase
     }
 
     /// <summary>
+    /// FSOUND_OUTPUT_DSOUND (2): the original FMOD loads dsound.dll with LoadLibraryA, takes DirectSoundCreate / DirectSoundEnumerateA with GetProcAddress (dynamic stubs of the translated module),
+    /// enumerates devices through a callback into guest code, creates a primary and a streaming secondary buffer and mixes into it with Lock/Unlock - all against the HOST's native dsound
+    /// (Windows, or Wine's built-in). Windows/Wine only; the audible proof (440 Hz in a null sink) is scripts/wine/audio-capture.sh, see docs/binary-com.md.
+    /// </summary>
+    [PackedSampleFact]
+    public void TheSameProgramDrivesFmodsDirectSoundOutputThroughTheHostDsound()
+    {
+        if (!OperatingSystem.IsWindows()) return;   // no host dsound elsewhere: DirectSoundCreate answers DSERR_NODRIVER (covered by the Win32 tests)
+        File.WriteAllBytes(Path.Combine(Root, "tone.wav"), ToneWav());
+        var stdout = Build(Source("FSOUND_OUTPUT_DSOUND"), CatalogFor(RealLibraries.PackedSample!), out var exit, out var err);
+        Assert.True(exit == 0, err + stdout);
+        File.Copy(Path.Combine(Root, "tone.wav"), Path.Combine(Root, "out", "tone.wav"));
+        var artifact = new ArtifactSerializer().Deserialize(File.ReadAllBytes(Path.Combine(Root, "out", "fmod.dll.bcx")));
+        Assert.True(artifact.DynamicStubs > 0, "the CLI gives a library that imports LoadLibrary/GetProcAddress a dynamic stub pool");
+
+        var stopwatch = Stopwatch.StartNew();
+        Assert.Equal(ExpectedNoSound.Replace("output 0\n", "output 2\n"), Run());
+        Assert.True(stopwatch.Elapsed >= TimeSpan.FromSeconds(1.5), $"the demo ran for {stopwatch.Elapsed}");
+    }
+
+    /// <summary>
     /// The product path: `blitzcs build main.bb --externals fmod.json --assets assets` writes a self-contained Windows x64 application (dist/Main/Main.exe), which this test
     /// runs on Windows or under Wine. Needs the SDK and the win-x64 runtime packs (NuGet), hence the explicit opt-in used by the other package tests.
     /// </summary>

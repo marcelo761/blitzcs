@@ -34,11 +34,31 @@ public sealed class CriticalSectionTests
         var cs = NewCs(w);
         Assert.Throws<Win32UsageException>(() => w.Kernel("LeaveCriticalSection", cs)); // not owned
         w.Kernel("EnterCriticalSection", cs);
-        Assert.Throws<Win32UsageException>(() => w.Kernel("DeleteCriticalSection", cs));
         Assert.Throws<Win32UsageException>(() => w.Kernel("InitializeCriticalSection", cs));
         w.Kernel("LeaveCriticalSection", cs);
         w.Kernel("DeleteCriticalSection", cs);
         Assert.Throws<Win32UsageException>(() => w.Kernel("EnterCriticalSection", cs)); // deleted
+    }
+
+    [Fact]
+    public void DeletingASectionTheCallingThreadStillOwnsIsToleratedButAnotherThreadsIsRefused()
+    {
+        using var w = new World();
+        var mine = NewCs(w);
+        w.Kernel("EnterCriticalSection", mine);
+        w.Kernel("EnterCriticalSection", mine);
+        w.Kernel("DeleteCriticalSection", mine);                                          // the original FMOD does this while closing DirectSound; Windows tolerates it
+        Assert.Throws<Win32UsageException>(() => w.Kernel("EnterCriticalSection", mine)); // deleted
+
+        var theirs = NewCs(w);
+        var entered = new ManualResetEventSlim(); var release = new ManualResetEventSlim();
+        var holder = new Thread(() => { w.Kernel("EnterCriticalSection", theirs); entered.Set(); release.Wait(); w.Kernel("LeaveCriticalSection", theirs); });
+        holder.Start();
+        entered.Wait();
+        var error = Assert.Throws<Win32UsageException>(() => w.Kernel("DeleteCriticalSection", theirs));
+        Assert.Contains("another thread", error.Message);
+        release.Set(); holder.Join();
+        w.Kernel("DeleteCriticalSection", theirs);
     }
 
     [Fact]

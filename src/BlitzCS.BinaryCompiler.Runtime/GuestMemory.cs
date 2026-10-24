@@ -2,15 +2,51 @@ using System.Text;
 
 namespace BlitzCS.BinaryCompiler.Runtime;
 
-/// <summary>A mapped guest range. PageWritable (one flag per page from Start) is null when the whole range is writable.</summary>
+/// <summary>What backs a mapped guest range.</summary>
+public enum GuestPageKind
+{
+    /// <summary>Nothing is mapped at the address.</summary>
+    Unmapped,
+    /// <summary>A page of an executable section of a translated image: the guest code the translator consumed.</summary>
+    ImageCode,
+    /// <summary>Any other page of a translated image (headers, data, import stubs).</summary>
+    ImageData,
+    /// <summary>A scratch buffer from <see cref="GuestMemory.Allocate"/> (the guest's VirtualAlloc and heap memory).</summary>
+    Buffer,
+    /// <summary>Stacks, TEB/PEB and other runtime-owned ranges.</summary>
+    Other,
+}
+
+/// <summary>One page as the guest sees it. <see cref="Tag"/> is the caller-defined protection last stored by <see cref="GuestMemory.TryProtect"/> (0 = never set).</summary>
+public readonly record struct GuestPageInfo(GuestPageKind Kind, uint RegionStart, uint RegionEnd, bool Readable, bool Writable, uint Tag, string? Owner);
+
+/// <summary>A mapped guest range. PageWritable/PageReadable/PageTag (one entry per page from Start) are null while the whole range is readable and writable.</summary>
 internal sealed record GuestRegion(ulong Start, ulong End, bool[]? PageWritable)
 {
+    public bool[]? PageWritable { get; set; } = PageWritable;
+    internal bool[]? PageReadable { get; set; }
+    internal uint[]? PageTag { get; set; }
+    internal bool[]? PageExecutable { get; init; }
+    internal GuestPageKind Kind { get; init; } = GuestPageKind.Other;
+    internal string? Owner { get; init; }
+
     internal bool CoversWrite(ulong from, ulong to)
     {
-        if (PageWritable is null) return true;
+        var w = PageWritable;
+        if (w is null) return true;
         var ps = (ulong)PlatformMemory.Current.PageSize;
         for (var p = (from - Start) / ps; p <= (to - 1 - Start) / ps; p++)
-            if (!PageWritable[p]) return false;
+            if (!w[p]) return false;
+        return true;
+    }
+
+    internal bool CoversRead(ulong from, ulong to)
+    {
+        var r = PageReadable;
+        if (r is null) return true;
+        var ps = (ulong)PlatformMemory.Current.PageSize;
+        for (var p = (from - Start) / ps; p <= (to - 1 - Start) / ps; p++)
+            if (!r[p]) return false;
         return true;
     }
 }
@@ -67,12 +103,109 @@ public sealed unsafe class GuestMemory
         var end = (ulong)address + (ulong)length;
         foreach (var r in regions)
             if (address >= r.Start && end <= r.End)
-                return !write || r.CoversWrite(address, Math.Max(end, address + 1UL)) ? r : null;
+                return Accessible(r, address, end, write) ? r : null;
         foreach (var peer in peers)
             foreach (var r in peer.regions)
                 if (address >= r.Start && end <= r.End)
-                    return !write || r.CoversWrite(address, Math.Max(end, address + 1UL)) ? r : null;
+                    return Accessible(r, address, end, write) ? r : null;
         return null;
+    }
+
+    private static bool Accessible(GuestRegion r, uint address, ulong end, bool write)
+    {
+        var to = Math.Max(end, address + 1UL);
+        return (write ? r.CoversWrite(address, to) : r.CoversRead(address, to)) && (!write || r.CoversRead(address, to));
+    }
+
+    private static GuestPageInfo Describe(GuestRegion r, uint page, uint ps)
+    {
+        var i = (int)((page - r.Start) / ps);
+        var writable = r.PageWritable is null || r.PageWritable[i];
+        var readable = r.PageReadable is null || r.PageReadable[i];
+        var kind = r.Kind == GuestPageKind.ImageData && r.PageExecutable is { } x && x[i] ? GuestPageKind.ImageCode : r.Kind;
+        return new GuestPageInfo(kind, (uint)r.Start, (uint)r.End, readable, writable, r.PageTag?[i] ?? 0, r.Owner);
+    }
+
+    private GuestRegion? FindRegion(uint address, out GuestMemory owner)
+    {
+        foreach (var r in regions)
+            if (address >= r.Start && address < r.End) { owner = this; return r; }
+        foreach (var peer in peers)
+            foreach (var r in peer.regions)
+                if (address >= r.Start && address < r.End) { owner = peer; return r; }
+        owner = this;
+        return null;
+    }
+
+    /// <summary>Describes the page containing <paramref name="address"/>; false (Kind Unmapped) when nothing is mapped there.</summary>
+    public bool TryQueryPage(uint address, out GuestPageInfo info)
+    {
+        module.EnterCall();
+        try
+        {
+            var ps = (uint)PlatformMemory.Current.PageSize;
+            var page = address & ~(ps - 1);
+            if (FindRegion(page, out _) is { } r) { info = Describe(r, page, ps); return true; }
+            info = new GuestPageInfo(GuestPageKind.Unmapped, 0, 0, false, false, 0, null);
+            return false;
+        }
+        finally { module.ExitCall(); }
+    }
+
+    /// <summary>The lowest mapped address above <paramref name="address"/> (own and peer regions), or 0x100000000 when there is none. For VirtualQuery of free space.</summary>
+    public ulong NextMappedAddress(uint address)
+    {
+        module.EnterCall();
+        try
+        {
+            var best = 0x1_0000_0000UL;
+            foreach (var r in regions) if (r.Start > address && r.Start < best) best = r.Start;
+            foreach (var peer in peers) foreach (var r in peer.regions) if (r.Start > address && r.Start < best) best = r.Start;
+            return best;
+        }
+        finally { module.ExitCall(); }
+    }
+
+    /// <summary>
+    /// Changes the host protection of whole pages of one region and records <paramref name="tag"/> for them. Only scratch buffers and non-code image pages can change:
+    /// pages of translated code are refused (<paramref name="refusal"/> says why), and host protection never includes execute, so a request for an executable
+    /// data page changes the guest-visible tag only. Nothing is changed when any page is refused.
+    /// </summary>
+    public bool TryProtect(uint address, uint length, MemoryProtection protection, uint tag, out string? refusal)
+    {
+        module.EnterCall();
+        try
+        {
+            if (protection == MemoryProtection.ReadExecute) throw new ArgumentException("Host execute permission is never granted to guest data.", nameof(protection));
+            var platform = PlatformMemory.Current;
+            var ps = (uint)platform.PageSize;
+            if (length == 0 || (address & (ps - 1)) != 0 || (length & (ps - 1)) != 0 || (ulong)address + length > 0x1_0000_0000UL) { refusal = "range is not page aligned"; return false; }
+            var region = FindRegion(address, out var owner);
+            if (region is null) { refusal = "range is not mapped"; return false; }
+            if (owner != this) return owner.TryProtect(address, length, protection, tag, out refusal);
+            lock (gate)
+            {
+                var last = address + length - ps;
+                if (last >= region.End) { refusal = "range leaves the allocation"; return false; }
+                if (region.Kind is not (GuestPageKind.Buffer or GuestPageKind.ImageData)) { refusal = "memory of this kind cannot change protection"; return false; }
+                var first = (int)((address - region.Start) / ps);
+                var count = (int)(length / ps);
+                for (var i = 0; i < count; i++)
+                    if (region.PageExecutable is { } x && x[first + i]) { refusal = "translated code"; return false; }
+                var pages = (int)((region.End - region.Start + ps - 1) / ps);
+                var write = protection == MemoryProtection.ReadWrite;
+                var read = protection != MemoryProtection.None;
+                platform.Protect((nint)address, length, protection);
+                var w = region.PageWritable ?? Enumerable.Repeat(true, pages).ToArray();
+                var rd = region.PageReadable ?? Enumerable.Repeat(true, pages).ToArray();
+                var tags = region.PageTag ?? new uint[pages];
+                for (var i = 0; i < count; i++) { w[first + i] = write; rd[first + i] = read; tags[first + i] = tag; }
+                region.PageTag = tags; region.PageReadable = rd; region.PageWritable = w;
+                refusal = null;
+                return true;
+            }
+        }
+        finally { module.ExitCall(); }
     }
 
     private byte* Check(uint address, long length, bool write)
