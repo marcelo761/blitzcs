@@ -20,5 +20,6 @@
     <Project Path="tests/BlitzCS.BinaryCompiler.Tests/BlitzCS.BinaryCompiler.Tests.csproj" />
     <Project Path="tests/BlitzCS.BinaryCompiler.Win32.Tests/BlitzCS.BinaryCompiler.Win32.Tests.csproj" />
     <Project Path="tests/BlitzCS.BinaryCompiler.Unpack.Tests/BlitzCS.BinaryCompiler.Unpack.Tests.csproj" />
+    <Project Path="tests/BlitzCS.Linking.E2E.Tests/BlitzCS.Linking.E2E.Tests.csproj" />
   </Folder>
 </Solution>

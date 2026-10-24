@@ -51,10 +51,32 @@ public sealed class RealPackedSampleTests(ITestOutputHelper output)
         output.WriteLine($"{getter.Name} -> {value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}");
         Assert.True(float.IsFinite(value) && value > 0 && value < 100, "a version getter should return a small positive float");
 
-        // DllMain needs CRT/Win32 services the component lacks: it must fail loudly, naming the import.
-        var failure = Assert.Throws<GuestInitializationException>(() =>
-            GuestModule.Load(artifact, derived, resolver, new GuestModuleOptions { RunEntryPoint = true, AllowUnboundImports = true }));
-        output.WriteLine("DllMain: " + failure.Message);
-        Assert.Contains("unbound import", failure.Message);
+        // With the Win32 component's msvcrt/kernel32/winmm services DllMain (the OEP) now runs to completion and returns TRUE.
+        using var attachResolver = new Win32ImportResolver(); // one resolver per guest module
+        using var attached = GuestModule.Load(artifact, derived, attachResolver, new GuestModuleOptions { RunEntryPoint = true, AllowUnboundImports = true });
+        output.WriteLine("DllMain: returned TRUE (module loaded)");
+        Assert.Equal(3.75f, attached.Bind(getter.Name!, GuestCallingConvention.Stdcall, 0).CallSingle());
+        Assert.Empty(Kernel32ExtraService.ThreadFaults(attachResolver.Context));
+
+        uint Call(string name, params uint[] args)
+        {
+            try { var r = attached.Bind("_FSOUND_" + name + "@" + 4 * args.Length, GuestCallingConvention.Stdcall, args.Length).Call(args); output.WriteLine($"{name}({string.Join(",", args)}) -> {(sbyte)r}"); return r; }
+            catch (GuestException e) { output.WriteLine($"{name}: {e.GetType().Name}: {e.Message}"); throw; }
+        }
+
+        // State-only API. Values other than the ones asserted are observations (written to the output), not validation against FMOD documentation.
+        Assert.Equal(0, (sbyte)Call("GetError"));
+        Assert.Equal(0, (sbyte)Call("GetNumDrivers"));       // headless host: winmm reports no devices
+        foreach (var output3 in new uint[] { 0, 1 })          // FSOUND_OUTPUT_NOSOUND = 0 and WINMM = 1 (docs/native-original-m13.md observes NOSOUND = 0)
+        {
+            Call("SetOutput", output3);
+            Assert.Equal((sbyte)output3, (sbyte)Call("GetOutput"));
+        }
+        Call("SetOutput", 0);
+        output.WriteLine("GetMixer observed " + (sbyte)Call("GetMixer") + "; GetOutputRate observed " + Call("GetOutputRate"));
+        // FSOUND_Init / SetDriver / driver enumeration after SetOutput dispatch through a function-pointer table whose targets the unpacked image's
+        // translation did not discover (relocations are dropped by the unpacker); they trap with GuestTrapException, reported here, not asserted.
+        try { Call("Init", 44100, 64, 0); output.WriteLine("Init completed"); }
+        catch (GuestTrapException) { output.WriteLine("FSOUND_Init: blocked by an undiscovered indirect call target (see docs/binary-unpack.md)"); }
     }
 }

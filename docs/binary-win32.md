@@ -35,6 +35,10 @@ An API that no service registers is absent: `Resolve` returns null, so `GuestMod
 | Kernel32.String | MultiByteToWideChar, WideCharToMultiByte, LCMapStringA/W, GetStringTypeA/W, GetACP, GetOEMCP, GetCPInfo, lstrlenA, lstrcpyA, lstrcpynA, lstrcatA |
 | Kernel32.File | CreateFileA, ReadFile, WriteFile, CloseHandle, SetFilePointer, SetEndOfFile, FlushFileBuffers, GetFileSize, GetFileType, GetFileAttributesA, FindFirstFileA, FindNextFileA, FindClose, GetStdHandle, SetStdHandle, SetHandleCount |
 | Msvcrt (cdecl) | malloc, calloc, realloc, free, memcpy, memmove, memset, memcmp, memchr, strlen, strcmp, _stricmp, strncmp, strcpy, strncpy, strcat, strchr, strrchr, strstr, abs, labs, atoi, toupper, tolower, sprintf, _snprintf |
+| Msvcrt.Runtime (cdecl) | `_initterm`, `_initterm_e` (callbacks into guest code), `_errno`, `_ftol` (x87 argument, EDX:EAX result), `_CIpow` (ST1/ST0 arguments, ST0 result), sin, cos, atan, log, pow, sqrt, fabs, floor, fmod, ldexp, frexp (double stack arguments, ST0 result), clock, rand, srand, qsort, `_vsnprintf`, wcstombs, `operator new` / `operator delete`, fopen/fclose/fread/fseek/ftell (binary modes only), `_isctype`; DATA exports `__mb_cur_max` (1), `_adjust_fdiv` (0), `_pctype` ("C" locale class table) |
+| Kernel32.Extra | CreateThread (real host thread running the guest routine), ResumeThread, GetExitCodeThread, Set/GetThreadPriority (recorded, host scheduling unchanged), DisableThreadLibraryCalls, GetSystemDirectoryA, GetWindowsDirectoryA, GetDriveTypeA (only C:), OutputDebugStringA (host sink or dropped) |
+| Winmm | waveOutGetNumDevs / waveInGetNumDevs / mixerGetNumDevs = 0; every device-id call fails with MMSYSERR_BADDEVICEID (numbered device) or MMSYSERR_NODRIVER (WAVE_MAPPER); every handle call fails with MMSYSERR_INVALHANDLE (no open can succeed); timeGetTime; timeSetEvent (TIME_CALLBACK_FUNCTION, one-shot/periodic, real host timer thread) and timeKillEvent. No mci* |
+| Winsock.Core | htonl, htons, ntohl, ntohs, WSAStartup, WSACleanup, WSAGetLastError, WSASetLastError, `__WSAFDIsSet` (WSOCK32 by ordinal 8, 9, 14, 15, 111, 112, 115, 116, 151, checked against a Windows-compatible export table; WS2_32 by name). No socket/connect/send/recv/select |
 | Winsock | inet_addr, inet_ntoa for WSOCK32 (by name and ordinals 10/11, checked against a Windows export table) and WS2_32 (by name) |
 
 ## Documented behaviour relied on, and approximations
@@ -70,6 +74,28 @@ ERROR_ALREADY_EXISTS).
   (`%e %g %n ...`) and NaN/Infinity raise `Win32UsageException` naming the specifier. `_snprintf` follows the MSVCRT truncation rule (returns -1,
   no terminator when the output does not fit).
 
+## Registry, COM and user32 subsets
+
+- **advapi32 registry** (`Advapi32RegistryService`): an in-memory virtual registry per resolver, empty except for the four predefined roots
+  (HKCR, HKCU, HKLM, HKU). ANSI `RegOpenKey[Ex]`, `RegCreateKey[Ex]`, `RegCloseKey`, `RegSetValue[Ex]`, `RegQueryValue[Ex]`, `RegEnumKey[Ex]`,
+  `RegEnumValue`, `RegDeleteKey`, `RegDeleteValue`, `RegFlushKey` return the LONG error code (SUCCESS, FILE_NOT_FOUND, MORE_DATA, NO_MORE_ITEMS,
+  INVALID_HANDLE, KEY_DELETED, ACCESS_DENIED for deleting a key with sub-keys) and follow the documented size-in/size-out buffer rules. With
+  `Win32Options.SandboxRoot` the tree is persisted to `.blitzcs-registry.json` in it (a corrupt file is a fault). Not modelled: W variants,
+  merged HKCR view, security, volatile keys, HKEY_CURRENT_CONFIG. `Advapi32RegistryService.Snapshot` lets a host inspect what a guest wrote.
+- **ole32** (`Ole32Service`): per-thread apartment bookkeeping (S_OK / S_FALSE / RPC_E_CHANGED_MODE), `CoTaskMemAlloc/Realloc/Free` on a checked guest
+  heap, GUID text conversion (`StringFromCLSID`, `StringFromGUID2`, `CLSIDFromString` incl. ProgID lookup in the virtual registry, `IIDFromString`).
+  `CoCreateInstance` never returns S_OK: no COM server is loaded by this component. It returns CO_E_NOTINITIALIZED before `CoInitialize`,
+  REGDB_E_CLASSNOTREG for an unregistered class, CLASS_E_CLASSNOTAVAILABLE when the virtual registry names a server that cannot be hosted here, and
+  always NULLs `*ppv`. Hosting an in-proc server through an explicit host registration API is out of scope.
+- **user32** (`User32BasicService`): `GetDesktopWindow` returns the opaque sandbox handle `0x00010010`; `IsWindow`/`IsWindowVisible`/`MessageBoxA` validate
+  HWNDs (ERROR_INVALID_WINDOW_HANDLE). `MessageBoxA` calls `Win32Options.MessageBoxHandler`; without one it faults naming `user32!MessageBoxA`. Every other
+  window API is unresolved and faults by name.
+- **eax.dll end to end** (`EaxTests`, needs `BLITZCS_REAL_PE32_DIR`): `DllRegisterServer` returns S_OK and writes two CLSIDs
+  ({4FF53B81-1CE0-11D3-AAB8-00A0C95949D5} EAX Unified, {CA503B60-B176-11D4-A094-D0C0BF3A560C} EAX Unified 8) each with InprocServer32 (default =
+  the module path `GetModuleFileNameA` answers, ThreadingModel=Both), ProgID and VersionIndependentProgID; the test checks the GUID format and values
+  against COM conventions. `DllUnregisterServer` removes them, leaving only the shared `HKCR\CLSID` parent (as ATL servers do). `DllCanUnloadNow`
+  returns S_OK with no objects; `DllGetClassObject` with an unknown CLSID returns CLASS_E_CLASSNOTAVAILABLE.
+
 ## Real imports (ogg.dll, vorbis.dll, vorbisFile.dll, eax.dll, UPX stub of fmod.dll)
 
 81 distinct non-inter-module imports were tabulated (`PriorityList.cs`). Satisfied per binary (imports from `ogg.dll`/`vorbis.dll` are
@@ -80,22 +106,32 @@ inter-module links the caller's own resolver must provide):
 | ogg.dll | 42/43 | RtlUnwind |
 | vorbis.dll | 54/56 | RtlUnwind, RaiseException |
 | vorbisFile.dll | 52/54 | RtlUnwind, RaiseException |
-| eax.dll | 58/73 | RtlUnwind, RaiseException, GetDesktopWindow, Reg* (7), ole32 (5) |
+| eax.dll | 71/73 | RtlUnwind, RaiseException |
 | fmod.dll stub | LoadLibraryA, GetProcAddress, abs, wsock32 #11 | RegCloseKey, acmStreamOpen, CoInitialize, ShowWindow, mixerOpen |
 
 `RtlUnwind` and `RaiseException` need structured exception handling in the runtime (frame chain walking and handler invocation), so they stay
 missing; the CRT only reaches them on exception paths, so `AllowUnboundImports` lets start-up code run while any use faults naming the API.
-The registry, COM, user32 and winmm imports of eax.dll/fmod.dll have no meaningful semantics without a registry, COM runtime and windowing
-layer and are intentionally absent.
+The design for these two is in `binary-seh.md`. The registry, COM and basic user32 imports of eax.dll are implemented as truthful subsets (below);
+the windowing and winmm imports of fmod.dll remain intentionally absent.
+
+## Runtime additions made for the unpacked fmod.dll (all additive)
+
+* `GuestModule.CallAddress` / `GuestCall.CallGuest` (hook 2 below, now present): an import can call guest code by address (the address must be a translated code entry: export,
+  relocation/immediate-derived root; otherwise `GuestTrapException` names it). Used by `_initterm`, `qsort`, `CreateThread`, `timeSetEvent`.
+* `GuestCall.TryPopSt0` / `PopSt0Double` / `SetReturnSt0(double)` and `GuestX87` (hook 6, now present): the guest x87 registers are the real ones of the executing thread and survive the
+  managed transition, so a 27-byte helper mapped R+X pops ST0 (it checks FXAM for an empty stack). Linux x86-64 only, like the rest of the runtime.
+* `IGuestDataImportResolver` / `GuestDataImport`: an import that is a VARIABLE (msvcrt `__mb_cur_max`, `_pctype`, `_adjust_fdiv`) gets the variable's guest address in its IAT slot, written before
+  the IAT is made read-only. Before this, such an import would have been bound to a callable stub and silently read as data.
 
 ## Runtime hooks needed
 
-1. A guest-callable stub address for a bound import (so `GetProcAddress(kernel32, "HeapAlloc")` can answer; see `Win32Context.SetExportStubAddressProvider`).
-2. A way for imports to call back into guest code by guest address (needed for `qsort`, `bsearch`, `atexit`, window procedures).
+1. (open) A guest-callable stub address for a bound import (so `GetProcAddress(kernel32, "HeapAlloc")` can answer; see `Win32Context.SetExportStubAddressProvider`).
+2. (done, see above) Calling back into guest code by address. `atexit`/`_onexit` still need the process-exit sequence.
 3. Page protection control on `GuestMemory` regions (needed for `VirtualProtect` and real decommit).
 4. Atomic read-modify-write on guest words, so Interlocked APIs are atomic against guest `LOCK` instructions.
-5. Structured exception support (`RtlUnwind`, `RaiseException`, `SetUnhandledExceptionFilter` delivery) and the TEB TLS array (see above).
-6. An x87-argument convention for `_ftol`/`_ftol2`.
+5. Structured exception support (`RtlUnwind`, `RaiseException`, `SetUnhandledExceptionFilter` delivery; study in `binary-seh.md`) and the TEB TLS array (see above).
+6. (done, see above) x87 arguments. `_ftol2` / `_CIsin` family are not registered (not imported by the samples).
+7. Relocation/data-pointer roots for UPX-unpacked images: the unpacker drops relocations, so code reachable only through data (the fmod output-driver function table) is not translated; `FSOUND_Init`, `FSOUND_SetDriver` and driver enumeration after `FSOUND_SetOutput` trap with `GuestTrapException` (see binary-unpack.md).
 
 ## Tests
 

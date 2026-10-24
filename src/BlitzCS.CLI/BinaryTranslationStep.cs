@@ -1,4 +1,5 @@
 using BlitzCS.BinaryCompiler;
+using BlitzCS.BinaryCompiler.Runtime;
 using BlitzCS.Compiler;
 
 namespace BlitzCS.CLI;
@@ -6,38 +7,98 @@ namespace BlitzCS.CLI;
 /// <summary>Translates catalog 'binaryLibraries' (PE32 x86) into x64 artifacts next to the output. A no-op for programs without them.</summary>
 internal static class BinaryTranslationStep
 {
-    internal static void Run(ExternalCatalogResult catalog, string outputPath, TextWriter output) =>
-        Prepare(catalog, outputPath).Publish(output);
+    internal static void Run(ExternalCatalogResult catalog, string outputPath, TextWriter output, TextWriter? warnings = null) =>
+        Prepare(catalog, outputPath, warnings).Publish(output);
 
-    /// <summary>Translates (or loads from cache) and validates every library and binding without writing next to the output.</summary>
-    internal static PreparedBinaries Prepare(ExternalCatalogResult catalog, string outputPath)
+    /// <summary>
+    /// Translates (or loads from cache) and validates every library and binding without writing next to the output. With several libraries each gets a load
+    /// base from <see cref="ModuleBaseAllocator"/> (a single library keeps its preferred base) and the cache key includes it.
+    /// Unprovided imports are reported to <paramref name="warnings"/> (or fail the build for libraries with <c>"unboundImports": "error"</c>).
+    /// </summary>
+    internal static PreparedBinaries Prepare(ExternalCatalogResult catalog, string outputPath, TextWriter? warnings = null)
     {
-        var pending = new List<(string Library, string Target, byte[] Bytes, BinaryBuildResult Result)>();
+        var pending = new List<PendingBinary>();
         if (catalog.BinaryLibraries is not { Count: > 0 } libraries) return new(pending);
+        var specs = catalog.LibrarySpecs ?? [.. libraries.Select(path => new BinaryLibrarySpec(path))];
         var profile = catalog.BinaryProfile is null ? OptimizationProfile.Release
             : Enum.TryParse<OptimizationProfile>(catalog.BinaryProfile, ignoreCase: true, out var parsed) ? parsed
             : throw new ArgumentException($"Unknown binaryProfile '{catalog.BinaryProfile}'; expected Debug, Release or ReleasePgo.");
-        var options = new BinaryCompilerOptions(profile);
-        var cacheDirectory = Environment.GetEnvironmentVariable("BLITZCS_BINARY_CACHE")
-            ?? Path.Combine(Environment.GetEnvironmentVariable("XDG_CACHE_HOME") is { Length: > 0 } xdg ? xdg
-                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache"), "blitzcs", "binary");
+        var cacheDirectory = BinaryCache.Directory();
         var outputDirectory = Path.GetDirectoryName(outputPath)!;
-        foreach (var library in libraries)
+        foreach (var spec in specs)
+            if (!BinaryBuild.IsPe32X86(spec.Path))
+                throw new ArgumentException($"Binary library '{spec.Path}' is not a PE32 x86 image.");
+        var images = specs.Select(spec => PeReader.Read(File.ReadAllBytes(spec.EffectivePath))).ToArray();
+        var bases = specs.Count > 1 ? ModuleBaseAllocator.Allocate([.. specs.Select((spec, i) => (spec.FileName, images[i]))]) : null;
+        var artifacts = new TranslationArtifact[specs.Count];
+        for (var i = 0; i < specs.Count; i++)
         {
-            if (!BinaryBuild.IsPe32X86(library))
-                throw new ArgumentException($"Binary library '{library}' is not a PE32 x86 image.");
-            var result = BinaryBuild.Translate(library, options, cacheDirectory);
+            var spec = specs[i];
+            var library = spec.Path;
+            var options = new BinaryCompilerOptions(profile, LoadBase: bases is not null && bases[i].Base != images[i].ImageBase ? bases[i].Base : null);
+            var result = BinaryBuild.Translate(spec.EffectivePath, options, cacheDirectory, spec.Preprocessed is { } pre ? [pre.LineageToken] : null);
             var errors = result.Artifact.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
             if (errors.Length > 0)
                 throw new InvalidOperationException($"Binary library '{Path.GetFileName(library)}' contains unsupported constructs:{Environment.NewLine}"
                     + string.Join(Environment.NewLine, errors.Take(20).Select(d => $"  {d.Code} at RVA 0x{d.GuestRva ?? 0:X}: {d.Message}"))
                     + (errors.Length > 20 ? $"{Environment.NewLine}  ... {errors.Length - 20} more" : "")
                     + PackedHint(library, errors));
-            foreach (var binding in catalog.BinaryBindings?.Where(b => b.LibraryPath == library) ?? [])
+            foreach (var binding in catalog.BinaryBindings?.Where(b => b.LibraryPath == library && b.Intrinsic is null) ?? [])
                 CheckBinding(binding, result.Artifact);
-            pending.Add((library, Path.Combine(outputDirectory, Path.GetFileName(library) + ".bcx"), new ArtifactSerializer().Serialize(result.Artifact), result));
+            artifacts[i] = result.Artifact;
+            pending.Add(new(library, Path.Combine(outputDirectory, Path.GetFileName(library) + ".bcx"), new ArtifactSerializer().Serialize(result.Artifact), result, spec));
         }
+        CheckImports(specs, images, artifacts, catalog.BinaryBindings ?? [], warnings);
         return new(pending);
+    }
+
+    /// <summary>
+    /// Imports a library needs: sibling libraries must export the name and be callable (a declared or decorated cdecl/stdcall convention); the rest must
+    /// be provided by the Win32 environment. Anything else is unbound: reachable-ness is only knowable at run time, so by default it is a warning
+    /// naming dll!name and the call faults naming it; <c>"unboundImports": "error"</c> makes it a build error.
+    /// </summary>
+    private static void CheckImports(IReadOnlyList<BinaryLibrarySpec> specs, PeImage[] images, TranslationArtifact[] artifacts,
+        IReadOnlyList<BinaryBinding> bindings, TextWriter? warnings)
+    {
+        var byName = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < specs.Count; i++) byName[GuestModuleSet.NormalizeName(specs[i].FileName)] = i;
+        for (var i = 0; i < specs.Count; i++)
+        {
+            var spec = specs[i];
+            var win32 = spec.Win32 != false ? new BlitzCS.BinaryCompiler.Win32.Win32ImportResolver() : null;
+            try
+            {
+                var verdicts = win32?.Analyze(images[i]);
+                var missing = new List<string>();
+                foreach (var import in images[i].Imports)
+                {
+                    var label = $"{import.Dll}!{import.Name ?? "#" + import.Ordinal}";
+                    if (!byName.TryGetValue(GuestModuleSet.NormalizeName(import.Dll), out var target))
+                    {
+                        var implemented = verdicts?.Any(v => v.Dll == import.Dll && v.Name == import.Name && v.Ordinal == import.Ordinal
+                            && v.Status == BlitzCS.BinaryCompiler.Win32.Win32ImportStatus.Implemented) ?? false;
+                        if (!implemented) missing.Add(label);
+                        continue;
+                    }
+                    var export = images[target].Exports.FirstOrDefault(e => import.Name is not null ? e.Name == import.Name : e.Ordinal == import.Ordinal);
+                    if (export is null) { missing.Add(label + " (sibling " + specs[target].FileName + " has no such export)"); continue; }
+                    var translated = artifacts[target].Exports.FirstOrDefault(e => e.Ordinal == export.Ordinal);
+                    if (translated is null) { missing.Add(label + " (sibling export is not code)"); continue; }
+                    var targetSpec = specs[target];
+                    var declared = targetSpec.ExportConventions.ContainsKey(export.Name ?? "") || targetSpec.ExportConventions.ContainsKey("#" + export.Ordinal)
+                        || bindings.Any(b => b.LibraryPath == targetSpec.Path && b.Export == export.Name && b.Convention is GuestCallingConvention.Cdecl or GuestCallingConvention.Stdcall);
+                    if (translated.Convention is GuestCallingConvention.Fastcall or GuestCallingConvention.Thiscall)
+                        throw new ArgumentException($"Binary library '{spec.FileName}' imports {label} from {targetSpec.FileName}, a {translated.Convention} export; register conventions cannot be bridged between libraries.");
+                    if (!declared && translated.Convention == GuestCallingConvention.Unknown && !targetSpec.DefaultCdecl)
+                        throw new ArgumentException($"Binary library '{spec.FileName}' imports {label} from {targetSpec.FileName}, whose convention is undeclared: add defaultConvention \"cdecl\" or an exportConventions entry to the {targetSpec.FileName} library. Conventions are never assumed.");
+                }
+                if (missing.Count == 0) continue;
+                var text = $"Binary library '{spec.FileName}': {missing.Count} import(s) not provided: {string.Join(", ", missing.Take(30))}{(missing.Count > 30 ? ", ..." : "")}";
+                if (spec.UnboundImportsAreErrors) throw new InvalidOperationException(text + " (unboundImports is \"error\").");
+                warnings?.WriteLine("warning: " + text + "; calling one faults at run time naming dll!name.");
+            }
+            finally { win32?.Dispose(); }
+        }
     }
 
     /// <summary>Explains BC_ROOT_NOT_FILE_BACKED as a packed image when the structure supports it.</summary>
@@ -47,7 +108,7 @@ internal static class BinaryTranslationStep
         try
         {
             var summary = PackedImageAnalyzer.Analyze(File.ReadAllBytes(library)).Summary;
-            return summary.Length == 0 ? "" : $"{Environment.NewLine}  Note: {summary}. See docs/binary-packed-images.md.";
+            return summary.Length == 0 ? "" : $"{Environment.NewLine}  Note: {summary}. See docs/binary-packed-images.md. If this is a packed library, set \"unpack\": true on its binaryLibraries entry (docs/binary-unpack.md).";
         }
         catch (Exception e) when (e is IOException or PeFormatException or UnauthorizedAccessException) { return ""; }
     }
@@ -58,6 +119,7 @@ internal static class BinaryTranslationStep
         var export = artifact.Exports.FirstOrDefault(e => e.Name == binding.Export)
             ?? throw new ArgumentException($"External function {label}: the translation has no such export.");
         var effective = binding.Convention != GuestCallingConvention.Unknown ? binding.Convention : export.Convention;
+        if (effective == GuestCallingConvention.Unknown && binding.LibraryDefaultCdecl) effective = GuestCallingConvention.Cdecl;
         if (effective == GuestCallingConvention.Unknown)
             throw new ArgumentException($"External function {label}: the calling convention cannot be inferred from the export; set binary.convention to 'cdecl', 'stdcall', 'thiscall' or 'fastcall'.");
         if (export.Convention != GuestCallingConvention.Unknown && binding.Convention != GuestCallingConvention.Unknown && export.Convention != binding.Convention)
@@ -71,17 +133,32 @@ internal static class BinaryTranslationStep
     }
 }
 
-internal sealed class PreparedBinaries(List<(string Library, string Target, byte[] Bytes, BinaryBuildResult Result)> pending)
+internal sealed record PendingBinary(string Library, string Target, byte[] Bytes, BinaryBuildResult Result, BinaryLibrarySpec Spec);
+
+internal sealed class PreparedBinaries(List<PendingBinary> pending)
 {
     internal void Publish(TextWriter output)
     {
-        foreach (var (library, target, bytes, result) in pending)
+        foreach (var (library, target, bytes, result, spec) in pending)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             var temporary = target + ".tmp";
             File.WriteAllBytes(temporary, bytes);
             File.Move(temporary, target, overwrite: true);
-            output.WriteLine($"binary: {Path.GetFileName(library)} -> {Path.GetFileName(target)} ({(result.CacheHit ? "cache hit" : "translated")}, {result.Artifact.HostImage.Length} bytes, {result.Artifact.Diagnostics.Count} diagnostic(s))");
+            output.WriteLine($"binary: {Path.GetFileName(library)} -> {Path.GetFileName(target)} ({(result.CacheHit ? "cache hit" : "translated")}, {result.Artifact.HostImage.Length} bytes, {result.Artifact.Diagnostics.Count} diagnostic(s), base 0x{result.Artifact.GuestImageBase:X8})");
+            if (spec.Preprocessed is { } derived)
+            {
+                var targetDirectory = Path.GetDirectoryName(target)!;
+                var derivedTarget = Path.Combine(targetDirectory, Path.GetFileName(library) + TranslatedLibrary.DerivedExtension);
+                var lineageTarget = Path.Combine(targetDirectory, Path.GetFileName(library) + TranslatedLibrary.LineageExtension);
+                var lineageSource = Path.ChangeExtension(derived.DerivedPath, ".lineage.json");
+                foreach (var protectedPath in new[] { derivedTarget, lineageTarget })
+                    if (string.Equals(Path.GetFullPath(protectedPath), Path.GetFullPath(library), StringComparison.Ordinal))
+                        throw new ArgumentException("Derived output would overwrite an input library.");
+                File.Copy(derived.DerivedPath, derivedTarget, overwrite: true);
+                File.Copy(lineageSource, lineageTarget, overwrite: true);
+                output.WriteLine($"binary: {Path.GetFileName(library)} preprocessed ({derived.LineageToken}) -> {Path.GetFileName(derivedTarget)}, {Path.GetFileName(lineageTarget)}");
+            }
         }
     }
 }

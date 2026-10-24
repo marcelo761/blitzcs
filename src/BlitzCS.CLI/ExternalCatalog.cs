@@ -21,27 +21,22 @@ internal static class ExternalCatalog
                 item.GetString() ?? throw new ArgumentException("External catalog 'nativeLibraries' entries cannot be null."),
                 Path.GetDirectoryName(catalogPath)!)).ToArray()
             : [];
-        var binaryLibraries = root.TryGetProperty("binaryLibraries", out var binaries) && binaries.ValueKind == JsonValueKind.Array
-            ? binaries.EnumerateArray().Select(item => Path.GetFullPath(
-                item.GetString() ?? throw new ArgumentException("External catalog 'binaryLibraries' entries cannot be null."),
-                Path.GetDirectoryName(catalogPath)!)).ToArray()
-            : [];
         var binaryProfile = root.TryGetProperty("binaryProfile", out var profile) && profile.ValueKind == JsonValueKind.String
             ? profile.GetString() : null;
         string Read(JsonElement item, string key) => item.GetProperty(key).GetString()
             ?? throw new ArgumentException($"External catalog '{key}' cannot be null.");
         var catalogDirectory = Path.GetDirectoryName(catalogPath)!;
         var binaryItems = items.Where(item => item.TryGetProperty("binary", out var binary) && binary.ValueKind != JsonValueKind.Null).ToArray();
-        var binaryBindings = binaryItems.Select(item => ReadBinding(item, catalogDirectory)).ToArray();
+        var specs = ReadLibrarySpecs(root, binaryItems, catalogDirectory);
+        var binaryLibraries = specs.Select(spec => spec.Path).ToArray();
+        var binaryBindings = binaryItems.Select(item => ReadBinding(item, catalogDirectory, specs)).ToArray();
         DirectoryStaging? staging = null;
         string? bindingAssembly = null;
         if (binaryBindings.Length > 0)
         {
             staging = new DirectoryStaging();
-            try { bindingAssembly = BinaryBindingGenerator.Generate(binaryBindings, staging.Path); }
+            try { bindingAssembly = BinaryBindingGenerator.Generate(binaryBindings, specs, staging.Path); }
             catch { staging.Dispose(); throw; }
-            var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-            binaryLibraries = binaryLibraries.Concat(binaryBindings.Select(b => b.LibraryPath)).Distinct(comparer).ToArray();
         }
         var boundItems = items.Where(item => item.TryGetProperty("method", out var method) && method.ValueKind != JsonValueKind.Null
             || binaryItems.Contains(item)).ToArray();
@@ -100,10 +95,53 @@ internal static class ExternalCatalog
             signatures.Add(signature);
             if (function is not null) functions.Add(function);
         }
-        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging);
+        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs);
         }
         catch { staging?.Dispose(); throw; }
         finally { context.Dispose(); }
+    }
+
+
+    private static bool PathEquals(string a, string b) =>
+        string.Equals(a, b, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    /// <summary>
+    /// Merges the <c>binaryLibraries</c> entries with the libraries named by function bindings (implicit entries with defaults), rejects duplicate files
+    /// and duplicate output file names, and runs the opt-in preprocessors (<c>unpack</c>).
+    /// </summary>
+    private static List<BinaryLibrarySpec> ReadLibrarySpecs(JsonElement root, JsonElement[] binaryItems, string catalogDirectory)
+    {
+        var specs = new List<BinaryLibrarySpec>();
+        if (root.TryGetProperty("binaryLibraries", out var entries) && entries.ValueKind == JsonValueKind.Array)
+            foreach (var entry in entries.EnumerateArray())
+            {
+                var spec = BinaryLibrarySpec.Parse(entry, catalogDirectory);
+                var existing = specs.FindIndex(candidate => PathEquals(candidate.Path, spec.Path));
+                if (existing >= 0)
+                {
+                    if (specs[existing].Explicit || spec.Explicit)
+                        throw new ArgumentException($"External catalog lists binary library '{spec.FileName}' more than once; its options would be ambiguous.");
+                    continue;
+                }
+                specs.Add(spec);
+            }
+        else if (root.TryGetProperty("binaryLibraries", out var other) && other.ValueKind != JsonValueKind.Null)
+            throw new ArgumentException("External catalog 'binaryLibraries' must be an array.");
+        foreach (var item in binaryItems)
+        {
+            var binary = item.GetProperty("binary");
+            if (binary.ValueKind != JsonValueKind.Object || !binary.TryGetProperty("library", out var name) || name.ValueKind != JsonValueKind.String) continue;
+            var path = Path.GetFullPath(name.GetString()!, catalogDirectory);
+            if (!specs.Any(candidate => PathEquals(candidate.Path, path))) specs.Add(new BinaryLibrarySpec(path));
+        }
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var spec in specs)
+            if (names.TryGetValue(spec.FileName, out var other) && !PathEquals(other, spec.Path))
+                throw new ArgumentException($"Binary libraries '{other}' and '{spec.Path}' have the same file name; modules are published side by side and linked by name.");
+            else names[spec.FileName] = spec.Path;
+        var work = BinaryCache.Directory();
+        for (var i = 0; i < specs.Count; i++) specs[i] = specs[i].Preprocess(work);
+        return specs;
     }
 
     private static int IndexOf(IReadOnlyList<string> list, string value)
@@ -120,7 +158,7 @@ internal static class ExternalCatalog
     };
 
     /// <summary>Validates one catalog 'binary' entry against the PE export table (no translation needed).</summary>
-    private static BinaryBinding ReadBinding(JsonElement item, string catalogDirectory)
+    private static BinaryBinding ReadBinding(JsonElement item, string catalogDirectory, IReadOnlyList<BinaryLibrarySpec> specs)
     {
         var name = item.GetProperty("name").GetString() ?? throw new ArgumentException("External catalog 'name' cannot be null.");
         if (name.Length == 0 || !char.IsAsciiLetter(name[0]) || name.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_'))
@@ -133,6 +171,21 @@ internal static class ExternalCatalog
         string Field(string key) => binary.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
             ? value.GetString()! : throw new ArgumentException($"External function '{name}': binary.{key} is required.");
         var libraryName = Field("library");
+        var intrinsic = binary.TryGetProperty("intrinsic", out var intrinsicElement) && intrinsicElement.ValueKind == JsonValueKind.String ? intrinsicElement.GetString() : null;
+        if (intrinsic is not null)
+        {
+            if (binary.TryGetProperty("export", out _)) throw new ArgumentException($"External function '{name}': binary.intrinsic cannot be combined with binary.export.");
+            var shapes = new Dictionary<string, (int Parameters, bool Returns)> { ["alloc"] = (1, true), ["free"] = (1, false), ["peek8"] = (1, true), ["peek32"] = (1, true), ["poke8"] = (2, false), ["poke32"] = (2, false) };
+            if (!shapes.TryGetValue(intrinsic, out var shape))
+                throw new ArgumentException($"External function '{name}': unknown binary.intrinsic '{intrinsic}'; expected {string.Join(", ", shapes.Keys)}.");
+            var declared = item.GetProperty("parameters").EnumerateArray().Select(p => ParseType(p.GetString(), false)).ToArray();
+            var returned = item.TryGetProperty("returnType", out var r) ? ParseType(r.GetString(), true) : ExternalValueType.Void;
+            if (declared.Length != shape.Parameters || declared.Any(t => t != ExternalValueType.Integer) || returned != (shape.Returns ? ExternalValueType.Integer : ExternalValueType.Void))
+                throw new ArgumentException($"External function '{name}': intrinsic '{intrinsic}' takes {shape.Parameters} Integer parameter(s) and returns {(shape.Returns ? "Integer" : "Void")}.");
+            var libraryPath = Path.GetFullPath(libraryName, catalogDirectory);
+            if (!File.Exists(libraryPath)) throw new FileNotFoundException($"Binary library '{libraryName}' for '{name}' does not exist.", libraryPath);
+            return new BinaryBinding(name, libraryPath, "", GuestCallingConvention.Unknown, declared, returned) { Intrinsic = intrinsic };
+        }
         var requested = Field("export");
         var parameters = item.GetProperty("parameters").EnumerateArray().Select(p => ParseType(p.GetString(), false)).ToArray();
         if (!item.TryGetProperty("returnType", out var returnElement))
@@ -153,7 +206,8 @@ internal static class ExternalCatalog
         var library = Path.GetFullPath(libraryName, catalogDirectory);
         if (!File.Exists(library)) throw new FileNotFoundException($"Binary library '{libraryName}' for '{name}' does not exist.", library);
         if (!BinaryBuild.IsPe32X86(library)) throw new ArgumentException($"Binary library '{libraryName}' is not a PE32 x86 image.");
-        var image = PeReader.Read(File.ReadAllBytes(library));
+        var spec = specs.First(candidate => PathEquals(candidate.Path, library));
+        var image = PeReader.Read(File.ReadAllBytes(spec.EffectivePath));
         var exact = image.Exports.Where(e => e.Name == requested).ToArray();
         var candidates = exact.Length > 0 ? exact : image.Exports.Where(e => e.Name is not null
             && (e.Name == "_" + requested || e.Name.StartsWith("_" + requested + "@", StringComparison.Ordinal) || e.Name.StartsWith(requested + "@", StringComparison.Ordinal)
@@ -164,7 +218,16 @@ internal static class ExternalCatalog
             throw new ArgumentException($"Binary library '{libraryName}' export '{requested}' is ambiguous ({string.Join(", ", candidates.Select(c => c.Name + "#" + c.Ordinal))}); name the exact export.");
         if (candidates[0].ForwarderTarget is { } forwarder)
             throw new ArgumentException($"Binary library '{libraryName}' export '{requested}' is a forwarder to '{forwarder}', which is unsupported.");
-        return new BinaryBinding(name, library, candidates[0].Name!, convention, parameters, returnType);
+        var exportName = candidates[0].Name!;
+        if ((spec.ExportConventions.TryGetValue(exportName, out var mapped) || spec.ExportConventions.TryGetValue("#" + candidates[0].Ordinal, out mapped)))
+        {
+            if (convention != GuestCallingConvention.Unknown && convention != mapped.Convention)
+                throw new ArgumentException($"External function '{name}' ({libraryName}!{exportName}): binary.convention says {convention} but the library's exportConventions says {mapped.Convention}; declare it once.");
+            if (mapped.Convention == GuestCallingConvention.Stdcall && mapped.ArgCount != parameters.Length)
+                throw new ArgumentException($"External function '{name}' ({libraryName}!{exportName}): exportConventions says stdcall:{mapped.ArgCount} but the declaration has {parameters.Length} parameter(s).");
+            convention = mapped.Convention;
+        }
+        return new BinaryBinding(name, library, exportName, convention, parameters, returnType, spec.DefaultCdecl);
     }
 
     private static object ReadDefault(JsonElement value, ExternalValueType type) => type switch
@@ -188,7 +251,8 @@ internal sealed record ExternalCatalogResult(
     IReadOnlyList<string>? BinaryLibraries = null,
     string? BinaryProfile = null,
     IReadOnlyList<BinaryBinding>? BinaryBindings = null,
-    IDisposable? Staging = null) : IDisposable
+    IDisposable? Staging = null,
+    IReadOnlyList<BinaryLibrarySpec>? LibrarySpecs = null) : IDisposable
 {
     public void Dispose() => Staging?.Dispose();
 }

@@ -157,11 +157,18 @@ public sealed unsafe partial class GuestModule : IDisposable
         // 1. Bind every import first: an unbound import is a load-time failure, with no stubs and no fake success.
         var bound = new GuestImport[artifact.Imports.Count];
         var missing = new List<string>();
+        var dataImports = new GuestDataImport?[bound.Length];
         for (var i = 0; i < bound.Length; i++)
         {
             var imp = artifact.Imports[i];
-            var resolved = resolver.Resolve(imp.Dll, imp.Name, imp.Ordinal);
             var label = $"{imp.Dll}!{imp.Name ?? "#" + imp.Ordinal}";
+            if (resolver is IGuestDataImportResolver dataResolver && dataResolver.ResolveData(imp.Dll, imp.Name, imp.Ordinal) is { } data)
+            {
+                dataImports[i] = data; // the IAT slot gets the variable's address below; calling through it must still fail loudly
+                bound[i] = GuestImport.Create(_ => throw new GuestImportException($"The guest called data import {label} as a function."), 0);
+                continue;
+            }
+            var resolved = resolver.Resolve(imp.Dll, imp.Name, imp.Ordinal);
             if (resolved is not null) bound[i] = resolved;
             else if (options.AllowUnboundImports)
                 bound[i] = GuestImport.Create(_ => throw new GuestImportException($"The guest called unbound import {label}, which no host service provides."), 0);
@@ -198,8 +205,15 @@ public sealed unsafe partial class GuestModule : IDisposable
         InitializeTls(image, mapped);
         for (var i = 0; i < bound.Length; i++)
             *(uint*)(guestMap + (nint)artifact.Imports[i].IatRva) = artifact.GuestImageBase + artifact.ImportStubBaseRva + 16u * (uint)i;
-        ProtectGuest(image, (int)(size / ps));
+        for (var i = 0; i < bound.Length; i++)
+            if (dataImports[i] is { } variable)
+            {
+                var address = variable.Materialize(Memory);
+                // written before ProtectGuest makes the IAT read-only
+                *(uint*)(guestMap + (nint)artifact.Imports[i].IatRva) = address;
+            }
 
+        ProtectGuest(image, (int)(size / ps));
         // 3. Host image: copy while RW, then flip the code part to RX.
         var hostLen = ((nuint)artifact.HostImage.Length + ps - 1) / ps * ps;
         hostMapLength = hostLen;

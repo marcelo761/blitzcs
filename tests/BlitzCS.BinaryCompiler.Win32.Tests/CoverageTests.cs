@@ -16,13 +16,14 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         Assert.Equal(apis.Count, apis.Select(a => a.Dll.ToLowerInvariant() + "!" + a.Name).Distinct().Count());
         foreach (var a in apis)
         {
-            Assert.InRange(a.ArgCount, 0, 8);
+            Assert.InRange(a.ArgCount, 0, 9);
             Assert.False(string.IsNullOrEmpty(a.Service));
             if (a.Dll.Equals("MSVCRT.dll", StringComparison.OrdinalIgnoreCase)) Assert.Equal(Win32Convention.Cdecl, a.Convention);
             else Assert.Equal(Win32Convention.Stdcall, a.Convention);
         }
-        Assert.Equal(["Kernel32.File", "Kernel32.Heap", "Kernel32.Memory", "Kernel32.Process", "Kernel32.String", "Kernel32.Sync", "Kernel32.Tls", "Msvcrt", "Winsock"],
-            apis.Select(a => a.Service).Distinct().Order().ToArray());
+        var services = apis.Select(a => a.Service).Distinct().ToHashSet();
+        foreach (var expected in new[] { "Kernel32.File", "Kernel32.Heap", "Kernel32.Memory", "Kernel32.Process", "Kernel32.String", "Kernel32.Sync", "Kernel32.Tls", "Msvcrt", "Winsock", "Advapi32.Registry", "Ole32.Com", "User32.Basic" })
+            Assert.Contains(expected, services);
     }
 
     [Fact]
@@ -33,7 +34,7 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         var missing = cov.Missing.Select(m => m.Dll + "!" + m.Name).ToHashSet();
         Assert.Contains("kernel32.dll!RtlUnwind", missing);
         Assert.Contains("kernel32.dll!RaiseException", missing);
-        Assert.Contains("ole32.dll!CoCreateInstance", missing);
+        Assert.DoesNotContain("ole32.dll!CoCreateInstance", missing);
         Assert.DoesNotContain("wsock32.dll!#11", missing);
         Assert.DoesNotContain(missing, m => m.StartsWith("kernel32.dll!Heap"));
     }
@@ -46,8 +47,9 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         Assert.NotNull(r.Resolve("KERNEL32", "GetVersion", null)); // dll name rules: case-insensitive, extension optional
         Assert.Null(r.Resolve("kernel32.dll", "heapalloc", null)); // function names are case-sensitive
         Assert.Null(r.Resolve("kernel32.dll", "RtlUnwind", null));
-        Assert.Null(r.Resolve("user32.dll", "GetDesktopWindow", null));
-        Assert.Null(r.Resolve("msvcrt.dll", "_ftol", null));
+        Assert.NotNull(r.Resolve("user32.dll", "GetDesktopWindow", null));
+        Assert.Null(r.Resolve("user32.dll", "ShowWindow", null));
+        Assert.Null(r.Resolve("msvcrt.dll", "_not_a_real_crt_function", null));
         Assert.Null(r.Resolve("kernel32.dll", null, 7));
     }
 
@@ -90,8 +92,8 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         Assert.Equal(["KERNEL32.dll!RaiseException", "KERNEL32.dll!RtlUnwind"], Missing("vorbisFile.dll"));
         var eax = Missing("eax.dll");
         Assert.Contains("KERNEL32.dll!RtlUnwind", eax);
-        Assert.Contains("USER32.dll!GetDesktopWindow", eax);
-        Assert.Contains("ole32.dll!CoCreateInstance", eax);
+        Assert.Contains("KERNEL32.dll!RaiseException", eax);
+        Assert.Equal(["KERNEL32.dll!RaiseException", "KERNEL32.dll!RtlUnwind"], eax);
         Assert.All(eax, m => Assert.DoesNotContain("Heap", m));
         // inter-module imports are reported as missing here and must come from the caller's own resolver
         Assert.Equal(11, r.Analyze(Load("vorbis.dll")).Count(v => v.Dll == "ogg.dll"));

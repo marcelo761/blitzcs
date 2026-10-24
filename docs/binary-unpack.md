@@ -82,9 +82,9 @@ Runtime hook added to `GuestModule`: `BoundImports` and `GetImportStubAddress(dl
 * The stub resolved 152 distinct `dll!name` through LoadLibraryA/GetProcAddress and called nothing else (only LoadLibraryA and GetProcAddress themselves); 164 IAT slots rebuilt in 19 descriptors
   (ADVAPI32, MSACM32, MSVCRT, ole32, USER32, WINMM, WSOCK32 ordinals, KERNEL32).
 * Derived image: 52 code pages, 94 data pages, 13 sections; translates with 0 errors and 0 warnings (2 Info: jump tables, fixed base); 232 exports translated.
-* Win32 component coverage of the 164 imports: 46 implemented, 118 missing (winmm 31, msvcrt 33, wsock32 14, user32 10, kernel32 11, msacm32 8, advapi32 6, ole32 5).
+* Win32 component coverage of the 164 imports (initially 46 implemented, 118 missing; now 130 implemented incl. registry/COM/user32 subsets, 34 missing: msacm32 8, user32 window APIs, mci 2, sockets 11, DeviceIoControl/OpenFile/VirtualLock/VirtualProtect, sscanf). DllMain returns TRUE; FSOUND_Init is blocked by code reachable only through data pointers (relocations dropped). Previously (winmm 31, msvcrt 33, wsock32 14, user32 10, kernel32 11, msacm32 8, advapi32 6, ole32 5).
 * `_FSOUND_GetVersion@0` (stdcall, no arguments, float in ST0) loaded with `RunEntryPoint=false`, `AllowUnboundImports=true` returned **3.75** (observed, not assumed).
-* `DllMain(DLL_PROCESS_ATTACH)` (the OEP) does not run: first blocker `msvcrt.dll!_initterm` (unbound, fails loudly naming the import); more CRT, user32, winmm, ole32 and Win32 services follow.
+* `DllMain(DLL_PROCESS_ATTACH)` (the OEP) now runs with `Win32ImportResolver` and returns TRUE (`_initterm` was the first blocker). State-only exports then answer (GetError 0, GetNumDrivers 0 on a host without devices, SetOutput/GetOutput round trip); `FSOUND_Init`, `FSOUND_SetDriver` and driver counts after `SetOutput` trap in code only reachable through the output-driver function table.
   Exports that need device I/O will fault naming their missing import in the same way.
 
 ## Limits
@@ -92,3 +92,13 @@ Runtime hook added to `GuestModule`: `BoundImports` and `GetImportStubAddress(dl
 IA-32 integer subset only; no FPU/SSE in stubs. Multi-layer packers are run until the first generated-code entry; layered results need a second `TryUnpack` on the derived file
 (not automatic). Stubs that rely on exceptions, timing or debugger checks are refused. Imports that are never stored in the image (kept in registers/stack) and API thunks
 generated per call cannot be rebuilt. Only the user's own libraries should be unpacked; the stub is interpreted locally and nothing is forwarded to the host.
+
+## Uso pela CLI (`"unpack": true`)
+
+No catálogo: `"binaryLibraries": [{"path": "packed.dll", "unpack": true}]`. Só então a CLI carrega
+`BlitzCS.BinaryCompiler.Unpack.dll` (ao lado do compilador) pelo nome, via `IBinaryPreprocessor` (id `unpack`), sem
+referência em tempo de compilação. A imagem derivada fica no cache (chave de linhagem), é traduzida (a chave de cache
+inclui a linhagem) e os bindings são validados contra ela. A saída recebe a DLL original (bytes intactos), `<dll>.bcx`,
+`<dll>.derived` (PE derivado) e `<dll>.lineage.json`; o runtime confere a linhagem contra a DLL original antes de carregar.
+Se o unpacker recusar, o build falha com o código dele ("Unpacking failed: UNPACK_...: ..."). O erro
+`BC_ROOT_NOT_FILE_BACKED` de uma biblioteca empacotada sugere `"unpack": true`.

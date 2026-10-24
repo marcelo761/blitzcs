@@ -53,9 +53,9 @@ public sealed class CrtService : Win32Service
     private static int ToLower(int ch) => ch is >= 'A' and <= 'Z' ? ch + 32 : ch;
     private static int ToUpper(int ch) => ch is >= 'a' and <= 'z' ? ch - 32 : ch;
 
-    private static uint Format(Win32Call c, uint format, int firstVarArg, out byte[] output)
+    internal static uint Format(IWin32Memory mem, Func<int, uint> va, uint format, int firstVarArg, out byte[] output)
     {
-        var fmt = c.Mem.ReadCString(format);
+        var fmt = mem.ReadCString(format);
         var sb = new List<byte>();
         var arg = firstVarArg;
         for (var i = 0; i < fmt.Length; i++)
@@ -76,13 +76,13 @@ public sealed class CrtService : Win32Service
                 break;
             }
             var width = 0;
-            if (i < fmt.Length && fmt[i] == '*') { var w = (int)c.VarArg(arg++); if (w < 0) { left = true; w = -w; } width = w; i++; }
+            if (i < fmt.Length && fmt[i] == '*') { var w = (int)va(arg++); if (w < 0) { left = true; w = -w; } width = w; i++; }
             else while (i < fmt.Length && fmt[i] is >= (byte)'0' and <= (byte)'9') width = width * 10 + fmt[i++] - '0';
             var precision = -1;
             if (i < fmt.Length && fmt[i] == '.')
             {
                 i++; precision = 0;
-                if (i < fmt.Length && fmt[i] == '*') { precision = (int)c.VarArg(arg++); i++; }
+                if (i < fmt.Length && fmt[i] == '*') { precision = (int)va(arg++); i++; }
                 else while (i < fmt.Length && fmt[i] is >= (byte)'0' and <= (byte)'9') precision = precision * 10 + fmt[i++] - '0';
             }
             var size = 4;
@@ -96,17 +96,17 @@ public sealed class CrtService : Win32Service
             switch (conv)
             {
                 case '%': body = "%"; break;
-                case 'c': body = ((char)(byte)c.VarArg(arg++)).ToString(); break;
+                case 'c': body = ((char)(byte)va(arg++)).ToString(); break;
                 case 's':
                 {
-                    var p = c.VarArg(arg++);
-                    var bytes = p == 0 ? "(null)"u8.ToArray() : c.Mem.ReadCString(p);
+                    var p = va(arg++);
+                    var bytes = p == 0 ? "(null)"u8.ToArray() : mem.ReadCString(p);
                     if (precision >= 0 && bytes.Length > precision) bytes = bytes[..precision];
                     body = Encoding.Latin1.GetString(bytes); break;
                 }
                 case 'd': case 'i':
                 {
-                    long v = size == 8 ? (long)(c.VarArg(arg++) | (ulong)c.VarArg(arg++) << 32) : size == 2 ? (short)c.VarArg(arg++) : (int)c.VarArg(arg++);
+                    long v = size == 8 ? (long)(va(arg++) | (ulong)va(arg++) << 32) : size == 2 ? (short)va(arg++) : (int)va(arg++);
                     var digits = Math.Abs((decimal)v).ToString(CultureInfo.InvariantCulture);
                     if (precision >= 0) digits = digits.PadLeft(precision, '0');
                     if (precision == 0 && v == 0) digits = "";
@@ -114,7 +114,7 @@ public sealed class CrtService : Win32Service
                 }
                 case 'u': case 'x': case 'X': case 'o': case 'p':
                 {
-                    ulong v = size == 8 ? c.VarArg(arg++) | (ulong)c.VarArg(arg++) << 32 : size == 2 ? (ushort)c.VarArg(arg++) : c.VarArg(arg++);
+                    ulong v = size == 8 ? va(arg++) | (ulong)va(arg++) << 32 : size == 2 ? (ushort)va(arg++) : va(arg++);
                     if (conv == 'p') { precision = 8; conv = 'X'; alt = false; }
                     var digits = conv switch { 'u' => v.ToString(CultureInfo.InvariantCulture), 'x' => v.ToString("x"), 'X' => v.ToString("X"), _ => Convert.ToString((long)v, 8) };
                     if (precision >= 0) digits = digits.PadLeft(precision, '0');
@@ -124,7 +124,7 @@ public sealed class CrtService : Win32Service
                 }
                 case 'f': case 'F':
                 {
-                    var lo = c.VarArg(arg++); var hi = c.VarArg(arg++);
+                    var lo = va(arg++); var hi = va(arg++);
                     var v = BitConverter.UInt64BitsToDouble(lo | (ulong)hi << 32);
                     if (!double.IsFinite(v)) throw new Win32UsageException("sprintf: %f of NaN/Infinity (the CRT prints 1.#INF00 style text) is not supported.");
                     {
@@ -154,6 +154,8 @@ public sealed class CrtService : Win32Service
         output = [.. sb];
         return (uint)output.Length;
     }
+
+    private static uint Format(Win32Call c, uint format, int firstVarArg, out byte[] output) => Format(c.Mem, c.VarArgs(), format, firstVarArg, out output);
 
     protected override void Define()
     {

@@ -15,6 +15,9 @@ public readonly struct GuestCall
     public GuestMemory Memory { get; }
     public uint Esp { get; }
     public uint Arg(int index) => Memory.ReadUInt32(Esp + 4 + 4u * (uint)index);
+    /// <summary>Calls back into the guest module that is running this import (see <see cref="GuestModule.CallAddress"/>).</summary>
+    public uint CallGuest(uint guestAddress, params ReadOnlySpan<uint> args) =>
+        (GuestModule.Current ?? throw new InvalidOperationException("CallGuest may only be used inside a guest import handler.")).CallAddress(guestAddress, args);
     public float ArgSingle(int index) => BitConverter.UInt32BitsToSingle(Arg(index));
 
     /// <summary>Also returns <paramref name="value"/> in EDX (the high half of a 64-bit result; EAX is the handler's return value). Only valid inside the handler.</summary>
@@ -22,9 +25,34 @@ public readonly struct GuestCall
 
     /// <summary>Also returns an x87 value in ST0, as its 10-byte extended-precision image (what FSTP m80 stores). Pushed onto the guest's x87 stack on return, so the caller sees exactly what the real callee would leave. Only valid inside the handler.</summary>
     public void SetReturnSt0(ReadOnlySpan<byte> extended80) => GuestModule.StageImportSt0(extended80);
+
+    /// <summary>Pops the guest's x87 ST0 (the argument of x87-convention imports such as _ftol) into its 10-byte extended image. False when the x87 stack is empty. Call at most once per stack slot, only inside the handler.</summary>
+    public bool TryPopSt0(Span<byte> extended80) => GuestX87.TryPop(extended80);
+
+    /// <summary>Pops ST0 and converts it to double (round to nearest even). Throws <see cref="InvalidOperationException"/> when the x87 stack is empty.</summary>
+    public double PopSt0Double()
+    {
+        Span<byte> image = stackalloc byte[10];
+        return GuestX87.TryPop(image) ? GuestX87.ToDouble(image) : throw new InvalidOperationException("The guest called an x87-argument import with an empty x87 stack.");
+    }
+
+    /// <summary>Returns <paramref name="value"/> in ST0.</summary>
+    public void SetReturnSt0(double value) => SetReturnSt0(GuestX87.FromDouble(value));
 }
 
 public delegate uint GuestImportHandler(GuestCall call);
+
+/// <summary>
+/// A DATA import (an exported variable such as msvcrt's <c>__mb_cur_max</c> or <c>_pctype</c>): the IAT slot must hold the address of the variable, not of a callable stub.
+/// <see cref="Materialize"/> runs once the guest memory exists and returns the guest address of the variable (typically from <see cref="GuestMemory.Allocate"/>, which the module owns).
+/// </summary>
+public sealed record GuestDataImport(Func<GuestMemory, uint> Materialize);
+
+/// <summary>Optional extension of <see cref="IGuestImportResolver"/>: names that are variables, not functions. Asked before <see cref="IGuestImportResolver.Resolve"/>; a data import is never also bound as a function.</summary>
+public interface IGuestDataImportResolver
+{
+    GuestDataImport? ResolveData(string dll, string? name, ushort? ordinal);
+}
 
 /// <summary>Float/pointer value helpers (guest values travel as 32-bit words).</summary>
 public static class GuestValue

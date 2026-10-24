@@ -42,7 +42,7 @@ public static class CliApplication
             using var catalog = args.Length == 6
                 ? ExternalCatalog.Load(args[5])
                 : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
-            var binaries = BinaryTranslationStep.Prepare(catalog, outputPath);
+            var binaries = BinaryTranslationStep.Prepare(catalog, outputPath, error);
             var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions, out var sourceInputs);
             DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram",
                 referencePaths: catalog.Functions.ReferencePaths, nativeLibraryPaths: catalog.NativeLibraries,

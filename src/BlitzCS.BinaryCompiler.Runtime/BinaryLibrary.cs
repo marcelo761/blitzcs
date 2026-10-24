@@ -28,22 +28,27 @@ public readonly struct BinaryArgument
 }
 
 /// <summary>
-/// Process-wide handle to one translated library (single <see cref="GuestModule"/> per file per process).
-/// The module is opened lazily and thread-safely on the first call, and disposed at process exit or
-/// when the owning assembly load context unloads. Generated BlitzCS bindings use this type; it contains no library-specific code.
+/// Process-wide handle to one translated library. All libraries registered by the same owner assembly (one generated binding assembly) form a
+/// <see cref="GuestModuleSet"/>: sibling imports are linked by the set, each module gets its own host-environment resolver (see
+/// <see cref="IBinaryHostEnvironment"/>), and a module is loaded lazily and thread-safely on the first call together with the siblings it imports.
+/// The set is disposed at process exit. Generated BlitzCS bindings use this type; it contains no library-specific code.
 /// </summary>
 public sealed class BinaryLibrary
 {
     private static readonly ConcurrentDictionary<string, BinaryLibrary> Libraries = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, LibraryGroup> Groups = new(StringComparer.Ordinal);
     private static readonly Encoding Windows1252 = CreateEncoding();
-    private readonly object gate = new();
-    private GuestModule? module;
-    private bool disposed;
+    private readonly LibraryGroup group;
+    private volatile GuestModule? module;
 
-    private BinaryLibrary(string path) { Path = path; }
+    private BinaryLibrary(string path, LibraryGroup group, BinaryLibraryOptions options)
+    {
+        Path = path; this.group = group; Options = options;
+    }
 
     public string Path { get; }
     public string Name => System.IO.Path.GetFileName(Path);
+    internal BinaryLibraryOptions Options { get; }
 
     static BinaryLibrary()
     {
@@ -56,38 +61,166 @@ public sealed class BinaryLibrary
         return Encoding.GetEncoding(1252, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
     }
 
-    /// <summary>Returns the shared library handle for <paramref name="fileName"/> beside <paramref name="owner"/>.</summary>
-    public static BinaryLibrary For(Assembly owner, string fileName)
+    /// <summary>Returns the shared library handle for <paramref name="fileName"/> beside <paramref name="owner"/> (no host environment: imports can only come from siblings).</summary>
+    public static BinaryLibrary For(Assembly owner, string fileName) => For(owner, fileName, null);
+
+    /// <summary>Returns the shared library handle for <paramref name="fileName"/> beside <paramref name="owner"/>; the first registration of a file fixes its options.</summary>
+    public static BinaryLibrary For(Assembly owner, string fileName, BinaryLibraryOptions? options)
     {
         ArgumentNullException.ThrowIfNull(owner);
         var directory = System.IO.Path.GetDirectoryName(owner.Location) ?? AppContext.BaseDirectory;
         var full = System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, fileName));
-        return Libraries.GetOrAdd(full, static path => new BinaryLibrary(path));
+        var group = Groups.GetOrAdd(directory, static _ => new LibraryGroup());
+        return Libraries.GetOrAdd(full, path =>
+        {
+            var library = new BinaryLibrary(path, group, options ?? new BinaryLibraryOptions());
+            group.Register(library);
+            return library;
+        });
     }
 
     public BinaryExport Export(string name, GuestCallingConvention convention, int argumentCount) => new(this, name, convention, argumentCount);
 
-    internal GuestModule OpenModule()
+    internal GuestModule OpenModule() => module ?? group.Open(this);
+
+    internal void SetModule(GuestModule? loaded) => module = loaded;
+
+    // ---- checked guest memory for BASIC (catalog "intrinsic" functions): pointers/structs for exports that take them ----
+
+    private readonly object memoryGate = new();
+    private readonly SortedDictionary<uint, GuestBuffer> allocations = [];
+    private const int MaxAllocation = 64 * 1024 * 1024;
+
+    /// <summary>Allocates a zero-filled guest block that stays valid until <see cref="Free"/>; returns its guest address (an Integer for BASIC).</summary>
+    public int Alloc(int size)
     {
-        lock (gate)
+        if (size is < 1 or > MaxAllocation) throw new BinaryLibraryException($"Binary library '{Name}': allocation size {size} is outside 1..{MaxAllocation}.");
+        try
         {
-            ObjectDisposedException.ThrowIf(disposed, this);
-            return module ??= TranslatedLibrary.Open(Path, new DictionaryGuestImportResolver());
+            lock (memoryGate)
+            {
+                var buffer = OpenModule().Memory.Allocate(size);
+                buffer.Write(0, new byte[size]);
+                allocations[buffer.Address] = buffer;
+                return unchecked((int)buffer.Address);
+            }
+        }
+        catch (Exception error) when (error is GuestException or ObjectDisposedException)
+        {
+            throw new BinaryLibraryException($"Binary library '{Name}' allocation failed: {error.Message}", error);
         }
     }
+
+    public void Free(int address)
+    {
+        lock (memoryGate)
+        {
+            if (!allocations.Remove(unchecked((uint)address), out var buffer))
+                throw new BinaryLibraryException($"Binary library '{Name}': 0x{address:X8} is not a live block returned by Alloc.");
+            buffer.Dispose();
+        }
+    }
+
+    private (GuestBuffer Buffer, int Offset) Locate(int address, int length)
+    {
+        var a = unchecked((uint)address);
+        foreach (var (start, buffer) in allocations)
+            if (a >= start && (ulong)a + (ulong)length <= (ulong)start + (ulong)buffer.Length) return (buffer, (int)(a - start));
+        throw new BinaryLibraryException($"Binary library '{Name}': {length} byte(s) at 0x{a:X8} are outside every live Alloc block.");
+    }
+
+    /// <summary>Reads guest memory the library returned a pointer into (any checked, mapped guest range; never writes).</summary>
+    public int Peek8(int address) => Peek(address, 1, memory => memory.ReadByte(unchecked((uint)address)));
+    public int Peek32(int address) => Peek(address, 4, memory => unchecked((int)memory.ReadUInt32(unchecked((uint)address))));
+
+    private int Peek(int address, int length, Func<GuestMemory, int> read)
+    {
+        try { lock (memoryGate) return read(OpenModule().Memory); }
+        catch (GuestMemoryException error) { throw new BinaryLibraryException($"Binary library '{Name}': {length} byte(s) at 0x{unchecked((uint)address):X8} cannot be read: {error.Message}", error); }
+    }
+    public void Poke8(int address, int value) { lock (memoryGate) { var (b, o) = Locate(address, 1); b.Write(o, [(byte)value]); } }
+    public void Poke32(int address, int value) { lock (memoryGate) { var (b, o) = Locate(address, 4); b.Write(o, BitConverter.GetBytes(value)); } }
 
     internal static Encoding Ansi => Windows1252;
 
     /// <summary>Disposes every open module (also runs at process exit). Later calls fail with a clear error.</summary>
     public static void DisposeAll()
     {
-        foreach (var library in Libraries.Values)
+        foreach (var group in Groups.Values) group.Dispose();
+    }
+
+    private sealed class LibraryGroup : IDisposable
+    {
+        private readonly object gate = new();
+        private readonly Dictionary<string, BinaryLibrary> members = new(StringComparer.Ordinal);
+        private readonly HashSet<string> added = new(StringComparer.Ordinal);
+        private GuestModuleSet? set;
+        private bool disposed;
+
+        public void Register(BinaryLibrary library)
         {
-            lock (library.gate)
+            lock (gate) members[GuestModuleSet.NormalizeName(library.Name)] = library;
+        }
+
+        public GuestModule Open(BinaryLibrary library)
+        {
+            lock (gate)
             {
-                library.disposed = true;
-                try { library.module?.Dispose(); } catch (GuestException) { }
-                library.module = null;
+                ObjectDisposedException.ThrowIf(disposed, library);
+                if (library.module is { } existing) return existing;
+                set ??= new GuestModuleSet(CreateResolver);
+                try
+                {
+                    AddWithDependencies(library);
+                    set.LoadAll();
+                }
+                catch (GuestInitializationException error)
+                {
+                    throw new BinaryLibraryException($"Binary library '{library.Name}' failed to initialise (DllMain/CRT start-up of it or of a library it imports): {error.Message}", error);
+                }
+                foreach (var member in members.Values.Where(m => added.Contains(GuestModuleSet.NormalizeName(m.Name))))
+                    member.SetModule(set[member.Name]);
+                return library.module!;
+            }
+        }
+
+        private void AddWithDependencies(BinaryLibrary library)
+        {
+            var key = GuestModuleSet.NormalizeName(library.Name);
+            if (added.Contains(key)) return;
+            var (artifact, image) = TranslatedLibrary.Read(library.Path);
+            set!.Add(library.Name, artifact, image, library.Options.Conventions, new GuestModuleOptions
+            {
+                RunEntryPoint = library.Options.RunEntryPoint,
+                AllowUnboundImports = library.Options.AllowUnboundImports,
+            });
+            added.Add(key);
+            foreach (var import in artifact.Imports.Select(i => GuestModuleSet.NormalizeName(i.Dll)).Distinct())
+                if (members.TryGetValue(import, out var sibling) && sibling != library) AddWithDependencies(sibling);
+        }
+
+        private IGuestImportResolver CreateResolver(string moduleName)
+        {
+            var library = members[GuestModuleSet.NormalizeName(moduleName)];
+            var options = library.Options;
+            if (options.Environment is null) return new DictionaryGuestImportResolver();
+            if (!options.EnvironmentRequired)
+            {
+                var (artifact, _) = TranslatedLibrary.Read(library.Path);
+                if (artifact.Imports.All(i => members.ContainsKey(GuestModuleSet.NormalizeName(i.Dll)))) return new DictionaryGuestImportResolver();
+            }
+            return options.Environment.CreateResolver(library.Name);
+        }
+
+        public void Dispose()
+        {
+            lock (gate)
+            {
+                disposed = true;
+                foreach (var member in members.Values) { member.SetModule(null); lock (member.memoryGate) member.allocations.Clear(); }
+                try { set?.Dispose(); }
+                catch (Exception error) when (error is GuestException or AggregateException) { }
+                set = null;
             }
         }
     }

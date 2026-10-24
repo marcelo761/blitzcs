@@ -1,0 +1,242 @@
+{
+  "binaryLibraries": [
+    {
+      "path": "ogg.dll",
+      "runEntryPoint": true
+    }
+  ],
+  "functions": [
+    {
+      "name": "GuestAlloc",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "intrinsic": "alloc"
+      }
+    },
+    {
+      "name": "GuestFree",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Void",
+      "binary": {
+        "library": "ogg.dll",
+        "intrinsic": "free"
+      }
+    },
+    {
+      "name": "GuestPeek8",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "intrinsic": "peek8"
+      }
+    },
+    {
+      "name": "GuestPeek32",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "intrinsic": "peek32"
+      }
+    },
+    {
+      "name": "GuestPoke8",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Void",
+      "binary": {
+        "library": "ogg.dll",
+        "intrinsic": "poke8"
+      }
+    },
+    {
+      "name": "GuestPoke32",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Void",
+      "binary": {
+        "library": "ogg.dll",
+        "intrinsic": "poke32"
+      }
+    },
+    {
+      "name": "OggPackWriteInit",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Void",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "oggpack_writeinit",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggPackWrite",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Void",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "oggpack_write",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggPackBytes",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "oggpack_bytes",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggPackGetBuffer",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "oggpack_get_buffer",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggPackWriteClear",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Void",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "oggpack_writeclear",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggPackReadInit",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Void",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "oggpack_readinit",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggPackRead",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "oggpack_read",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggStreamInit",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "ogg_stream_init",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggStreamPacketIn",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "ogg_stream_packetin",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggStreamFlush",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "ogg_stream_flush",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggPageSerialNo",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "ogg_page_serialno",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggPagePageNo",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "ogg_page_pageno",
+        "convention": "cdecl"
+      }
+    },
+    {
+      "name": "OggStreamClear",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Void",
+      "binary": {
+        "library": "ogg.dll",
+        "export": "ogg_stream_clear",
+        "convention": "cdecl"
+      }
+    }
+  ]
+}

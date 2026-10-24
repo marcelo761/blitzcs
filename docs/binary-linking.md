@@ -64,10 +64,46 @@ artefato desatualizado (`.bcx` de outra DLL) e imports não resolvidos viram
 `BinaryLibraryException` com biblioteca, export e a mensagem original (por exemplo
 `missing.dll!NeverProvided`).
 
+## Ambiente Win32, bibliotecas reais e conjuntos de módulos
+
+Uma DLL de terceiros (HeapAlloc, seções críticas, CRT, outras DLLs) roda a partir de um `.bb` sem
+código de ligação escrito à mão. `BinaryLibrary` (Runtime, sem dependência do Win32) obtém os imports de
+um `IBinaryHostEnvironment` (`CreateResolver(moduleName)`, um resolvedor por módulo; `CompositeBinaryHostEnvironment`
+compõe ambientes). O binding gerado referencia `BlitzCS.BinaryCompiler.Win32` e registra `Win32ImportResolver`
+como ambiente; o assembly Win32 e suas dependências são copiados para a saída com as proteções de sobrescrita.
+
+`binaryLibraries` aceita, além de strings, objetos (chaves desconhecidas são rejeitadas; a mesma DLL listada duas
+vezes com opções é erro de ambiguidade; dois arquivos com o mesmo nome também):
+
+| chave | padrão | efeito |
+|---|---|---|
+| `path` | obrigatório | caminho relativo ao catálogo |
+| `win32` | ausente = automático | `true` sempre cria o ambiente Win32; `false` nunca; automático só se a DLL importa de uma DLL que não é irmã do catálogo |
+| `runEntryPoint` | `true` | executa DllMain(PROCESS_ATTACH) (inicialização da CRT); sem efeito se o PE não tem entry point. Falha vira `BinaryLibraryException` ("Binary library 'x.dll' failed to initialise ...") |
+| `unboundImports` | `"fault"` | `"fault"`: import sem provedor = aviso no build (stderr, lista `dll!nome`) e falha na chamada nomeando `dll!nome`; `"error"`: erro de build |
+| `defaultConvention` | nenhum | só `"cdecl"`: exports sem decoração e sem entrada própria |
+| `exportConventions` | vazio | `{"export": "cdecl" \| "stdcall:N", "#ordinal": ...}`; contradizer `binary.convention` ou a contagem de parâmetros é erro |
+| `unpack` | `false` | ver `docs/binary-unpack.md` |
+
+A política de imports ausentes: se um import ausente é alcançável só se sabe em tempo de execução, então o build
+avisa (com `Win32ImportResolver.Analyze` e a checagem dos irmãos) e a chamada falha nomeando `dll!nome`.
+
+**Vários módulos.** Com mais de uma biblioteca, o build aloca bases com `ModuleBaseAllocator` (uma única biblioteca
+mantém sua base preferida), traduz cada uma para a sua base (chave de cache por base; a base fica no `.bcx`) e
+valida os imports entre irmãos (export existe, é código, convenção cdecl/stdcall declarada ou decorada;
+nunca presumida). Em tempo de execução todas as bibliotecas do mesmo binding formam um `GuestModuleSet` por
+processo: carregado de forma preguiçosa (a biblioteca chamada mais os irmãos que ela importa), seguro entre threads,
+com um estado Win32 por módulo, descartado ao sair.
+
+**Memória do guest a partir do BASIC.** Funções do catálogo com `"binary": {"library": "x.dll", "intrinsic": "alloc"}`
+(sem `export`): `alloc(Integer)->Integer` (bloco zerado), `free(Integer)`, `peek8/peek32(Integer)->Integer`
+(lê qualquer memória do guest mapeada, verificada), `poke8/poke32(Integer, Integer)` (só dentro de blocos de `alloc`
+vivos). Ponteiros e structs são `Integer`; não há tipo `Bank` nem cópia de entrada/saída. `samples/BinaryLinking/Real/`
+usa isso com o libogg real (`ogg.bb`/`ogg.json`; a DLL fica fora do repositório).
+
 ## Limitações
 
-- Imports da DLL que nada resolve falham no carregamento; não há stubs e não há
-  hook de catálogo para fornecê-los.
+- Imports que nem o ambiente Win32 nem um irmão fornecem viram stub que falha na chamada nomeando `dll!nome` (`unboundImports`).
 - Somente Linux x86-64; as DLLs têm base fixa e a execução é serializada por módulo.
 - Retorno `String`, ponteiros de saída, structs e callbacks não são suportados pelo
   catálogo (a API gerenciada `GuestFunction.InvokeWithBuffers` e

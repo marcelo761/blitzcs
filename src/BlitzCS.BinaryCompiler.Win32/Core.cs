@@ -143,8 +143,40 @@ public static class Win32MemoryExtensions
 /// <summary>One decoded import call. <see cref="Args"/> holds exactly the declared argument count; <see cref="VarArg"/> reads further stack words of cdecl varargs APIs.</summary>
 public readonly ref struct Win32Call
 {
-    internal Win32Call(Win32Context ctx, IWin32Memory mem, ReadOnlySpan<uint> args, Func<int, uint>? varArg)
-    { Ctx = ctx; Mem = mem; Args = args; varReader = varArg; }
+    internal Win32Call(Win32Context ctx, IWin32Memory mem, ReadOnlySpan<uint> args, Func<int, uint>? varArg, GuestCall? guest = null)
+    { Ctx = ctx; Mem = mem; Args = args; varReader = varArg; this.guest = guest; }
+
+    private readonly GuestCall? guest;
+
+    /// <summary>Calls guest code at <paramref name="address"/> (callbacks such as _initterm entries, qsort comparers). Only available when the API runs for a guest module.</summary>
+    public uint CallGuest(uint address, params ReadOnlySpan<uint> args) =>
+        (guest ?? throw new Win32UsageException("This API calls back into guest code and needs a running guest module.")).CallGuest(address, args);
+
+    /// <summary>A capturable form of <see cref="CallGuest"/> (valid on the same thread, inside the handler) for local functions.</summary>
+    public Func<uint, uint[], uint> GuestCaller()
+    {
+        var g = guest ?? throw new Win32UsageException("This API calls back into guest code and needs a running guest module.");
+        return (address, args) => g.CallGuest(address, args);
+    }
+
+    /// <summary>A capturable reader of the variable arguments (index counts from the first declared argument).</summary>
+    public Func<int, uint> VarArgs()
+    {
+        var all = Args.ToArray(); var reader = varReader;
+        return i => i < all.Length ? all[i] : reader is { } r ? r(i) : throw new Win32UsageException("This API does not take variable arguments.");
+    }
+
+    /// <summary>The x87 argument of an x87-convention import (ST0), popped. Only available for a guest module.</summary>
+    public double PopSt0Double() => (guest ?? throw new Win32UsageException("x87 arguments need a running guest module.")).PopSt0Double();
+
+    /// <summary>Also returns <paramref name="value"/> in EDX (high half of a 64-bit result).</summary>
+    public void ReturnEdx(uint value) => (guest ?? throw new Win32UsageException("EDX results need a running guest module.")).SetReturnEdx(value);
+
+    /// <summary>Returns a double in ST0.</summary>
+    public void ReturnSt0(double value) => (guest ?? throw new Win32UsageException("x87 results need a running guest module.")).SetReturnSt0(value);
+
+    /// <summary>Reads the double that occupies argument words <paramref name="index"/> and <paramref name="index"/>+1 (cdecl/stdcall pass a double as two words, low first).</summary>
+    public double Double(int index) => BitConverter.UInt64BitsToDouble(this[index] | (ulong)this[index + 1] << 32);
 
     private readonly Func<int, uint>? varReader;
     public Win32Context Ctx { get; }
@@ -192,6 +224,19 @@ public sealed class Win32Registry
         all.Add(api);
     }
 
+    private readonly Dictionary<string, Func<Win32Context, IWin32Memory, uint>> data = new(StringComparer.Ordinal);
+
+    /// <summary>Registers an exported variable. The factory returns its guest address (allocated once per module).</summary>
+    public void AddData(string dll, string name, Func<Win32Context, IWin32Memory, uint> factory)
+    {
+        if (!data.TryAdd(Key(dll, name), factory)) throw new InvalidOperationException($"{dll}!{name} (data) registered twice.");
+    }
+
+    public Func<Win32Context, IWin32Memory, uint>? FindData(string dll, string? name) =>
+        name is not null && data.TryGetValue(Key(dll, name), out var f) ? f : null;
+
+    public IEnumerable<string> DataNames => data.Keys;
+
     public Win32Api? Find(string dll, string? name, ushort? ordinal) =>
         map.TryGetValue(Key(dll, name ?? "#" + ordinal), out var api) ? api : null;
 }
@@ -212,6 +257,7 @@ public abstract class Win32Service : IWin32Service
 
     public void Register(Win32Registry r) { registry = r; Define(); registry = null; }
 
+    protected void Data(string dll, string name, Func<Win32Context, IWin32Memory, uint> factory) => registry!.AddData(dll, name, factory);
     protected void Std(string dll, string name, int argc, Win32Handler h) => Add(dll, name, Win32Convention.Stdcall, argc, false, null, h);
     protected void StdOrdinal(string dll, string name, ushort ordinal, int argc, Win32Handler h) => Add(dll, name, Win32Convention.Stdcall, argc, false, ordinal, h);
     protected void Cdecl(string dll, string name, int argc, Win32Handler h) => Add(dll, name, Win32Convention.Cdecl, argc, false, null, h);
@@ -241,6 +287,10 @@ public sealed class Win32Options
     public Stream? Stderr { get; init; }
     /// <summary>Upper bound for a single VirtualAlloc/HeapAlloc request (the runtime caps one guest region at 256 MiB).</summary>
     public long MaxAllocation { get; init; } = 256L * 1024 * 1024;
+    /// <summary>Host answer for user32!MessageBoxA. Null: the API faults (no window system; the user is never assumed to have clicked).</summary>
+    public Win32MessageBoxHandler? MessageBoxHandler { get; init; }
+    /// <summary>Receives OutputDebugStringA text (what an attached debugger would see). Null: no debugger is attached and the text is dropped, as on Windows.</summary>
+    public Action<string>? DebugOutput { get; init; }
 }
 
 /// <summary>Per-process emulation state shared by the services. One instance must serve exactly one guest module.</summary>

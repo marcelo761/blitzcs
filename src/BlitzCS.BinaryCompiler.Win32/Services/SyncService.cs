@@ -203,6 +203,7 @@ public sealed class SyncService : Win32Service
             {
                 KernelEvent e => e.Wait(c[1]) ? WaitObject0 : WaitTimeout,
                 KernelMutex m => m.Acquire(c[1]) ? WaitObject0 : WaitTimeout,
+                KernelThread t => t.Done.Wait(c[1]) ? WaitObject0 : WaitTimeout,
                 _ => c.Ctx.Fail(Win32Error.InvalidHandle, WaitFailed),
             };
         });
