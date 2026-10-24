@@ -100,6 +100,27 @@ public sealed class PlatformMemoryTests
     }
 
     [Fact]
+    public unsafe void Published_x64_code_executes_and_can_be_republished()
+    {
+        var length = (nuint)P.PageSize;
+        var map = P.Map(length, out var error);
+        Assert.True(map != 0, $"Map failed with OS error {error}");
+        try
+        {
+            // mov eax, imm32; ret: same machine code and return ABI on both supported hosts.
+            Marshal.Copy(new byte[] { 0xB8, 42, 0, 0, 0, 0xC3 }, 0, map, 6);
+            P.Protect(map, length, MemoryProtection.ReadExecute);
+            var invoke = (delegate* unmanaged<int>)map;
+            Assert.Equal(42, invoke());
+            P.Protect(map, length, MemoryProtection.ReadWrite);
+            Marshal.WriteInt32(map, 1, 73);
+            P.Protect(map, length, MemoryProtection.ReadExecute);
+            Assert.Equal(73, invoke());
+        }
+        finally { P.Free(map, length); }
+    }
+
+    [Fact]
     public void Free_releases_the_range_and_ignores_null()
     {
         P.Free(0, 4096);

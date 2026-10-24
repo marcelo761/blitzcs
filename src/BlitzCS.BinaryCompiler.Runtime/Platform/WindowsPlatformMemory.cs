@@ -34,6 +34,9 @@ internal sealed class WindowsPlatformMemory : IPlatformMemory
     private static extern bool VirtualProtect(nint address, nuint size, uint newProtect, out uint oldProtect);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern nuint VirtualQuery(nint address, out MemoryBasicInformation buffer, nuint length);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool FlushInstructionCache(nint process, nint address, nuint size);
 
     public string Name => "windows";
     public string TargetOs => BinaryTargets.WindowsX64;
@@ -99,6 +102,10 @@ internal sealed class WindowsPlatformMemory : IPlatformMemory
         };
         if (!VirtualProtect(address, length, flags, out _))
             throw new GuestLoadException($"VirtualProtect(0x{address:X}, {length}, {protection}) failed with error {Marshal.GetLastPInvokeError()}.");
+        // Windows requires the publisher of generated code to make instruction-cache coherence explicit.
+        // -1 is the current-process pseudo handle; no owned handle needs to be opened or closed.
+        if (protection == MemoryProtection.ReadExecute && !FlushInstructionCache(-1, address, length))
+            throw new GuestLoadException($"FlushInstructionCache(0x{address:X}, {length}) failed with error {Marshal.GetLastPInvokeError()}.");
     }
 
     public void Free(nint address, nuint length)
