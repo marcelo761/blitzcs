@@ -1,0 +1,82 @@
+{
+  "metadata": {
+    "id": "scpcb-mavless",
+    "sourceRepository": "https://github.com/Regalis11/scpcb",
+    "sourceCommit": "edb8fe0840b78f14d1aef3a0bf6174630e7be296",
+    "source": "mavless_bin.zip!bin/runtime.dll",
+    "sourceArtifact": {
+      "repositoryPath": "mavless_bin.zip",
+      "archiveSha256": "ab1b66f0fca099f9bc5fbd13054ebe1bca009661598cde3c2091d7bdceef7749",
+      "runtimePath": "bin/runtime.dll",
+      "runtimeSha256": "ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d",
+      "evidence": "ASCII rtSym descriptor strings at the recorded file offsets in the patched PE32 runtime DLL"
+    },
+    "upstreamReferences": [
+      "https://github.com/Regalis11/scpcb/blob/edb8fe0840b78f14d1aef3a0bf6174630e7be296/Instructions.txt#L4-L7",
+      "https://github.com/blitz-research/blitz3d/tree/6beb288cb5962393684a59a4a44ac11524894939"
+    ],
+    "limitations": [
+      "These declarations are recovered from the SCP-specific patched runtime artifact, not the pinned stock Blitz3D source/runtime inventory.",
+      "An rtSym descriptor records a runtime registration signature; it does not establish native ABI, calling convention, export names, or string marshaling.",
+      "The source byte offset identifies the descriptor string in the PE32 runtime file and is not a native function address."
+    ]
+  },
+  "profiles": [
+    "blitz3d.json"
+  ],
+  "functions": [
+    {
+      "name": "TextureBumpEnvMat",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Float"
+      ],
+      "defaults": [],
+      "contract": {
+        "profile": "scpcb-mavless-rtSym",
+        "provider": "scpcb.mavless-runtime",
+        "resolution": "runtime-registration",
+        "symbol": "TextureBumpEnvMat%texture%x%y#envmat",
+        "callingConvention": null,
+        "source": "mavless_bin.zip!bin/runtime.dll+0xEAD30"
+      }
+    },
+    {
+      "name": "TextureBumpEnvOffset",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "defaults": [],
+      "contract": {
+        "profile": "scpcb-mavless-rtSym",
+        "provider": "scpcb.mavless-runtime",
+        "resolution": "runtime-registration",
+        "symbol": "TextureBumpEnvOffset%texture#envoffset",
+        "callingConvention": null,
+        "source": "mavless_bin.zip!bin/runtime.dll+0xEACE4"
+      }
+    },
+    {
+      "name": "TextureBumpEnvScale",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "defaults": [],
+      "contract": {
+        "profile": "scpcb-mavless-rtSym",
+        "provider": "scpcb.mavless-runtime",
+        "resolution": "runtime-registration",
+        "symbol": "TextureBumpEnvScale%texture#envmat",
+        "callingConvention": null,
+        "source": "mavless_bin.zip!bin/runtime.dll+0xEAD0C"
+      }
+    }
+  ]
+}
