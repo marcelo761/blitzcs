@@ -20,6 +20,13 @@ internal static class ExternalCatalog
                 item.GetString() ?? throw new ArgumentException("External catalog 'nativeLibraries' entries cannot be null."),
                 Path.GetDirectoryName(catalogPath)!)).ToArray()
             : [];
+        var binaryLibraries = root.TryGetProperty("binaryLibraries", out var binaries) && binaries.ValueKind == JsonValueKind.Array
+            ? binaries.EnumerateArray().Select(item => Path.GetFullPath(
+                item.GetString() ?? throw new ArgumentException("External catalog 'binaryLibraries' entries cannot be null."),
+                Path.GetDirectoryName(catalogPath)!)).ToArray()
+            : [];
+        var binaryProfile = root.TryGetProperty("binaryProfile", out var profile) && profile.ValueKind == JsonValueKind.String
+            ? profile.GetString() : null;
         string Read(JsonElement item, string key) => item.GetProperty(key).GetString()
             ?? throw new ArgumentException($"External catalog '{key}' cannot be null.");
         var boundItems = items.Where(item => item.TryGetProperty("method", out var method) && method.ValueKind != JsonValueKind.Null).ToArray();
@@ -74,7 +81,7 @@ internal static class ExternalCatalog
             signatures.Add(signature);
             if (function is not null) functions.Add(function);
         }
-        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries);
+        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile);
         }
         finally { context.Dispose(); }
     }
@@ -96,4 +103,6 @@ internal static class ExternalCatalog
 
 internal sealed record ExternalCatalogResult(
     ExternalFunctionRegistry Functions,
-    IReadOnlyList<string> NativeLibraries);
+    IReadOnlyList<string> NativeLibraries,
+    IReadOnlyList<string>? BinaryLibraries = null,
+    string? BinaryProfile = null);

@@ -6,5 +6,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" PrivateAssets="all" />
     <ProjectReference Include="../../src/BlitzCS.BinaryCompiler/BlitzCS.BinaryCompiler.csproj" />
     <ProjectReference Include="../../src/BlitzCS.BinaryCompiler.Runtime/BlitzCS.BinaryCompiler.Runtime.csproj" />
+    <ProjectReference Include="../../src/BlitzCS.CLI/BlitzCS.CLI.csproj" />
   </ItemGroup>
 </Project>

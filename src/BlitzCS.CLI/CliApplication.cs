@@ -46,6 +46,7 @@ public static class CliApplication
             DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram",
                 referencePaths: catalog.Functions.ReferencePaths, nativeLibraryPaths: catalog.NativeLibraries,
                 inputPaths: args.Length == 6 ? sourceInputs.Append(args[5]) : sourceInputs);
+            BinaryTranslationStep.Run(catalog, outputPath, output);
             output.WriteLine(outputPath);
             return 0;
         }
