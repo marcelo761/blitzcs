@@ -6,6 +6,8 @@
     <Project Path="src/BlitzCS.CLI/BlitzCS.CLI.csproj" />
     <Project Path="src/BlitzCS.Compiler/BlitzCS.Compiler.csproj" />
     <Project Path="src/BlitzCS.NativeInterop/BlitzCS.NativeInterop.csproj" />
+    <Project Path="src/BlitzCS.BinaryCompiler/BlitzCS.BinaryCompiler.csproj" />
+    <Project Path="src/BlitzCS.BinaryCompiler.Runtime/BlitzCS.BinaryCompiler.Runtime.csproj" />
     <Project Path="samples/NativeInterop/ManagedBinding/BlitzCS.NativeInterop.ManagedBinding.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -13,5 +15,6 @@
     <Project Path="tests/Blitz3DCS.Audio.Tests/Blitz3DCS.Audio.Tests.csproj" />
     <Project Path="tests/BlitzCS.Compiler.Tests/BlitzCS.Compiler.Tests.csproj" />
     <Project Path="tests/BlitzCS.NativeInterop.Tests/BlitzCS.NativeInterop.Tests.csproj" />
+    <Project Path="tests/BlitzCS.BinaryCompiler.Tests/BlitzCS.BinaryCompiler.Tests.csproj" />
   </Folder>
 </Solution>
