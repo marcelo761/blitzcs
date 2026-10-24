@@ -65,3 +65,9 @@ public sealed class GuestTrapException : GuestException
 {
     public GuestTrapException(string message) : base(message) { }
 }
+
+/// <summary>The guest violated (or the call site mis-declared) the calling convention in a way the runtime can detect: x87 stack imbalance, or a requested return register that was not produced.</summary>
+public sealed class GuestAbiException : GuestException
+{
+    public GuestAbiException(string message) : base(message) { }
+}

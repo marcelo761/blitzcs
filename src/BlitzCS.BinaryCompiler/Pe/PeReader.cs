@@ -193,7 +193,7 @@ public static class PeReader
         if (tlsRva != 0)
         {
             if (!Off(tlsRva, 16, out var o)) Err("PE040", "TLS directory outside image.", tlsRva);
-            else tls = new PeTls(U32(b, o), U32(b, o + 4), U32(b, o + 8), U32(b, o + 12));
+            else tls = new PeTls(U32(b, o), U32(b, o + 4), U32(b, o + 8), U32(b, o + 12), Off(tlsRva + 16, 4, out var zo) ? U32(b, zo) : 0);
         }
         if (Dir(13).Rva != 0) Err("PE050", "Unsupported delay import directory.", Dir(13).Rva);
         if (Dir(14).Rva != 0) Err("PE051", "Managed (CLR) images are not supported.", Dir(14).Rva);

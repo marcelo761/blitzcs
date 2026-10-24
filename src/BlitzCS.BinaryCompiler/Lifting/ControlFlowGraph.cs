@@ -47,6 +47,19 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
     private readonly List<(uint Start, uint End)> exec = [];
     private bool speculative;
 
+    /// <summary>RVAs of the TLS callbacks listed in the (zero-terminated) callback array, as far as the array lies inside the image.</summary>
+    public static IEnumerable<uint> TlsCallbackRvas(PeImage image, byte[] mapped)
+    {
+        if (image.Tls is not { CallbacksVa: not 0 } tls || tls.CallbacksVa < image.ImageBase) yield break;
+        var at = tls.CallbacksVa - image.ImageBase;
+        for (var n = 0; n < 256 && (ulong)at + 4 <= (ulong)mapped.Length; n++, at += 4)
+        {
+            var va = BitConverter.ToUInt32(mapped, (int)at);
+            if (va == 0) yield break;
+            if (va >= image.ImageBase && va - image.ImageBase < image.SizeOfImage) yield return va - image.ImageBase;
+        }
+    }
+
     public ControlFlowGraph Build()
     {
         foreach (var s in image.Sections.Where(s => s.IsExecutable))
@@ -60,6 +73,7 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
 
         foreach (var e in image.Exports.Where(e => e.ForwarderTarget is null).OrderBy(e => e.Rva)) EnqueueRoot(e.Rva, $"export '{e.Name ?? "#" + e.Ordinal}'");
         if (image.EntryPointRva != 0) EnqueueRoot(image.EntryPointRva, "entry point");
+        foreach (var rva in TlsCallbackRvas(image, mapped)) EnqueueRoot(rva, "TLS callback");
         Drain();
 
         speculative = true;

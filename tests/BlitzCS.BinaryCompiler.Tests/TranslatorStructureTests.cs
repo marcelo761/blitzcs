@@ -162,7 +162,8 @@ public sealed class TranslatorStructureTests
 
     public static IEnumerable<object[]> UnsupportedCases()
     {
-        yield return ["fs", "BC_SEGMENT_OVERRIDE", (Action<Assembler>)(a => a.db(0x64, 0x8B, 0x05, 0, 0, 0, 0))];
+        yield return ["gs", "BC_SEGMENT_OVERRIDE", (Action<Assembler>)(a => a.db(0x65, 0x8B, 0x05, 0, 0, 0, 0))];
+        yield return ["fs unmodelled offset", "BC_FS_UNSUPPORTED_OFFSET", (Action<Assembler>)(a => a.db(0x64, 0x8B, 0x05, 0x1C, 0, 0, 0))];
         yield return ["aaa", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.aaa())];
         yield return ["daa", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.daa())];
         yield return ["int", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.@int(0x2E))];

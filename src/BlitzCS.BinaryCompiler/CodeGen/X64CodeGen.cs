@@ -5,12 +5,18 @@ namespace BlitzCS.BinaryCompiler.CodeGen;
 
 /// <summary>
 /// Register conventions inside translated code: guest EAX..EDI map to RAX..RDI (upper halves always zero), guest ESP is RSP
-/// (always zero-extended), R12 = host image base, R13 = dispatch table address, R8-R11 and XMM15 are translator scratch.
+/// (always zero-extended), R12 = host image base, R13 = dispatch table address, R15 = guest TEB base (loaded from the call context by EnterGuest), R8-R11 and XMM15 are translator scratch.
 /// Translated code is bound to the image's preferred base (guest addresses are embedded as constants).
 /// </summary>
-internal sealed class X64CodeGen
+internal sealed partial class X64CodeGen
 {
-    public const int CtxNativeRsp = 0, CtxTrapKind = 16, CtxTrapAddress = 24, CtxFault = 32;
+    public const int CtxNativeRsp = 0, CtxTrapKind = 16, CtxTrapAddress = 24, CtxFault = 32, CtxTeb = 40,
+        CtxEdx = 48, CtxMode = 56, CtxSt0Raw = 64, CtxSt0Double = 80, CtxSt0Single = 88, CtxXmm0 = 96, CtxStatus = 112, CtxSavedFcw = 116, CtxCurrentFcw = 118,
+        CtxSavedMxcsr = 120, CtxCurrentMxcsr = 124, CtxSize = 128;
+    /// <summary>Capture request bits in CtxMode (runtime -> EnterGuest).</summary>
+    public const uint ModeSt0 = 2, ModeXmm0 = 4;
+    /// <summary>Status bits in CtxStatus (ExitCommon -> runtime): 1 = x87 stack not empty on entry (guest not run), 2 = x87 stack unbalanced when the guest returned (reset), 4 = ST0 requested but the x87 stack was empty.</summary>
+    public const uint StatusEntryX87 = 1, StatusExitX87 = 2, StatusSt0Empty = 4;
 
     private readonly PeImage image;
     private readonly ControlFlowGraph cfg;
@@ -31,7 +37,7 @@ internal sealed class X64CodeGen
     /// <summary>Label offsets of the previous layout pass; the host-offset jump tables embedded in the code are filled from it and then verified against the final layout.</summary>
     public Func<ulong, uint>? PreviousOffsets { get; set; }
 
-    public ulong FaultExitLabel, EnterLabel, ExitCommonLabel, DispatchLabel, Trap1Label, Trap2Label;
+    public ulong FaultExitLabel, EnterLabel, ExitCommonLabel, DispatchLabel, Trap1Label, Trap2Label, Trap3Label;
     public readonly Dictionary<uint, ulong> GuestLabels = [];
     public readonly List<uint> LabeledRvas = [];
     public readonly List<ulong> ImportBodyLabels = [];
@@ -210,7 +216,7 @@ internal sealed class X64CodeGen
     // ---- runtime routines ------------------------------------------------------------------------------------------
     public void EmitRuntime()
     {
-        FaultExitLabel = E.NewLabel(); Trap1Label = E.NewLabel(); Trap2Label = E.NewLabel(); ExitCommonLabel = E.NewLabel(); DispatchLabel = E.NewLabel(); EnterLabel = E.NewLabel();
+        FaultExitLabel = E.NewLabel(); Trap1Label = E.NewLabel(); Trap2Label = E.NewLabel(); Trap3Label = E.NewLabel(); ExitCommonLabel = E.NewLabel(); DispatchLabel = E.NewLabel(); EnterLabel = E.NewLabel();
         var trapStore = E.NewLabel();
         // Host offset 0 is the trap routine: dispatch table entries that are 0 land here (untranslated indirect target).
         E.Place(Trap1Label);
@@ -221,6 +227,9 @@ internal sealed class X64CodeGen
         Jmp(ExitCommonLabel);
         E.Place(Trap2Label);
         A(Instruction.Create(Code.Mov_rm32_imm32, Ctx(CtxTrapKind), 2u));
+        Jmp(trapStore);
+        E.Place(Trap3Label);
+        A(Instruction.Create(Code.Mov_rm32_imm32, Ctx(CtxTrapKind), 3u));
         Jmp(trapStore);
 
         // A managed import raised a fault: abandon the guest call at once instead of letting guest code run on with a bogus result.
@@ -233,9 +242,25 @@ internal sealed class X64CodeGen
         foreach (var r in new[] { Register.RBX, Register.RBP, Register.R12, Register.R13, Register.R14, Register.R15 })
             A(Instruction.Create(Code.Push_r64, r));
         A(Instruction.Create(Code.Mov_r64_rm64, Register.R14, Register.RDX));
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R15, Ctx(CtxTeb))); // the thread's guest TEB; the caller's R15 was pushed above, so nested entries restore it
         A(Instruction.Create(Code.Push_r64, Register.RDX)); // padding: keeps the saved native RSP 16-byte aligned for the import stubs' managed calls
         A(Instruction.Create(Code.Mov_rm64_r64, Ctx(CtxNativeRsp), Register.RSP));
         A(Instruction.Create(Code.Mov_rm32_imm32, Ctx(CtxTrapKind), 0u));
+        // Floating-point state contract: the x87 stack must be empty (TOP == 0) on entry; the host's x87 control word and MXCSR are
+        // restored by ExitCommon if the guest changed them.
+        var x87Bad = E.NewLabel();
+        A(Instruction.Create(Code.Fnstsw_AX, Register.AX));
+        A(Instruction.Create(Code.Test_AX_imm16, Register.AX, 0x3800));
+        Jcc(ConditionCode.ne, x87Bad);
+        A(Instruction.Create(Code.Fnstcw_m2byte, Ctx(CtxSavedFcw)));
+        A(Instruction.Create(Code.Stmxcsr_m32, Ctx(CtxSavedMxcsr)));
+        var enterGo = E.NewLabel();
+        Jmp(enterGo);
+        E.Place(x87Bad);
+        A(Instruction.Create(Code.Or_rm32_imm8, Ctx(CtxStatus), 1));
+        A(Instruction.Create(Code.Xor_r32_rm32, Register.EAX, Register.EAX));
+        Jmp(ExitCommonLabel);
+        E.Place(enterGo);
         A(Instruction.Create(Code.Lea_r64_m, Register.R12, new MemoryOperand(Register.RIP, 0L, 8)));
         A(Instruction.Create(Code.Lea_r64_m, Register.R13, new MemoryOperand(Register.RIP, (long)dataBase + tableOffset, 8)));
         A(Instruction.Create(Code.Mov_r64_rm64, Register.R8, Register.RDI));
@@ -248,6 +273,7 @@ internal sealed class X64CodeGen
         // Shared exit: guest EAX is the result. R14 (the caller's context) is restored by the pops, so nested entries work.
         E.Place(ExitCommonLabel);
         A(Instruction.Create(Code.Mov_r64_rm64, Register.RSP, Ctx(CtxNativeRsp)));
+        EmitExitFloatingPoint();
         A(Instruction.Create(Code.Pop_r64, Register.R9)); // padding
         foreach (var r in new[] { Register.R15, Register.R14, Register.R13, Register.R12, Register.RBP, Register.RBX })
             A(Instruction.Create(Code.Pop_r64, r));
@@ -287,6 +313,59 @@ internal sealed class X64CodeGen
             A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R10D));
             Jmp(DispatchLabel);
         }
+    }
+
+    /// <summary>
+    /// Part of ExitCommon (R14 = call context, guest EAX = result): stores EDX, captures ST0 / XMM0 when the call asked for them, verifies that the
+    /// x87 stack is balanced (resetting it otherwise) and restores the host's x87 control word and MXCSR if the guest changed them. EAX is preserved.
+    /// </summary>
+    private void EmitExitFloatingPoint()
+    {
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R9D, Register.EAX));
+        A(Instruction.Create(Code.Mov_rm32_r32, Ctx(CtxEdx), Register.EDX));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R10D, Ctx(CtxMode)));
+        var noSt0 = E.NewLabel(); var haveSt0 = E.NewLabel(); var afterSt0 = E.NewLabel(); var noXmm = E.NewLabel(); var balanced = E.NewLabel();
+        var fcwOk = E.NewLabel(); var mxcsrOk = E.NewLabel();
+        A(Instruction.Create(Code.Test_rm32_imm32, Register.R10D, (int)ModeSt0));
+        Jcc(ConditionCode.e, noSt0);
+        A(Instruction.Create(Code.Fxam));
+        A(Instruction.Create(Code.Fnstsw_AX, Register.AX));
+        A(Instruction.Create(Code.And_rm8_imm8, Register.AH, 0x45));
+        A(Instruction.Create(Code.Cmp_rm8_imm8, Register.AH, 0x41));      // C3=1, C2=0, C0=1: ST0 empty
+        Jcc(ConditionCode.ne, haveSt0);
+        A(Instruction.Create(Code.Or_rm32_imm8, Ctx(CtxStatus), 4));
+        Jmp(afterSt0);
+        E.Place(haveSt0);
+        A(Instruction.Create(Code.Fld_sti, Register.ST0));
+        A(Instruction.Create(Code.Fstp_m64fp, Ctx(CtxSt0Double)));
+        A(Instruction.Create(Code.Fld_sti, Register.ST0));
+        A(Instruction.Create(Code.Fstp_m32fp, Ctx(CtxSt0Single)));
+        A(Instruction.Create(Code.Fstp_m80fp, Ctx(CtxSt0Raw)));
+        E.Place(afterSt0);
+        E.Place(noSt0);
+        A(Instruction.Create(Code.Test_rm32_imm32, Register.R10D, (int)ModeXmm0));
+        Jcc(ConditionCode.e, noXmm);
+        A(Instruction.Create(Code.Movups_xmmm128_xmm, Ctx(CtxXmm0), Register.XMM0));
+        E.Place(noXmm);
+        A(Instruction.Create(Code.Fnstsw_AX, Register.AX));
+        A(Instruction.Create(Code.Test_AX_imm16, Register.AX, 0x3800));
+        Jcc(ConditionCode.e, balanced);
+        A(Instruction.Create(Code.Or_rm32_imm8, Ctx(CtxStatus), 2));
+        A(Instruction.Create(Code.Fninit));
+        E.Place(balanced);
+        A(Instruction.Create(Code.Fnstcw_m2byte, Ctx(CtxCurrentFcw)));
+        A(Instruction.Create(Code.Movzx_r32_rm16, Register.EAX, Ctx(CtxCurrentFcw)));
+        A(Instruction.Create(Code.Cmp_r16_rm16, Register.AX, Ctx(CtxSavedFcw)));
+        Jcc(ConditionCode.e, fcwOk);
+        A(Instruction.Create(Code.Fldcw_m2byte, Ctx(CtxSavedFcw)));
+        E.Place(fcwOk);
+        A(Instruction.Create(Code.Stmxcsr_m32, Ctx(CtxCurrentMxcsr)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EAX, Ctx(CtxCurrentMxcsr)));
+        A(Instruction.Create(Code.Cmp_r32_rm32, Register.EAX, Ctx(CtxSavedMxcsr)));
+        Jcc(ConditionCode.e, mxcsrOk);
+        A(Instruction.Create(Code.Ldmxcsr_m32, Ctx(CtxSavedMxcsr)));
+        E.Place(mxcsrOk);
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EAX, Register.R9D));
     }
 
     /// <summary>r8d = guest VA -> jump to its translation (see the comment at the Dispatch routine). Clobbers r8/r9/xmm15, preserves flags.</summary>
@@ -391,6 +470,7 @@ internal sealed class X64CodeGen
             A(Instruction.Create(Code.Mov_r32_imm32, Register.R9D, va));
             Jmp(kind == 2 ? Trap2Label : Trap1Label);
         }
+        EmitFsTrapStubs();
         EmitShadowTables();
     }
 
@@ -558,15 +638,34 @@ internal sealed class X64CodeGen
     private bool Lower(GuestInstruction g)
     {
         var i = g.Instr;
-        if (i.SegmentPrefix is Register.FS or Register.GS)
+        if (i.SegmentPrefix == Register.GS)
         {
-            Unsupported(g, "BC_SEGMENT_OVERRIDE", "fs/gs segment override (TLS and SEH are not supported)");
+            Unsupported(g, "BC_SEGMENT_OVERRIDE", "gs segment override (GS is the x64 TEB register and is not modelled)");
             return false;
+        }
+        MemoryOperand? fsOperand = null;
+        if (i.SegmentPrefix == Register.FS)
+        {
+            var hasMemory = false;
+            for (var op = 0; op < i.OpCount; op++) if (i.GetOpKind(op) == OpKind.Memory) hasMemory = true;
+            if (i.IsStringInstruction || !hasMemory)
+            {
+                Unsupported(g, "BC_SEGMENT_OVERRIDE", "fs segment override on an instruction without a plain memory operand (string instruction or stray prefix)");
+                return false;
+            }
+            // lea (and other instructions that do not access memory) ignore the segment: only the address computation remains.
+            var accesses = false;
+            foreach (var m in infoFactory.GetInfo(i, InstructionInfoOptions.NoRegisterUsage).GetUsedMemory()) if (m.Access != OpAccess.NoMemAccess) accesses = true;
+            if (accesses && i.Code is not (Code.Push_rm32 or Code.Pop_rm32 or Code.Call_rm32 or Code.Jmp_rm32))
+            {
+                if (!TryLowerFsOperand(g, out var fm)) return false;
+                fsOperand = fm;
+            }
         }
         for (var op = 0; op < i.OpCount; op++)
         {
             var k = i.GetOpKind(op);
-            if (k == OpKind.Register && i.GetOpRegister(op).IsSegmentRegister()) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "segment register operand"); return false; }
+            if (k == OpKind.Register && i.GetOpRegister(op).IsSegmentRegister()) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "segment register operand (fs/gs/ds/... cannot be loaded, stored or pushed; only fs: memory operands are modelled)"); return false; }
             if (k is OpKind.MemorySegSI or OpKind.MemoryESDI or OpKind.MemorySegDI) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "16-bit addressing"); return false; }
             if (k is OpKind.FarBranch16 or OpKind.FarBranch32 or OpKind.NearBranch16) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "far or 16-bit branch"); return false; }
         }
@@ -580,16 +679,20 @@ internal sealed class X64CodeGen
             case Code.Pushd_imm32 or Code.Pushd_imm8:
                 StoreImmAtSp(-4, (uint)i.GetImmediate(0)); SpAdd(-4); return true;
             case Code.Push_rm32:
-                A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, MemOf(i)));
+                if (!TryMemoryOperand(g, out var pushSrc)) return false;
+                A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, pushSrc));
                 StoreAtSp(-4, Register.R8D); SpAdd(-4); return true;
             case Code.Pop_r32 or Code.Pop_rm32 when i.Op0Kind == OpKind.Register:
                 if (i.Op0Register == Register.ESP) LoadFromSp(Register.ESP, 0);
                 else { LoadFromSp(i.Op0Register, 0); SpAdd(4); }
                 return true;
             case Code.Pop_rm32:
+            {
+                if (!TryMemoryOperand(g, out var popDst)) return false;
                 LoadFromSp(Register.R8D, 0); SpAdd(4);
-                A(Instruction.Create(Code.Mov_rm32_r32, MemOf(i), Register.R8D));
+                A(Instruction.Create(Code.Mov_rm32_r32, popDst, Register.R8D));
                 return true;
+            }
             case Code.Pushad:
                 A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.ESP));
                 SpAdd(-32);
@@ -635,8 +738,8 @@ internal sealed class X64CodeGen
             case Code.Call_rm32:
             {
                 var generic = E.NewLabel();
-                if (TryEmitShadowTable(g, generic, true)) E.Place(generic);
-                LoadBranchSource(i);
+                if (i.SegmentPrefix != Register.FS && TryEmitShadowTable(g, generic, true)) E.Place(generic);
+                if (!LoadBranchSource(g)) return false;
                 PushReturn(g.NextRva);
                 JmpDispatch(true);
                 return false;
@@ -662,9 +765,9 @@ internal sealed class X64CodeGen
             case Code.Jmp_rm32:
             {
                 var generic = E.NewLabel();
-                var shadow = TryEmitShadowTable(g, generic, false);
+                var shadow = i.SegmentPrefix != Register.FS && TryEmitShadowTable(g, generic, false);
                 if (shadow) E.Place(generic);
-                LoadBranchSource(i);
+                if (!LoadBranchSource(g)) return false;
                 JmpDispatch(tableJumps.Contains(g.Rva));
                 return false;
             }
@@ -720,16 +823,34 @@ internal sealed class X64CodeGen
 
         var pass = i;
         pass.SegmentPrefix = Register.None;
+        if (fsOperand is { } teb)
+        {
+            // The accumulator-only moffs encodings (opcodes A0-A3) address an absolute offset; the TEB operand needs the ModRM form.
+            var modrm = pass.Code switch
+            {
+                Code.Mov_AL_moffs8 => Instruction.Create(Code.Mov_r8_rm8, Register.AL, teb),
+                Code.Mov_AX_moffs16 => Instruction.Create(Code.Mov_r16_rm16, Register.AX, teb),
+                Code.Mov_EAX_moffs32 => Instruction.Create(Code.Mov_r32_rm32, Register.EAX, teb),
+                Code.Mov_moffs8_AL => Instruction.Create(Code.Mov_rm8_r8, teb, Register.AL),
+                Code.Mov_moffs16_AX => Instruction.Create(Code.Mov_rm16_r16, teb, Register.AX),
+                Code.Mov_moffs32_EAX => Instruction.Create(Code.Mov_rm32_r32, teb, Register.EAX),
+                _ => (Instruction?)null,
+            };
+            if (modrm is { } converted) pass = converted; else ApplyOperand(ref pass, teb);
+        }
         if (!CodeEmitter.TryEncodeProbe(pass, out var err)) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "cannot be encoded in 64-bit mode (" + err + ")"); return false; }
         A(pass);
         return i.FlowControl != FlowControl.Exception && i.FlowControl != FlowControl.Interrupt;
     }
 
     /// <summary>Loads the guest target of an indirect call/jmp (register or memory operand) into r8d.</summary>
-    private void LoadBranchSource(Instruction i)
+    private bool LoadBranchSource(GuestInstruction g)
     {
-        if (i.Op0Kind == OpKind.Register) A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, i.Op0Register));
-        else A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, MemOf(i)));
+        var i = g.Instr;
+        if (i.Op0Kind == OpKind.Register) { A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, i.Op0Register)); return true; }
+        if (!TryMemoryOperand(g, out var src)) return false;
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, src));
+        return true;
     }
 
     public IEnumerable<(uint Rva, ulong Label)> GuestEntries() => LabeledRvas.Select(r => (r, GuestLabels[r]));

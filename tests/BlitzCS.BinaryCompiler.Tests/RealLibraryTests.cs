@@ -42,6 +42,22 @@ public sealed class RealLibraryTests
     }
 
     [Fact]
+    public void OggEntryPointTranslatesAndStopsOnlyAtTheMissingWin32Imports()
+    {
+        var path = OggPath();
+        if (path is null) return;
+        var image = PeReader.Read(File.ReadAllBytes(path));
+        var artifact = X64Translator.Translate(image, new BinaryCompilerOptions(OptimizationProfile.Release), "real-ogg-main");
+        var errors = artifact.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        Assert.True(errors.Count == 0, "translation errors: " + string.Join("; ", errors.Take(8).Select(e => $"{e.Code}@{e.GuestRva:X}: {e.Message}")));
+        // DllMain(DLL_PROCESS_ATTACH) runs the CRT start-up, which needs heap and critical-section services: with unbound imports the guest
+        // call faults naming the first one it reaches (provided by the Win32 component, not by this runtime).
+        var ex = Assert.ThrowsAny<GuestException>(() => GuestModule.Load(artifact, image, new DictionaryGuestImportResolver(),
+            new GuestModuleOptions { AllowUnboundImports = true }));
+        Assert.Contains("unbound import", ex.ToString());
+    }
+
+    [Fact]
     public void OggPageFunctionsMatchAnIndependentReference()
     {
         var path = OggPath();
@@ -50,8 +66,8 @@ public sealed class RealLibraryTests
         var image = PeReader.Read(dll);
         var options = new BinaryCompilerOptions(OptimizationProfile.Release);
         var artifact = X64Translator.Translate(image, options, "real-ogg");
-        // The CRT start-up code (SEH through fs:) is rejected with explicit errors; the functions below never reach it.
-        Assert.Contains(artifact.Diagnostics, d => d.Severity == DiagnosticSeverity.Error && d.Code == "BC_SEGMENT_OVERRIDE");
+        // The CRT start-up code reaches the TEB through fs: (SEH prolog, stack bounds); that is modelled now, so no fs:/gs: diagnostic remains.
+        Assert.DoesNotContain(artifact.Diagnostics, d => d.Code is "BC_SEGMENT_OVERRIDE" or "BC_FS_UNSUPPORTED_OFFSET");
         using var module = GuestModule.Load(artifact, image, new DictionaryGuestImportResolver(),
             new GuestModuleOptions { RunEntryPoint = false, AllowTranslationErrors = true, AllowUnboundImports = true });
         GuestFunction Fn(string name) => module.Bind(name, GuestCallingConvention.Cdecl, 1);

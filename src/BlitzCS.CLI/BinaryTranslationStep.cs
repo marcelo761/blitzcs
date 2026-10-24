@@ -30,12 +30,25 @@ internal static class BinaryTranslationStep
             if (errors.Length > 0)
                 throw new InvalidOperationException($"Binary library '{Path.GetFileName(library)}' contains unsupported constructs:{Environment.NewLine}"
                     + string.Join(Environment.NewLine, errors.Take(20).Select(d => $"  {d.Code} at RVA 0x{d.GuestRva ?? 0:X}: {d.Message}"))
-                    + (errors.Length > 20 ? $"{Environment.NewLine}  ... {errors.Length - 20} more" : ""));
+                    + (errors.Length > 20 ? $"{Environment.NewLine}  ... {errors.Length - 20} more" : "")
+                    + PackedHint(library, errors));
             foreach (var binding in catalog.BinaryBindings?.Where(b => b.LibraryPath == library) ?? [])
                 CheckBinding(binding, result.Artifact);
             pending.Add((library, Path.Combine(outputDirectory, Path.GetFileName(library) + ".bcx"), new ArtifactSerializer().Serialize(result.Artifact), result));
         }
         return new(pending);
+    }
+
+    /// <summary>Explains BC_ROOT_NOT_FILE_BACKED as a packed image when the structure supports it.</summary>
+    private static string PackedHint(string library, BinaryDiagnostic[] errors)
+    {
+        if (!errors.Any(d => d.Code == "BC_ROOT_NOT_FILE_BACKED")) return "";
+        try
+        {
+            var summary = PackedImageAnalyzer.Analyze(File.ReadAllBytes(library)).Summary;
+            return summary.Length == 0 ? "" : $"{Environment.NewLine}  Note: {summary}. See docs/binary-packed-images.md.";
+        }
+        catch (Exception e) when (e is IOException or PeFormatException or UnauthorizedAccessException) { return ""; }
     }
 
     private static void CheckBinding(BinaryBinding binding, TranslationArtifact artifact)

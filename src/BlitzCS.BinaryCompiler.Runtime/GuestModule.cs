@@ -17,7 +17,7 @@ namespace BlitzCS.BinaryCompiler.Runtime;
 /// per-module lock (re-entrant for guest->import->managed->guest on the same thread). See the report for the contract
 /// change that would allow parallel calls.
 /// </remarks>
-public sealed unsafe class GuestModule : IDisposable
+public sealed unsafe partial class GuestModule : IDisposable
 {
     private const uint CanaryWord = 0xCAFEBABE;
 
@@ -29,6 +29,7 @@ public sealed unsafe class GuestModule : IDisposable
         public uint ImportEsp;
         public Exception? PendingFault;
         public unsafe byte* CallContext;
+        public TebBlock? Teb;
     }
 
     private sealed class GuestStack
@@ -94,7 +95,7 @@ public sealed unsafe class GuestModule : IDisposable
             throw new GuestLoadException("The translation artifact contains error diagnostics and cannot be loaded: " +
                 string.Join("; ", errors.Take(5).Select(d => $"{d.Code}: {d.Message}")) + (errors.Count > 5 ? $"; (+{errors.Count - 5} more)" : "") + ".");
         if (image.Tls is not null && !a.Diagnostics.Any(d => d.Code == "TLS_HANDLED"))
-            throw new GuestUnsupportedException("The image has a TLS directory, which the guest runtime does not support (thread-local storage and TLS callbacks would be silently skipped).");
+            throw new GuestUnsupportedException("The image has a TLS directory but the artifact was not produced by a compiler that models it (no TLS_HANDLED diagnostic); re-translate the image.");
         if (!string.Equals(a.SourceSha256, image.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new GuestLoadException("The translation artifact was produced from a different image (SHA-256 mismatch).");
         if (a.GuestImageBase != image.ImageBase || a.GuestImageSize != image.SizeOfImage)
@@ -161,6 +162,8 @@ public sealed unsafe class GuestModule : IDisposable
 
         var mapped = image.MapImage();
         Marshal.Copy(mapped, 0, guestMap, mapped.Length);
+        AllocatePeb(image);
+        InitializeTls(image, mapped);
         for (var i = 0; i < bound.Length; i++)
             *(uint*)(guestMap + (nint)artifact.Imports[i].IatRva) = artifact.GuestImageBase + artifact.ImportStubBaseRva + 16u * (uint)i;
         ProtectGuest(image, (int)(size / ps));
@@ -175,7 +178,13 @@ public sealed unsafe class GuestModule : IDisposable
             *(nint*)(hostMap + (nint)artifact.ImportThunkTableOffset + 8 * i) = bound[i].FunctionPointer;
         Libc.Protect(hostMap, (nuint)artifact.CodeSize, Libc.PROT_READ | Libc.PROT_EXEC);
 
-        // 4. DllMain(hinst, DLL_PROCESS_ATTACH, 0)
+        // 4. TLS callbacks (DLL_PROCESS_ATTACH), then DllMain(hinst, DLL_PROCESS_ATTACH, 0)
+        if (options.RunEntryPoint && tlsCallbacks.Length > 0)
+        {
+            try { RunTlsCallbacks(DllProcessAttach); }
+            catch (GuestException e) { throw new GuestInitializationException($"TLS callback(DLL_PROCESS_ATTACH) failed: {e.Message}", e); }
+            tlsProcessAttached = true;
+        }
         if (options.RunEntryPoint && image.IsDll && image.EntryPointRva != 0)
         {
             var target = ResolveEntry(image.EntryPointRva);
@@ -186,6 +195,7 @@ public sealed unsafe class GuestModule : IDisposable
             entryRva = image.EntryPointRva;
             attached = true;
         }
+        initializing = false;
     }
 
     private nint ResolveEntry(uint rva)
@@ -273,10 +283,25 @@ public sealed unsafe class GuestModule : IDisposable
         finally { ExitCall(); }
     }
 
-    private uint InvokeCore(nint hostTarget, ReadOnlySpan<uint> args)
+    /// <summary>Calls the guest and captures the return registers selected by <paramref name="kind"/> (EAX and EDX are always reported).</summary>
+    internal GuestCallResult Invoke(nint hostTarget, ReadOnlySpan<uint> args, GuestReturn kind)
+    {
+        EnterCall();
+        try
+        {
+            GuestCallResult result = default;
+            InvokeCore(hostTarget, args, kind, &result);
+            return result;
+        }
+        finally { ExitCall(); }
+    }
+
+    private uint InvokeCore(nint hostTarget, ReadOnlySpan<uint> args, GuestReturn kind = GuestReturn.Eax, GuestCallResult* result = null)
     {
         {
             var state = threadState.Value!;
+            if (state.Teb is null) CreateThreadTeb(state);
+            var teb = state.Teb!;
             var outermost = state.Depth == 0;
             GuestStack stack;
             uint start;
@@ -292,6 +317,7 @@ public sealed unsafe class GuestModule : IDisposable
                 start = state.ImportEsp;
                 stack = FindStack(start);
             }
+            if (outermost) PrepareTebForCall(teb, stack.Top, stack.Low);
 
             var previous = current;
             try
@@ -310,8 +336,11 @@ public sealed unsafe class GuestModule : IDisposable
                     for (var a = canaryStart; a < canaryTop; a += 4) *(uint*)(nuint)a = CanaryWord;
 
                 var enter = (delegate* unmanaged<ulong, uint, ulong, ulong>)(hostMap + (nint)artifact.EnterGuestOffset);
-                byte* callContext = stackalloc byte[64];
-                new Span<byte>(callContext, 64).Clear();
+                // Call context (layout: CodeGen/X64CodeGen.cs, Ctx* constants): caller-owned, 128 bytes, zeroed.
+                byte* callContext = stackalloc byte[128];
+                new Span<byte>(callContext, 128).Clear();
+                *(ulong*)(callContext + 40) = teb.Address;
+                *(uint*)(callContext + 56) = kind switch { GuestReturn.St0 => 2u, GuestReturn.Xmm0 => 4u, _ => 0u };
                 current = this;
                 state.Depth++;
                 var savedContext = state.CallContext;
@@ -320,13 +349,18 @@ public sealed unsafe class GuestModule : IDisposable
                 try { eax = (uint)enter((ulong)hostTarget, esp, (ulong)callContext); }
                 finally { state.Depth--; current = previous; state.ImportEsp = savedEsp; state.CallContext = savedContext; }
 
+                var abi = *(uint*)(callContext + 112);
+                if ((abi & 1) != 0)
+                    throw new GuestAbiException("The x87 FPU stack was not empty when the guest call started (a previous translated routine or host code left a value on it); the guest was not run.");
                 var trapKind = *(uint*)(callContext + 16);
                 if (trapKind != 0)
                 {
                     var trapAddress = *(ulong*)(callContext + 24);
                     throw new GuestTrapException(trapKind == 1
                         ? $"Guest control flow reached untranslated code at 0x{trapAddress:X8} (indirect target not discovered at build time)."
-                        : $"Guest executed an instruction the translator rejected at 0x{trapAddress:X8}.");
+                        : trapKind == 3
+                            ? $"Guest instruction at 0x{trapAddress:X8} used an fs: offset outside the thread environment block (run-time offset beyond the TLS slot array)."
+                            : $"Guest executed an instruction the translator rejected at 0x{trapAddress:X8}.");
                 }
                 var fault = state.PendingFault;
                 if (fault is not null)
@@ -338,6 +372,16 @@ public sealed unsafe class GuestModule : IDisposable
                     for (var a = canaryStart; a < canaryTop; a += 4)
                         if (*(uint*)(nuint)a != CanaryWord)
                             throw new GuestStackException($"Guest stack corruption: the call frame canary at 0x{a:X8} was overwritten (the callee wrote above its declared {args.Length} argument(s)).");
+                if ((abi & 4) != 0)
+                    throw new GuestAbiException("A floating-point return in ST0 was requested but the guest returned with an empty x87 stack.");
+                if ((abi & 2) != 0)
+                    throw new GuestAbiException(kind == GuestReturn.St0
+                        ? "The guest returned with extra values on the x87 stack (the stack was reset)."
+                        : "The guest returned with values left on the x87 stack (for example a float/double result in ST0 that this call did not request; the stack was reset). Use the typed call (GuestFunction.CallDouble / CallSingle / Invoke(GuestReturn.St0)).");
+                if (result is not null)
+                    *result = new GuestCallResult(eax, *(uint*)(callContext + 48), kind,
+                        *(ulong*)(callContext + 64), *(ushort*)(callContext + 72), *(double*)(callContext + 80), *(float*)(callContext + 88),
+                        *(ulong*)(callContext + 96), *(ulong*)(callContext + 104));
                 return eax;
             }
             finally
@@ -460,6 +504,16 @@ public sealed unsafe class GuestModule : IDisposable
         try
         {
             if (disposed) return;
+            initializing = true; // detach notifications must not trigger DLL_THREAD_ATTACH for the disposing thread
+            if (tlsProcessAttached)
+            {
+                try
+                {
+                    if (threadState.IsValueCreated && threadState.Value!.Teb is not null) RunTlsCallbacks(DllThreadDetach);
+                    RunTlsCallbacks(DllProcessDetach);
+                }
+                catch (Exception error) { DetachError = error; }
+            }
             if (attached)
             {
                 try
@@ -467,7 +521,7 @@ public sealed unsafe class GuestModule : IDisposable
                     var detach = ResolveEntry(entryRva);
                     InvokeCore(detach, [artifact.GuestImageBase, 0u, 0u]);
                 }
-                catch (Exception error) { DetachError = error; }
+                catch (Exception error) { DetachError ??= error; }
             }
             Teardown();
         }
@@ -477,6 +531,7 @@ public sealed unsafe class GuestModule : IDisposable
     private void Teardown()
     {
         Memory.Clear();
+        FreeAllTebs();
         lock (resourceLock)
         {
             foreach (var (_, (map, length)) in buffers) Libc.Unmap(map, length);

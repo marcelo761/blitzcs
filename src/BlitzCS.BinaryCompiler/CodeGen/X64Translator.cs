@@ -15,6 +15,32 @@ namespace BlitzCS.BinaryCompiler.CodeGen;
 /// </summary>
 public sealed class X64Translator
 {
+    /// <summary>Returns null when the TLS directory has a form the runtime models, else the reason it cannot.</summary>
+    private static string? ValidateTls(PeImage image, PeTls tls, byte[] mapped, ControlFlowGraph cfg)
+    {
+        bool InImage(uint va, uint length) => va >= image.ImageBase && (ulong)(va - image.ImageBase) + length <= (ulong)mapped.Length;
+        if (tls.EndRaw < tls.StartRaw || (tls.EndRaw != tls.StartRaw && !InImage(tls.StartRaw, tls.EndRaw - tls.StartRaw)))
+            return $"TLS data template 0x{tls.StartRaw:X8}..0x{tls.EndRaw:X8} does not lie inside the image.";
+        if (!InImage(tls.IndexAddress, 4) || tls.IndexAddress % 4 != 0)
+            return $"TLS index address 0x{tls.IndexAddress:X8} is not a 4-byte aligned location inside the image.";
+        if (tls.SizeOfZeroFill > 0x100000 || tls.EndRaw - tls.StartRaw > 0x100000)
+            return "TLS data larger than 1 MiB per thread is not supported.";
+        if (tls.CallbacksVa != 0)
+        {
+            if (!InImage(tls.CallbacksVa, 4)) return $"TLS callback array 0x{tls.CallbacksVa:X8} does not lie inside the image.";
+            var callbacks = 0;
+            for (var at = tls.CallbacksVa - image.ImageBase; ; at += 4)
+            {
+                if ((ulong)at + 4 > (ulong)mapped.Length || callbacks > 64) return "The TLS callback array is not zero-terminated inside the image.";
+                var va = BitConverter.ToUInt32(mapped, (int)at);
+                if (va == 0) break;
+                callbacks++;
+                if (!cfg.Instructions.ContainsKey(va - image.ImageBase)) return $"TLS callback 0x{va:X8} is not translatable code.";
+            }
+        }
+        return null;
+    }
+
     public static TranslationArtifact Translate(PeImage image, BinaryCompilerOptions options, string cacheKey)
     {
         ArgumentNullException.ThrowIfNull(image);
@@ -78,8 +104,13 @@ public sealed class X64Translator
         var diagnostics = new List<BinaryDiagnostic>(image.Diagnostics);
         diagnostics.AddRange(cfg.Diagnostics);
         diagnostics.AddRange(gen.Diagnostics);
-        if (image.Tls is not null)
-            diagnostics.Add(new BinaryDiagnostic(DiagnosticSeverity.Warning, "BC_TLS_UNSUPPORTED", "The image has a TLS directory; thread-local storage and TLS callbacks are not translated."));
+        if (image.Tls is { } tls)
+        {
+            var problem = ValidateTls(image, tls, mapped, cfg);
+            diagnostics.Add(problem is null
+                ? new BinaryDiagnostic(DiagnosticSeverity.Info, "TLS_HANDLED", "Implicit TLS is modelled: per-thread TLS data, the TLS index and TLS callbacks are provided by the runtime.")
+                : new BinaryDiagnostic(DiagnosticSeverity.Error, "BC_TLS_UNSUPPORTED", problem));
+        }
         diagnostics.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "BC_FIXED_BASE", $"Translated code is bound to the fixed guest base 0x{image.ImageBase:X8}."));
 
         var exports = new List<TranslatedExport>();

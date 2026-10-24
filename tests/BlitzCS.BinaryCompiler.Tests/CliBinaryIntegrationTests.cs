@@ -68,7 +68,7 @@ public sealed class CliBinaryIntegrationTests : IDisposable
     [Fact]
     public void UnsupportedInstructionFailsTheBuildWithDiagnostic()
     {
-        var output = Prepare(TranslatorHarness.Asm(a => { a.db(0x64, 0x8B, 0x05, 0, 0, 0, 0); a.ret(); }));
+        var output = Prepare(TranslatorHarness.Asm(a => { a.db(0x65, 0x8B, 0x05, 0, 0, 0, 0); a.ret(); }));
         var text = Build(root, output, out var exit);
         Assert.Equal(1, exit);
         Assert.Contains("BC_SEGMENT_OVERRIDE", text);
