@@ -121,6 +121,7 @@ public sealed class Kernel32ExtraService : Win32Service
             {
                 state.ExitCode = 0xFFFFFFFF;
                 FaultTable.GetValue(ctx, _ => new Faults()).Queue.Enqueue(e);
+                ctx.PoisonProcess(e); // like an unhandled fault on Windows, but scoped to this module's Win32 state
             }
             finally { state.Finished = true; state.Done.Set(); }
         }) { IsBackground = true, Name = "guest-thread" };

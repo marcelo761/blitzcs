@@ -76,6 +76,8 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
 
     private static uint Invoke(Win32Context ctx, Win32Api api, GuestCall guest)
     {
+        ctx.Options.CallTrace?.Invoke($"[{Environment.CurrentManagedThreadId}] {api.Dll}!{api.Name}");
+        ctx.ThrowIfPoisoned();
         var mem = ctx.Bind(guest.Memory);
         Span<uint> args = stackalloc uint[api.ArgCount];
         for (var i = 0; i < args.Length; i++) args[i] = guest.Arg(i);
@@ -91,6 +93,8 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         var api = registry.Find(dll, name, null) ?? throw new KeyNotFoundException($"{dll}!{name} is not implemented.");
         if (args.Length < api.ArgCount || (!api.Variadic && args.Length != api.ArgCount))
             throw new ArgumentException($"{api} takes {api.ArgCount} argument(s), got {args.Length}.");
+        Context.Options.CallTrace?.Invoke($"[{Environment.CurrentManagedThreadId}] {api.Dll}!{api.Name}");
+        Context.ThrowIfPoisoned();
         Context.BindForHost(memory);
         var captured = args;
         return api.Handler(new Win32Call(Context, memory, args.AsSpan(0, api.ArgCount), api.Variadic ? i => captured[i] : null));

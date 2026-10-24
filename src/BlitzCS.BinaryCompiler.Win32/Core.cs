@@ -289,6 +289,9 @@ public sealed class Win32Options
     public long MaxAllocation { get; init; } = 256L * 1024 * 1024;
     /// <summary>Host answer for user32!MessageBoxA. Null: the API faults (no window system; the user is never assumed to have clicked).</summary>
     public Win32MessageBoxHandler? MessageBoxHandler { get; init; }
+
+    /// <summary>Diagnostics hook: called with "dll!name" before each Win32 API runs (thread id included in the text). Null (the default) costs nothing.</summary>
+    public Action<string>? CallTrace { get; init; }
     /// <summary>Receives OutputDebugStringA text (what an attached debugger would see). Null: no debugger is attached and the text is dropped, as on Windows.</summary>
     public Action<string>? DebugOutput { get; init; }
 }
@@ -315,6 +318,22 @@ public sealed class Win32Context : IDisposable
     }
 
     public Win32Options Options { get; }
+
+    private Exception? processFault;
+
+    /// <summary>
+    /// Set when a guest thread terminated abnormally. On Windows an unhandled fault ends the whole process; here the process is the host, so
+    /// instead every later Win32 call is refused with this cause. A thread that waits for the dead one fails promptly and explicitly instead of hanging.
+    /// </summary>
+    public Exception? ProcessFault => Volatile.Read(ref processFault);
+
+    public void PoisonProcess(Exception cause) => Interlocked.CompareExchange(ref processFault, cause, null);
+
+    internal void ThrowIfPoisoned()
+    {
+        if (Volatile.Read(ref processFault) is { } f)
+            throw new Win32UsageException($"A guest thread terminated abnormally ({f.GetType().Name}: {f.Message}); further Win32 calls are refused because the program state is undefined.");
+    }
     internal HeapState Heaps { get; }
     internal VirtualState Virtual { get; }
     internal SyncState Sync { get; }

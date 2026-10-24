@@ -84,8 +84,16 @@ public sealed class LiftingControlFlowTests
         Assert.Contains(T + 3, cfg.Instructions.Keys);
         Assert.Contains(T + 3, cfg.FunctionEntries);
         Assert.Contains(cfg.Diagnostics, d => d.Code == "CFG_RELOC_ROOTS" && d.Severity == DiagnosticSeverity.Info);
-        // without the relocation the pointer is just data
-        Assert.DoesNotContain(T + 3, Cfg(code, null, data).Instructions.Keys);
+        // Without a relocation table the word is still a candidate, but only because it points at something that looks like a function start
+        // (preceded by padding, clean trial decode); the root is reported by the scan diagnostic, not as a relocation root.
+        var scanned = Cfg(code, null, data);
+        Assert.Contains(T + 3, scanned.Instructions.Keys);
+        Assert.Contains(scanned.Diagnostics, d => d.Code == "CFG_POINTER_SCAN_ROOTS");
+        Assert.DoesNotContain(scanned.Diagnostics, d => d.Code == "CFG_RELOC_ROOTS");
+        // A word that points into the middle of an instruction is data, with or without a table.
+        var middle = new byte[0x100];
+        BinaryPrimitives.WriteUInt32LittleEndian(middle.AsSpan(0x20), CodeVa + 4);
+        Assert.DoesNotContain(T + 4, Cfg(code, null, middle).Instructions.Keys);
     }
 
     [Fact]

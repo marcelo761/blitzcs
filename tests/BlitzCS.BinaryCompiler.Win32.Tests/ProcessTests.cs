@@ -14,6 +14,33 @@ public sealed class ProcessTests
     };
 
     [Fact]
+    public void CallTraceReportsEveryApiThatRuns()
+    {
+        var seen = new List<string>();
+        using var w = new World(new Win32Options { CallTrace = seen.Add });
+        w.Kernel("SetLastError", 7);
+        w.Kernel("GetLastError");
+        Assert.Equal(2, seen.Count);
+        Assert.EndsWith("KERNEL32.dll!SetLastError", seen[0]);
+        Assert.EndsWith("KERNEL32.dll!GetLastError", seen[1]);
+        using var silent = new World(); // no hook: nothing is observed and nothing breaks
+        silent.Kernel("GetLastError");
+    }
+
+    [Fact]
+    public void AbnormalGuestThreadTerminationRefusesFurtherWin32CallsWithTheCause()
+    {
+        using var w = new World();
+        w.Kernel("GetLastError"); // fine before the fault
+        w.R.Context.PoisonProcess(new InvalidOperationException("boom"));
+        var error = Assert.Throws<Win32UsageException>(() => w.Kernel("GetLastError"));
+        Assert.Contains("InvalidOperationException", error.Message);
+        Assert.Contains("boom", error.Message);
+        w.R.Context.PoisonProcess(new Exception("second")); // the first cause is kept
+        Assert.Contains("boom", Assert.Throws<Win32UsageException>(() => w.Kernel("GetLastError")).Message);
+    }
+
+    [Fact]
     public void ErrorsArePerThread()
     {
         using var w = new World();

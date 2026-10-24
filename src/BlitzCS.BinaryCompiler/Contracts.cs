@@ -99,5 +99,5 @@ public enum OptimizationProfile { Debug, Release, ReleasePgo }
 /// <param name="LoadBase">Guest base address to translate for (64 KiB aligned, below 4 GiB). Null = the image's preferred base. Translated code embeds absolute addresses, so this is part of the cache key.</param>
 public sealed record BinaryCompilerOptions(OptimizationProfile Profile = OptimizationProfile.Release, string TargetArchitecture = "x64", string TargetOs = "linux-sysv", uint? LoadBase = null)
 {
-    public const string CompilerVersion = "0.5.0";
+    public const string CompilerVersion = "0.6.0";
 }

@@ -79,7 +79,7 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
         speculative = true;
         var starts = insts.Values.ToArray();
         var candidates = new SortedSet<uint>();
-        foreach (var rel in image.Relocations.Where(r => r.Type == 3).Select(r => r.Rva).Order())
+        foreach (var rel in PointerSlots())
         {
             if ((ulong)rel + 4 > (ulong)mapped.Length) continue;
             var v = BitConverter.ToUInt32(mapped, (int)rel);
@@ -87,18 +87,115 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
             var t = v - image.ImageBase;
             if (!IsExec(t) || insts.ContainsKey(t)) { if (insts.ContainsKey(t)) candidates.Add(t); continue; }
             if (InsideDecoded(starts, t)) continue;
+            if (image.Relocations.Count == 0 && (InsideDecoded(starts, rel) || !LooksLikeFunctionStart(t))) continue;
             candidates.Add(t);
         }
         foreach (var t in candidates) Enqueue(t, true);
-        if (candidates.Count > 0)
+        if (image.Relocations.Count == 0 && candidates.Count > 0)
+            diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "CFG_POINTER_SCAN_ROOTS", $"The image has no relocation table; {candidates.Count} data dword(s) among {pointerScanSlots} scanned point into code and were treated as potential function pointers."));
+        else if (candidates.Count > 0)
             diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "CFG_RELOC_ROOTS", $"{candidates.Count} relocation target(s) in executable sections were treated as potential function pointers."));
         Drain();
+        if (image.Relocations.Count == 0) DiscoverImmediateRoots();
 
         return new ControlFlowGraph
         {
             Instructions = insts, Leaders = leaders, FunctionEntries = entries, Undecodable = undecodable,
             Blocks = BuildBlocks(), Diagnostics = diags,
         };
+    }
+
+    /// <summary>
+    /// Locations that may hold code pointers. With a relocation table these are exactly the HIGHLOW fixups. Without one (stripped or
+    /// derived images, e.g. unpacked ones) every aligned dword of a file-backed section outside decoded code is a candidate; a candidate
+    /// only becomes a root when its value lands in file-backed executable memory, and such roots are speculative (warnings, not errors).
+    /// </summary>
+    private IEnumerable<uint> PointerSlots()
+    {
+        if (image.Relocations.Any(r => r.Type == 3))
+        {
+            foreach (var rva in image.Relocations.Where(r => r.Type == 3).Select(r => r.Rva).Order()) yield return rva;
+            yield break;
+        }
+        var count = 0;
+        // Every file-backed section is scanned: images produced by packers keep code and data in the same section. The caller drops the dwords
+        // that lie inside decoded instructions, so only data words remain.
+        foreach (var section in image.Sections.Where(x => x.RawSize != 0))
+        {
+            var size = Math.Min(section.VirtualSize != 0 ? section.VirtualSize : section.RawSize, section.RawSize);
+            var start = (section.VirtualAddress + 3u) & ~3u;
+            var end = (uint)Math.Min((ulong)section.VirtualAddress + size, (ulong)mapped.Length);
+            for (var at = start; at + 4 <= end; at += 4) { count++; yield return at; }
+        }
+        pointerScanSlots = count;
+    }
+
+    private int pointerScanSlots;
+
+    /// <summary>
+    /// Without relocations the addresses of functions that are only stored (callback registration: <c>push offset f</c>,
+    /// <c>mov [mem], offset f</c>) cannot be told from other constants by a fixup. Any 32-bit immediate of a decoded instruction that
+    /// equals the address of file-backed executable memory, not inside an already decoded instruction, is a speculative root. Repeated
+    /// to a fixed point because each new function can reveal more.
+    /// </summary>
+    private void DiscoverImmediateRoots()
+    {
+        var seen = new HashSet<uint>();
+        for (var round = 0; round < 32; round++)
+        {
+            var starts = insts.Values.ToArray();
+            var fresh = new SortedSet<uint>();
+            foreach (var g in starts)
+                for (var i = 0; i < g.Instr.OpCount; i++)
+                {
+                    if (g.Instr.GetOpKind(i) != OpKind.Immediate32) continue;
+                    var v = g.Instr.Immediate32;
+                    if (v < image.ImageBase) continue;
+                    var t = v - image.ImageBase;
+                    if (!IsExec(t) || insts.ContainsKey(t) || InsideDecoded(starts, t) || !seen.Add(t)) continue;
+                    if (!LooksLikeFunctionStart(t)) { rejectedAsData++; continue; }
+                    fresh.Add(t);
+                }
+            if (fresh.Count == 0) break;
+            foreach (var t in fresh) Enqueue(t, true);
+            Drain();
+        }
+        if (seen.Count > 0)
+            diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "CFG_IMMEDIATE_ROOTS", $"The image has no relocation table; {seen.Count - rejectedAsData} code address(es) held as instruction immediates were treated as potential function pointers ({rejectedAsData} more did not look like function starts and were ignored)."));
+    }
+
+    private int rejectedAsData;
+
+    /// <summary>Instructions that compiled user-mode code does not contain; meeting one in a trial decode means the bytes are data.</summary>
+    private static bool IsUserModeNonsense(Mnemonic m) => m is Mnemonic.In or Mnemonic.Out or Mnemonic.Insb or Mnemonic.Insw or Mnemonic.Insd
+        or Mnemonic.Outsb or Mnemonic.Outsw or Mnemonic.Outsd or Mnemonic.Cli or Mnemonic.Sti or Mnemonic.Hlt or Mnemonic.Bound or Mnemonic.Into
+        or Mnemonic.Lgdt or Mnemonic.Lidt or Mnemonic.Lldt or Mnemonic.Ltr or Mnemonic.Wrmsr or Mnemonic.Rdmsr or Mnemonic.Invd or Mnemonic.Wbinvd
+        or Mnemonic.Arpl or Mnemonic.Aaa or Mnemonic.Aas or Mnemonic.Daa or Mnemonic.Das or Mnemonic.Salc or Mnemonic.Retf or Mnemonic.Iretd
+       ;
+
+    /// <summary>
+    /// Evidence that a guessed address starts a function rather than pointing into inline data: the preceding byte ends a function or is padding
+    /// (ret, ret imm16, int3, nop) and a short trial decode is clean. Used only for pointer guesses without relocations.
+    /// </summary>
+    private bool LooksLikeFunctionStart(uint t)
+    {
+        if (t == 0 || t >= mapped.Length) return false;
+        var before = mapped[t - 1];
+        var afterRet = before is 0xC3 or 0xCC or 0x90 || (t >= 3 && mapped[t - 3] == 0xC2);
+        if (!afterRet) return false;
+        var end = ExecEnd(t);
+        if (end == 0) return false;
+        var decoder = Iced.Intel.Decoder.Create(32, new ByteArrayCodeReader(mapped, (int)t, (int)Math.Min(end - t, 512u)), image.ImageBase + t);
+        var zeroAdds = 0;
+        for (var n = 0; n < 48; n++)
+        {
+            var ins = decoder.Decode();
+            if (ins.IsInvalid || IsUserModeNonsense(ins.Mnemonic)) return false;
+            zeroAdds = ins.Code == Code.Add_rm8_r8 && ins.Length == 2 && mapped[ins.IP - image.ImageBase] == 0 ? zeroAdds + 1 : 0;
+            if (zeroAdds >= 3) return false;
+            if (ins.FlowControl is FlowControl.Return or FlowControl.UnconditionalBranch or FlowControl.IndirectBranch) return true;
+        }
+        return true;
     }
 
     private void EnqueueRoot(uint rva, string what)
