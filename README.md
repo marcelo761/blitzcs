@@ -50,6 +50,8 @@ This is a source distribution: no published NuGet package, global tool installat
 
 See [compiler architecture](docs/architecture.md), [external functions](docs/external-functions.md), [native interoperability](docs/native-interop-m13.md) and the [proposed Blitz3DCS architecture](docs/blitz3dcs-architecture.md).
 
+Historical API [profiles](docs/api-profiles.md) compose declarations and real providers through `--externals`. Declaration validation does not imply runtime support; builds reject required unbound calls. See [measured original-source compatibility](docs/legacy-source-compatibility.md).
+
 ## BASIC and C# in one program
 
 This is the checked-in [answer example](samples/Hybrid/answer.bb):
