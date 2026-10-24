@@ -19,11 +19,30 @@ public static class CliApplication
             target = args[targetAt + 1];
             args = [.. args[..targetAt], .. args[(targetAt + 2)..]];
         }
+        string? packageOutput = null;
+        string? assets = null;
+        var graphical = args.Contains("--gui");
+        args = args.Where(arg => arg != "--gui").ToArray();
+        var assetsAt = Array.IndexOf(args, "--assets");
+        if (assetsAt >= 0)
+        {
+            if (assetsAt + 1 >= args.Length) { error.WriteLine("--assets expects a directory."); return 2; }
+            assets = args[assetsAt + 1];
+            args = [.. args[..assetsAt], .. args[(assetsAt + 2)..]];
+        }
+        // Keep explicit DLL emission for existing tooling and compiler regression tests.
+        var outputAt = Array.IndexOf(args, "-o");
+        if (outputAt >= 0 && outputAt + 1 < args.Length && !args[outputAt + 1].EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        {
+            packageOutput = args[outputAt + 1];
+            args = [.. args[..outputAt], .. args[(outputAt + 2)..]];
+        }
+        var packageBuild = args.Length is 2 or 4 && args[0] == "build" && (args.Length == 2 || args[2] == "--externals");
         var syntaxOnly = args.Length == 2 && args[0] == "check-syntax";
         var semanticsOnly = args.Length is 2 or 4 && args[0] == "check-semantics" && (args.Length == 2 || args[2] == "--externals");
-        if (!syntaxOnly && !semanticsOnly && (args.Length is not (4 or 6) || args[0] != "build" || args[2] != "-o" || args.Length == 6 && args[4] != "--externals"))
+        if (!packageBuild && !syntaxOnly && !semanticsOnly && (args.Length is not (4 or 6) || args[0] != "build" || args[2] != "-o" || args.Length == 6 && args[4] != "--externals"))
         {
-            error.WriteLine("Usage: blitzcs build <source.bb> -o <output.dll> [--externals <catalog.json>] [--target linux-x64|windows-x64]");
+            error.WriteLine("Usage: blitzcs build <source.bb> [-o <package-directory|output.dll>] [--externals <catalog.json>] [--target linux-x64|windows-x64] [--assets <directory>] [--gui]");
             error.WriteLine("       blitzcs check-syntax <source.bb>");
             error.WriteLine("       blitzcs check-semantics <source.bb> [--externals <catalog.json>]");
             return 2;
@@ -51,6 +70,27 @@ public static class CliApplication
                 output.WriteLine($"Semantic validation succeeded; {unbound.Count} external call(s) lack implementations.");
                 return 0;
             }
+            if (packageBuild)
+            {
+                // Application and translated native code must always agree about the runtime target.
+                var applicationTarget = target is null ? BinaryTargets.WindowsX64 : BinaryTargets.Normalize(target);
+                using var packageCatalog = args.Length == 4
+                    ? ExternalCatalog.Load(args[3], applicationTarget)
+                    : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
+                var code = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, packageCatalog.Functions, out var inputs);
+                var name = Path.GetFileNameWithoutExtension(sourcePath);
+                var destination = packageOutput ?? Path.Combine("dist", name);
+                if (destination.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    name = Path.GetFileNameWithoutExtension(destination);
+                    destination = Path.Combine(Path.GetDirectoryName(destination) ?? ".", name);
+                }
+                ApplicationPublisher.Build(code, destination, name, applicationTarget, packageCatalog,
+                    args.Length == 4 ? inputs.Append(args[3]) : inputs, output, error, assets, graphical);
+                return 0;
+            }
+            if (packageOutput is not null || assets is not null || graphical)
+                throw new ArgumentException("--assets and --gui require an application package build.");
             var outputPath = Path.GetFullPath(args[3]);
             using var catalog = args.Length == 6
                 ? ExternalCatalog.Load(args[5], target)
@@ -67,7 +107,7 @@ public static class CliApplication
         catch (Exception exception) when (exception is BasicDiagnosticException
             or IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException
             or System.Text.Json.JsonException or KeyNotFoundException or TypeLoadException or BadImageFormatException
-            or System.Reflection.AmbiguousMatchException or PeRebaseException)
+            or System.Reflection.AmbiguousMatchException or PeRebaseException or System.ComponentModel.Win32Exception)
         {
             error.WriteLine(exception.Message);
             return 1;

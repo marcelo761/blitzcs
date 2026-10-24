@@ -6,6 +6,8 @@ Created and led by **Marcelo Buratti de Freitas Filho**, the project explores ho
 
 BlitzCS is an independent project. It is not an official Blitz Research, Microsoft, FMOD, or SCP project.
 
+`blitzcs build Main.bb` now defaults to a self-contained Windows x64 package at `dist/Main/Main.exe`, including when compiling on Linux. See [Windows application builds](docs/windows-build.md) for tool installation, assets, explicit Linux builds and validation, and [native-library status](docs/windows-native-status.md) for BCSBRE support and limits.
+
 ## Quick start
 
 For the verified full-solution build, use **Linux**, the **.NET 10 SDK**, and a **C compiler available as `cc`**. The native integration test project explicitly requires Linux. Run these commands from a checkout of this repository:

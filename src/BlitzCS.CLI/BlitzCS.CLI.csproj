@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>blitzcs</ToolCommandName>
+    <PackageId>BlitzCS.Tool</PackageId>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../BlitzCS.Compiler/BlitzCS.Compiler.csproj" />
@@ -8,7 +11,7 @@
     <ProjectReference Include="../BlitzCS.BinaryCompiler.Runtime/BlitzCS.BinaryCompiler.Runtime.csproj" />
     <ProjectReference Include="../BlitzCS.BinaryCompiler.Win32/BlitzCS.BinaryCompiler.Win32.csproj" />
     <!-- Loaded by name only for catalog "unpack": true; built and copied beside the compiler, never referenced by it. -->
-    <ProjectReference Include="../BlitzCS.BinaryCompiler.Unpack/BlitzCS.BinaryCompiler.Unpack.csproj" ReferenceOutputAssembly="false" OutputItemType="Content" CopyToOutputDirectory="PreserveNewest" />
+    <ProjectReference Include="../BlitzCS.BinaryCompiler.Unpack/BlitzCS.BinaryCompiler.Unpack.csproj" ReferenceOutputAssembly="false" OutputItemType="Content" Pack="false" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
   </ItemGroup>
 </Project>

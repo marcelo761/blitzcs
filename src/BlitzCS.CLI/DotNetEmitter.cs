@@ -154,7 +154,7 @@ public static class DotNetEmitter
         }
     }
 
-    private static string CanonicalPath(string path)
+    internal static string CanonicalPath(string path)
     {
         var fullPath = Path.GetFullPath(path);
         var current = Path.GetPathRoot(fullPath)!;
