@@ -1,0 +1,120 @@
+{
+  "runtime": ".NET 10.0.12",
+  "architecture": "X64",
+  "iterations": 500000,
+  "warmup": 20000,
+  "rounds": 5,
+  "native_enabled": true,
+  "native_video_driver": "dummy",
+  "note": "Median wall time and calling-thread managed allocation per operation; state cycle performs multiple events/queries. SDL dummy is a real native backend without desktop input. No timing assertion, native allocation measurement, original-runtime speed or rendering claim.",
+  "results": [
+    {
+      "name": "state-empty-poll",
+      "median_nanoseconds_per_operation": 29.315026,
+      "median_allocated_bytes_per_operation": 0,
+      "nanoseconds_per_operation_by_round": [
+        28.312964,
+        29.315026,
+        28.52361,
+        41.317716,
+        31.614664
+      ],
+      "allocated_bytes_by_round": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "checksum_by_round": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "expected_checksum_per_round": 0
+    },
+    {
+      "name": "state-event-and-poll-cycle",
+      "median_nanoseconds_per_operation": 27.742148,
+      "median_allocated_bytes_per_operation": 0,
+      "nanoseconds_per_operation_by_round": [
+        120.916928,
+        98.345896,
+        26.708422,
+        27.742148,
+        27.13053
+      ],
+      "allocated_bytes_by_round": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "checksum_by_round": [
+        22000000,
+        22000000,
+        22000000,
+        22000000,
+        22000000
+      ],
+      "expected_checksum_per_round": 22000000
+    },
+    {
+      "name": "native-dummy-empty-pump",
+      "median_nanoseconds_per_operation": 1159.170768,
+      "median_allocated_bytes_per_operation": 0,
+      "nanoseconds_per_operation_by_round": [
+        1159.170768,
+        1134.128498,
+        1151.66833,
+        1201.038106,
+        1187.023288
+      ],
+      "allocated_bytes_by_round": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "checksum_by_round": [
+        500000,
+        500000,
+        500000,
+        500000,
+        500000
+      ],
+      "expected_checksum_per_round": 500000
+    },
+    {
+      "name": "native-dummy-keydown-poll",
+      "median_nanoseconds_per_operation": 1129.839098,
+      "median_allocated_bytes_per_operation": 0,
+      "nanoseconds_per_operation_by_round": [
+        1129.839098,
+        1144.77122,
+        1126.085426,
+        1112.925674,
+        1162.751796
+      ],
+      "allocated_bytes_by_round": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "checksum_by_round": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "expected_checksum_per_round": 0
+    }
+  ]
+}

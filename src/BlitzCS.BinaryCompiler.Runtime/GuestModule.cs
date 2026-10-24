@@ -27,6 +27,8 @@ public sealed unsafe class GuestModule : IDisposable
     {
         public int Holds, Depth;
         public uint ImportEsp;
+        public Exception? PendingFault;
+        public unsafe byte* CallContext;
     }
 
     private sealed class GuestStack
@@ -37,7 +39,6 @@ public sealed unsafe class GuestModule : IDisposable
     private readonly TranslationArtifact artifact;
     private readonly GuestModuleOptions options;
     private readonly ReaderWriterLockSlim lifetime = new(LockRecursionPolicy.SupportsRecursion);
-    private readonly object callLock = new();
     private readonly object resourceLock = new();
     private readonly ThreadLocal<ThreadState> threadState = new(() => new ThreadState());
     private readonly List<GuestStack> allStacks = [];
@@ -47,7 +48,6 @@ public sealed unsafe class GuestModule : IDisposable
     private GuestImport[] boundImports = [];
     private nint guestMap, hostMap;
     private nuint guestMapLength, hostMapLength;
-    private Exception? pendingFault;
     private bool attached, disposed;
 
     private GuestModule(TranslationArtifact artifact, GuestModuleOptions options)
@@ -128,8 +128,11 @@ public sealed unsafe class GuestModule : IDisposable
         {
             var imp = artifact.Imports[i];
             var resolved = resolver.Resolve(imp.Dll, imp.Name, imp.Ordinal);
-            if (resolved is null) missing.Add($"{imp.Dll}!{imp.Name ?? "#" + imp.Ordinal}");
-            else bound[i] = resolved;
+            var label = $"{imp.Dll}!{imp.Name ?? "#" + imp.Ordinal}";
+            if (resolved is not null) bound[i] = resolved;
+            else if (options.AllowUnboundImports)
+                bound[i] = GuestImport.Create(_ => throw new GuestImportException($"The guest called unbound import {label}, which no host service provides."), 0);
+            else missing.Add(label);
         }
         if (missing.Count > 0)
             throw new GuestImportException("Unbound import(s): " + string.Join(", ", missing) + ".");
@@ -272,7 +275,6 @@ public sealed unsafe class GuestModule : IDisposable
 
     private uint InvokeCore(nint hostTarget, ReadOnlySpan<uint> args)
     {
-        lock (callLock)
         {
             var state = threadState.Value!;
             var outermost = state.Depth == 0;
@@ -283,7 +285,7 @@ public sealed unsafe class GuestModule : IDisposable
             {
                 stack = RentStack();
                 start = stack.Top;
-                pendingFault = null;
+                state.PendingFault = null;
             }
             else
             {
@@ -307,17 +309,29 @@ public sealed unsafe class GuestModule : IDisposable
                 if (options.CheckStackCanary)
                     for (var a = canaryStart; a < canaryTop; a += 4) *(uint*)(nuint)a = CanaryWord;
 
-                var enter = (delegate* unmanaged<ulong, uint, ulong>)(hostMap + (nint)artifact.EnterGuestOffset);
+                var enter = (delegate* unmanaged<ulong, uint, ulong, ulong>)(hostMap + (nint)artifact.EnterGuestOffset);
+                byte* callContext = stackalloc byte[64];
+                new Span<byte>(callContext, 64).Clear();
                 current = this;
                 state.Depth++;
+                var savedContext = state.CallContext;
+                state.CallContext = callContext;
                 uint eax;
-                try { eax = (uint)enter((ulong)hostTarget, esp); }
-                finally { state.Depth--; current = previous; state.ImportEsp = savedEsp; }
+                try { eax = (uint)enter((ulong)hostTarget, esp, (ulong)callContext); }
+                finally { state.Depth--; current = previous; state.ImportEsp = savedEsp; state.CallContext = savedContext; }
 
-                var fault = pendingFault;
+                var trapKind = *(uint*)(callContext + 16);
+                if (trapKind != 0)
+                {
+                    var trapAddress = *(ulong*)(callContext + 24);
+                    throw new GuestTrapException(trapKind == 1
+                        ? $"Guest control flow reached untranslated code at 0x{trapAddress:X8} (indirect target not discovered at build time)."
+                        : $"Guest executed an instruction the translator rejected at 0x{trapAddress:X8}.");
+                }
+                var fault = state.PendingFault;
                 if (fault is not null)
                 {
-                    if (outermost) pendingFault = null;
+                    if (outermost) state.PendingFault = null;
                     throw new GuestImportException($"A managed import failed during the guest call: {fault.GetType().Name}: {fault.Message}", fault);
                 }
                 if (options.CheckStackCanary)
@@ -341,14 +355,17 @@ public sealed unsafe class GuestModule : IDisposable
         if (module is null) return pop; // no owning call on this thread; nothing can observe a fault
         try
         {
-            if (module.pendingFault is not null) return pop; // after a fault the rest of the call is a no-op
-            module.threadState.Value!.ImportEsp = esp;
+            var state = module.threadState.Value!;
+            if (state.PendingFault is not null) return pop; // after a fault the rest of the call is a no-op
+            state.ImportEsp = esp;
             return handler(new GuestCall(module.Memory, esp)) | pop;
         }
         catch (Exception error)
         {
             module.LastImportFault = error;
-            module.pendingFault ??= error;
+            var faulted = module.threadState.Value!;
+            faulted.PendingFault ??= error;
+            if (faulted.CallContext != null) *(uint*)(faulted.CallContext + 32) = 1; // makes the import stub abandon the guest call
             return pop;
         }
     }

@@ -1,0 +1,3934 @@
+{
+ "abi": {
+  "emptyExportCallNsPerCall": {
+   "N": 15,
+   "Median": 135.2245,
+   "P10": 133.2534,
+   "P90": 138.6054,
+   "Min": 129.8775,
+   "Max": 146.0675,
+   "Mean": 136.0181333333333,
+   "StdDev": 3.671902034692777
+  },
+  "addThreeArgsExportCallNsPerCall": {
+   "N": 15,
+   "Median": 144.865,
+   "P10": 138.43019999999999,
+   "P90": 176.7251,
+   "Min": 136.7845,
+   "Max": 249.8425,
+   "Mean": 154.53523333333337,
+   "StdDev": 29.2333687656434
+  },
+  "importCallbackNsPerGuestCallbackIncludingLoop": {
+   "N": 15,
+   "Median": 60.8145,
+   "P10": 58.1927,
+   "P90": 85.93339999999999,
+   "Min": 57.255,
+   "Max": 94.312,
+   "Mean": 66.05173333333333,
+   "StdDev": 11.977425800925115
+  },
+  "nestedImportThenGuestExportNsPerIteration": {
+   "N": 15,
+   "Median": 165.9445,
+   "P10": 164.1534,
+   "P90": 200.23430000000002,
+   "Min": 163.5575,
+   "Max": 203.363,
+   "Mean": 172.69936666666666,
+   "StdDev": 14.825274889605957
+  },
+  "nativeEquivalentLoopNsPerIteration": {
+   "callThroughFunctionPointer": 1.360565985,
+   "directNopCall": 1.05207905
+  },
+  "managedToNativeUnmanagedFunctionPointerNsPerCall": {
+   "N": 15,
+   "Median": 1.988,
+   "P10": 1.9702,
+   "P90": 2.2809,
+   "Min": 1.957,
+   "Max": 2.6615,
+   "Mean": 2.0967333333333333,
+   "StdDev": 0.19205066915741148
+  },
+  "referenceGuestLoopNsPerIteration": {
+   "N": 15,
+   "Median": 1.803,
+   "P10": 1.7842,
+   "P90": 2.0476,
+   "Min": 1.781,
+   "Max": 2.6215,
+   "Mean": 1.905433333333333,
+   "StdDev": 0.21915437046802905
+  },
+  "lockReferenceNs": {
+   "readerWriterLockSlimRecursiveEnterExitReadNs": {
+    "N": 15,
+    "Median": 21.173,
+    "P10": 20.537000000000003,
+    "P90": 23.3278,
+    "Min": 20.4705,
+    "Max": 25.093,
+    "Mean": 21.803700000000003,
+    "StdDev": 1.333767606658457
+   },
+   "monitorEnterExitUncontendedNs": {
+    "N": 15,
+    "Median": 17.3715,
+    "P10": 16.8776,
+    "P90": 19.213,
+    "Min": 16.788,
+    "Max": 20.5875,
+    "Mean": 17.79776666666667,
+    "StdDev": 1.1209206972501706
+   }
+  },
+  "importCallbacksObserved": 14000000,
+  "interpretation": "emptyExport = managed->guest->managed round trip (lock, stack setup, EnterGuest/Exit). importCallback = guest->managed->guest-return per call (spill, native stack switch, UnmanagedCallersOnly thunk, GuestCall handler). nested = callback + managed->guest re-entry (nop_fn) inside the handler; subtract callback for the nested-call cost."
+ },
+ "codeSize": {
+  "originalCodeBytes": 2900,
+  "hostImageBytes": 762208,
+  "hostCodeBytes": 8192,
+  "hostRwDataBytes": 754016,
+  "addressMapEntries": 193,
+  "functionsTotal": {
+   "guestBytes": 2772,
+   "hostBytes": 5194,
+   "guestInstructions": 809,
+   "hostInstructions": 1197,
+   "byteExpansion": 1.8737373737373737,
+   "staticInstructionExpansion": 1.4796044499381953
+  },
+  "perFunction": [
+   {
+    "name": "w_init",
+    "guestBytes": 384,
+    "hostBytes": 448,
+    "guestInstructions": 99,
+    "hostInstructions": 105
+   },
+   {
+    "name": "nop_fn",
+    "guestBytes": 16,
+    "hostBytes": 48,
+    "guestInstructions": 4,
+    "hostInstructions": 10
+   },
+   {
+    "name": "add3",
+    "guestBytes": 16,
+    "hostBytes": 64,
+    "guestInstructions": 5,
+    "hostInstructions": 13
+   },
+   {
+    "name": "w_int",
+    "guestBytes": 112,
+    "hostBytes": 224,
+    "guestInstructions": 43,
+    "hostInstructions": 58
+   },
+   {
+    "name": "w_fnv",
+    "guestBytes": 96,
+    "hostBytes": 128,
+    "guestInstructions": 26,
+    "hostInstructions": 32
+   },
+   {
+    "name": "w_crc",
+    "guestBytes": 144,
+    "hostBytes": 144,
+    "guestInstructions": 36,
+    "hostInstructions": 36
+   },
+   {
+    "name": "w_mem",
+    "guestBytes": 208,
+    "hostBytes": 304,
+    "guestInstructions": 62,
+    "hostInstructions": 76
+   },
+   {
+    "name": "fib",
+    "guestBytes": 80,
+    "hostBytes": 160,
+    "guestInstructions": 27,
+    "hostInstructions": 39
+   },
+   {
+    "name": "w_fib",
+    "guestBytes": 16,
+    "hostBytes": 16,
+    "guestInstructions": 3,
+    "hostInstructions": 2
+   },
+   {
+    "name": "leaf1",
+    "guestBytes": 16,
+    "hostBytes": 96,
+    "guestInstructions": 4,
+    "hostInstructions": 17
+   },
+   {
+    "name": "leaf2",
+    "guestBytes": 16,
+    "hostBytes": 80,
+    "guestInstructions": 7,
+    "hostInstructions": 17
+   },
+   {
+    "name": "mid",
+    "guestBytes": 32,
+    "hostBytes": 128,
+    "guestInstructions": 11,
+    "hostInstructions": 26
+   },
+   {
+    "name": "w_calls",
+    "guestBytes": 96,
+    "hostBytes": 224,
+    "guestInstructions": 31,
+    "hostInstructions": 49
+   },
+   {
+    "name": "w_switch",
+    "guestBytes": 304,
+    "hostBytes": 640,
+    "guestInstructions": 89,
+    "hostInstructions": 129
+   },
+   {
+    "name": "w_ind",
+    "guestBytes": 112,
+    "hostBytes": 256,
+    "guestInstructions": 32,
+    "hostInstructions": 55
+   },
+   {
+    "name": "w_lz",
+    "guestBytes": 368,
+    "hostBytes": 496,
+    "guestInstructions": 100,
+    "hostInstructions": 108
+   },
+   {
+    "name": "w_matmul",
+    "guestBytes": 304,
+    "hostBytes": 384,
+    "guestInstructions": 82,
+    "hostInstructions": 90
+   },
+   {
+    "name": "w_x87",
+    "guestBytes": 112,
+    "hostBytes": 144,
+    "guestInstructions": 30,
+    "hostInstructions": 35
+   },
+   {
+    "name": "w_sse",
+    "guestBytes": 112,
+    "hostBytes": 224,
+    "guestInstructions": 30,
+    "hostInstructions": 47
+   },
+   {
+    "name": "w_cbloop",
+    "guestBytes": 228,
+    "hostBytes": 986,
+    "guestInstructions": 88,
+    "hostInstructions": 253
+   }
+  ],
+  "note": "Host bytes of a guest instruction include any translator stub emitted between it and the next mapped instruction. Guest bytes include embedded rodata (jump/function tables) that follows each function in .text."
+ },
+ "coldStart": {
+  "dotnetRuntimeStartupFloorMs": {
+   "N": 15,
+   "Median": 25.7235,
+   "P10": 23.41496,
+   "P90": 28.420920000000002,
+   "Min": 22.8787,
+   "Max": 29.484,
+   "Mean": 25.891459999999995,
+   "StdDev": 1.9080979904456847
+  },
+  "dotnetProcessWithCachedTranslationLoadAndOneCallMs": {
+   "N": 15,
+   "Median": 76.2093,
+   "P10": 71.84268,
+   "P90": 91.62826,
+   "Min": 69.4086,
+   "Max": 97.316,
+   "Mean": 78.81901333333333,
+   "StdDev": 8.397644735610324
+  },
+  "incrementalCostOverRuntimeFloorMs": 50.4858,
+  "nativeElf32ProcessLaunchMs": {
+   "N": 15,
+   "Median": 0.7728,
+   "P10": 0.75638,
+   "P90": 0.9037,
+   "Min": 0.7544,
+   "Max": 1.0852,
+   "Mean": 0.8094466666666666,
+   "StdDev": 0.09114733650733273
+  },
+  "note": "Whole-process wall time including 'dotnet' host start; the child reads the cached artifact, loads the module and performs one export call."
+ },
+ "load": {
+  "loadMs": {
+   "N": 15,
+   "Median": 0.3,
+   "P10": 0.29306,
+   "P90": 0.49138,
+   "Min": 0.2891,
+   "Max": 6.6527,
+   "Mean": 0.7479933333333334,
+   "StdDev": 1.6350357735128203
+  },
+  "rssBeforeKb": 87080,
+  "rssAfterOneModuleKb": 88148,
+  "rssDeltaKb": 1068
+ },
+ "meta": {
+  "generatedUtc": "2026-10-24T03:10:42.7440797Z",
+  "commit": "9cc097a1c355cb7a7c424527d19d584119a5f61e",
+  "workingTreeDirty": true,
+  "cpu": "Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz",
+  "logicalCpus": 12,
+  "kernel": "7.2.9-ogc3.1.fc44.x86_64",
+  "os": "Bazzite",
+  "memTotalKb": "24505820",
+  "virtualization": "none",
+  "cpuGovernor": "performance",
+  "intelNoTurbo": "0",
+  "perfEventParanoid": "2",
+  "dotnet": ".NET 10.0.12",
+  "gcc": "gcc (GCC) 16.2.1 20260819 (Red Hat 16.2.1-2)",
+  "oracleCompileFlags": "-m32 -O2 -ffreestanding -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fcf-protection=none -fno-builtin -nostdlib",
+  "pinnedCpu": 3,
+  "samplesPerWorkload": 15,
+  "targetNativeMs": 150,
+  "commandLine": "dotnet run -c Release --project benchmarks/BlitzCS.BinaryCompiler.Bench -- --out docs/evidence/m21-binary-benchmark.json   (see docs/binary-benchmark.md; the recorded runs additionally used --reuse-n to keep identical iteration counts between the baseline and optimized builds)",
+  "method": "Per sample, interleaved (order alternates): (a) native ELF32 oracle process pinned with taskset, self-timed (clock_gettime + rdtsc) around the workload with in-process user-space perf_event_open counters; (b) the same machine code translated and run through GuestModule on the pinned .NET thread, timed with Stopwatch and perf_event_open on that thread. Both run w_init(12345) first and must return identical checksums."
+ },
+ "perfCountersAvailable": [
+  {
+   "counter": "cycles",
+   "available": true
+  },
+  {
+   "counter": "instructions",
+   "available": true
+  },
+  {
+   "counter": "branch_misses",
+   "available": true
+  },
+  {
+   "counter": "cache_misses",
+   "available": true
+  }
+ ],
+ "translation": {
+  "coldTranslateMs": {
+   "N": 9,
+   "Median": 16.65,
+   "P10": 15.216059999999999,
+   "P90": 67.91500000000002,
+   "Min": 15.1495,
+   "Max": 162.3162,
+   "Mean": 37.04372222222222,
+   "StdDev": 47.883219962184505
+  },
+  "peParseOnlyMs": {
+   "N": 9,
+   "Median": 0.5042,
+   "P10": 0.45644,
+   "P90": 1.08244,
+   "Min": 0.4238,
+   "Max": 2.0882,
+   "Mean": 0.7145555555555556,
+   "StdDev": 0.5290806888157777
+  },
+  "cacheHitMs": {
+   "N": 25,
+   "Median": 2.4226,
+   "P10": 2.21502,
+   "P90": 3.77464,
+   "Min": 2.1603,
+   "Max": 5.3873,
+   "Mean": 2.8336200000000002,
+   "StdDev": 0.8136838565028394
+  },
+  "note": "BinaryBuild.Translate end-to-end (read file + parse + hash + translate + cache write) in-process after JIT warm-up of the first run; the first cold sample includes JIT."
+ },
+ "workloads": [
+  {
+   "name": "int",
+   "description": "integer xorshift/multiply/rotate loop",
+   "export": "w_int",
+   "n": 83385231,
+   "resultChecksum": "0xFC45CDFC",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 155790827,
+     "P10": 154632335.8,
+     "P90": 157196277.8,
+     "Min": 154322818,
+     "Max": 160462108,
+     "Mean": 155989341.86666667,
+     "StdDev": 1532717.1511033163
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 452422666,
+     "P10": 449058696.2,
+     "P90": 456504731.2,
+     "Min": 448159849,
+     "Max": 465988432,
+     "Mean": 452999545.8666667,
+     "StdDev": 4451116.851346025
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 176688400,
+     "P10": 175693040,
+     "P90": 178239380,
+     "Min": 174489900,
+     "Max": 181599200,
+     "Mean": 176877213.33333334,
+     "StdDev": 1661937.4798566822
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 608343430,
+      "P10": 607683800.2,
+      "P90": 609178790.2,
+      "Min": 607567306,
+      "Max": 610946964,
+      "Mean": 608392697.7333333,
+      "StdDev": 867187.0095822525
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 1500934440,
+      "P10": 1500934435,
+      "P90": 1500934452,
+      "Min": 1500934433,
+      "Max": 1500934459,
+      "Mean": 1500934443.4,
+      "StdDev": 8.042742957829393
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 56,
+      "P10": 28.2,
+      "P90": 68.8,
+      "Min": 24,
+      "Max": 71,
+      "Mean": 50,
+      "StdDev": 16.711843533426055
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 463,
+      "P10": 395,
+      "P90": 598.8,
+      "Min": 392,
+      "Max": 735,
+      "Mean": 487.6666666666667,
+      "StdDev": 99.30880170074602
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 155527900,
+     "P10": 154137140,
+     "P90": 156912180,
+     "Min": 153250900,
+     "Max": 159419500,
+     "Mean": 155653920,
+     "StdDev": 1487690.4848983686
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 608436084,
+      "P10": 607838354.8,
+      "P90": 609505845.4,
+      "Min": 607665330,
+      "Max": 615640091,
+      "Mean": 608908691.6,
+      "StdDev": 1939976.634709361
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 1500938610,
+      "P10": 1500938506.8,
+      "P90": 1500947363,
+      "Min": 1500938493,
+      "Max": 1501508536,
+      "Mean": 1500977875.4666667,
+      "StdDev": 146840.03043976933
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 308,
+      "P10": 282.4,
+      "P90": 413.59999999999997,
+      "Min": 276,
+      "Max": 9720,
+      "Mean": 947,
+      "StdDev": 2427.3960475020494
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 2339,
+      "P10": 2221.4,
+      "P90": 4563.2,
+      "Min": 1965,
+      "Max": 46553,
+      "Mean": 5666.133333333333,
+      "StdDev": 11342.074746376033
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": -0.16876924339068733,
+    "pairedRatioMedianPercent": 0.3991075803198685,
+    "pairedRatioP10Percent": -1.9513139013155545,
+    "pairedRatioP90Percent": 1.0455240545169442,
+    "cyclesRatioMinus1Percent": 0.015230541735289371,
+    "dynamicInstructionExpansion": 1.0000027782692493
+   }
+  },
+  {
+   "name": "fnv",
+   "description": "FNV-1a hash over a 64 KB buffer",
+   "export": "w_fnv",
+   "n": 2312,
+   "resultChecksum": "0xEC30C7E5",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 155090444,
+     "P10": 153883641.8,
+     "P90": 156698613.6,
+     "Min": 153471925,
+     "Max": 157085019,
+     "Mean": 155244706.53333333,
+     "StdDev": 1115399.1731419272
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 450389130,
+     "P10": 446884686.6,
+     "P90": 455059324.6,
+     "Min": 445688897,
+     "Max": 456182052,
+     "Mean": 450837387.93333334,
+     "StdDev": 3239228.359573431
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 175902900,
+     "P10": 174224440,
+     "P90": 177172400,
+     "Min": 173560100,
+     "Max": 178541700,
+     "Mean": 175805140,
+     "StdDev": 1315184.680024607
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 606897568,
+      "P10": 606788692,
+      "P90": 607020215.4,
+      "Min": 606607220,
+      "Max": 607055165,
+      "Mean": 606891951.8666667,
+      "StdDev": 116726.73588028866
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 909131854,
+      "P10": 909131849.8,
+      "P90": 909131863.2,
+      "Min": 909131848,
+      "Max": 909131865,
+      "Mean": 909131856,
+      "StdDev": 5.209880722517277
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 2445,
+      "P10": 2403.8,
+      "P90": 2496,
+      "Min": 2388,
+      "Max": 2527,
+      "Mean": 2445.3333333333335,
+      "StdDev": 39.458235907759246
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 11097,
+      "P10": 6201.6,
+      "P90": 21037.6,
+      "Min": 4875,
+      "Max": 31936,
+      "Mean": 13306.6,
+      "StdDev": 7167.06148989947
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 155514000,
+     "P10": 153883820,
+     "P90": 156950260,
+     "Min": 153509100,
+     "Max": 157593900,
+     "Mean": 155420533.33333334,
+     "StdDev": 1204038.3884878343
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 606919435,
+      "P10": 606749151.2,
+      "P90": 607319486.2,
+      "Min": 606598102,
+      "Max": 607562707,
+      "Mean": 606981206.8666667,
+      "StdDev": 257793.04253408578
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 909131410,
+      "P10": 909129998.6,
+      "P90": 909131503.8,
+      "Min": 909129982,
+      "Max": 909142253,
+      "Mean": 909131866.4666667,
+      "StdDev": 2933.5605831886437
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 4060,
+      "P10": 3944.2,
+      "P90": 4333.6,
+      "Min": 3937,
+      "Max": 4723,
+      "Mean": 4114.666666666667,
+      "StdDev": 210.11346141232042
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 15076,
+      "P10": 8483.2,
+      "P90": 25045.399999999998,
+      "Min": 7996,
+      "Max": 28595,
+      "Mean": 15326.066666666668,
+      "StdDev": 6863.895910244172
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": 0.2731025774869833,
+    "pairedRatioMedianPercent": 0.277424927934633,
+    "pairedRatioP10Percent": -1.1212138986892328,
+    "pairedRatioP90Percent": 1.4815352635368484,
+    "cyclesRatioMinus1Percent": 0.003603079193759129,
+    "dynamicInstructionExpansion": 0.9999995116219963
+   }
+  },
+  {
+   "name": "crc",
+   "description": "table CRC32 over a 64 KB buffer",
+   "export": "w_crc",
+   "n": 1141,
+   "resultChecksum": "0xA3AC7955",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 159559255,
+     "P10": 155169871.6,
+     "P90": 170383734.8,
+     "Min": 154733923,
+     "Max": 172982181,
+     "Mean": 161682638.26666668,
+     "StdDev": 6516162.6610857565
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 463368418,
+     "P10": 450619775.6,
+     "P90": 494801594,
+     "Min": 449353717,
+     "Max": 502347905,
+     "Mean": 469533401.8666667,
+     "StdDev": 18923177.25597814
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 180447700,
+     "P10": 176222480,
+     "P90": 191702120,
+     "Min": 175845300,
+     "Max": 196750100,
+     "Mean": 183247386.66666666,
+     "StdDev": 7184915.636234675
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 610767981,
+      "P10": 610542191.8,
+      "P90": 611148859.4,
+      "Min": 610311488,
+      "Max": 611719973,
+      "Mean": 610818741.4,
+      "StdDev": 329649.4984217111
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 598218610,
+      "P10": 598218588.8,
+      "P90": 598218749.2,
+      "Min": 598218586,
+      "Max": 598218785,
+      "Mean": 598218651,
+      "StdDev": 69.92751348973552
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 1554,
+      "P10": 1455.8,
+      "P90": 1729.8,
+      "Min": 1388,
+      "Max": 1766,
+      "Mean": 1569.3333333333333,
+      "StdDev": 115.40776568737643
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 36212,
+      "P10": 6683.8,
+      "P90": 79608.79999999999,
+      "Min": 4927,
+      "Max": 118730,
+      "Mean": 38102.8,
+      "StdDev": 34827.24797831228
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 157247400,
+     "P10": 155172780,
+     "P90": 176348440,
+     "Min": 154132500,
+     "Max": 176464500,
+     "Mean": 162168073.33333334,
+     "StdDev": 8444623.88289282
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 610719641,
+      "P10": 610451224.6,
+      "P90": 611450363.2,
+      "Min": 610370298,
+      "Max": 611809962,
+      "Mean": 610831159.8,
+      "StdDev": 431803.514751493
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 598221399,
+      "P10": 598221329,
+      "P90": 598221876,
+      "Min": 598221326,
+      "Max": 598224832,
+      "Mean": 598221676,
+      "StdDev": 894.5296449611302
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 2176,
+      "P10": 1969.2,
+      "P90": 2612.2,
+      "Min": 1859,
+      "Max": 2674,
+      "Mean": 2240.3333333333335,
+      "StdDev": 251.08156519536112
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 17462,
+      "P10": 6869.8,
+      "P90": 100457.2,
+      "Min": 6524,
+      "Max": 113318,
+      "Mean": 35479.6,
+      "StdDev": 38159.53276480952
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": -1.4489005980881542,
+    "pairedRatioMedianPercent": 0.6042436843307852,
+    "pairedRatioP10Percent": -3.1866174298134764,
+    "pairedRatioP90Percent": 5.02314264853565,
+    "cyclesRatioMinus1Percent": -0.00791462576686941,
+    "dynamicInstructionExpansion": 1.0000046621752539
+   }
+  },
+  {
+   "name": "mem",
+   "description": "rep movsd copy + repne scasb scan, 64 KB",
+   "export": "w_mem",
+   "n": 4370,
+   "resultChecksum": "0x692BC47E",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 155775937,
+     "P10": 151199271.6,
+     "P90": 166766852,
+     "Min": 150785552,
+     "Max": 183741191,
+     "Mean": 158298536.33333334,
+     "StdDev": 8582198.826583784
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 452379796,
+     "P10": 439089442.8,
+     "P90": 484297784,
+     "Min": 437887781,
+     "Max": 533592016,
+     "Mean": 459705651.73333335,
+     "StdDev": 24922981.74914023
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 176610600,
+     "P10": 171988140,
+     "P90": 189087060,
+     "Min": 170607200,
+     "Max": 206387400,
+     "Mean": 179514526.66666666,
+     "StdDev": 9230933.694181805
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 598603587,
+      "P10": 596973696.8,
+      "P90": 600813022.2,
+      "Min": 596757280,
+      "Max": 609886976,
+      "Mean": 599287790.8,
+      "StdDev": 3218139.700406636
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 153272,
+      "P10": 153229.4,
+      "P90": 153390.4,
+      "Min": 153223,
+      "Max": 153446,
+      "Mean": 153287.4,
+      "StdDev": 68.14564235098655
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 5,
+      "P10": 5,
+      "P90": 7.6,
+      "Min": 5,
+      "Max": 23,
+      "Mean": 6.8,
+      "StdDev": 4.570089089472358
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 6753,
+      "P10": 2364.6000000000004,
+      "P90": 27428.999999999993,
+      "Min": 1627,
+      "Max": 58860,
+      "Mean": 12246.2,
+      "StdDev": 15453.553651414384
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 156848100,
+     "P10": 153590560,
+     "P90": 173004140,
+     "Min": 152472300,
+     "Max": 177979600,
+     "Mean": 160549353.33333334,
+     "StdDev": 7917109.457810494
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 598262976,
+      "P10": 596879318,
+      "P90": 625961262.8,
+      "Min": 596521517,
+      "Max": 664874381,
+      "Mean": 606860546.6666666,
+      "StdDev": 18728098.001684558
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 156034,
+      "P10": 155986.8,
+      "P90": 156127.6,
+      "Min": 155971,
+      "Max": 158049,
+      "Mean": 156170.2,
+      "StdDev": 521.7038294993489
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 68,
+      "P10": 61.4,
+      "P90": 80,
+      "Min": 59,
+      "Max": 137,
+      "Mean": 72.6,
+      "StdDev": 18.83310155778156
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 12156,
+      "P10": 5678,
+      "P90": 28427,
+      "Min": 3635,
+      "Max": 49896,
+      "Mean": 16841.466666666667,
+      "StdDev": 12684.256410812504
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": 0.6882725410921386,
+    "pairedRatioMedianPercent": 0.28147030179634935,
+    "pairedRatioP10Percent": -3.298786046759239,
+    "pairedRatioP90Percent": 11.404855429699845,
+    "cyclesRatioMinus1Percent": -0.05690092866081908,
+    "dynamicInstructionExpansion": 1.0180202515788925
+   }
+  },
+  {
+   "name": "fib",
+   "description": "recursive fibonacci (call/ret heavy)",
+   "export": "w_fib",
+   "n": 39,
+   "resultChecksum": "0x03C50EA2",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 228868348,
+     "P10": 225929948.2,
+     "P90": 241634397.79999998,
+     "Min": 224745005,
+     "Max": 248576994,
+     "Mean": 231167219.8,
+     "StdDev": 7095664.047273028
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 664642110,
+     "P10": 656108373.8,
+     "P90": 701721029.6,
+     "Min": 652667129,
+     "Max": 721875863,
+     "Mean": 671318488.0666667,
+     "StdDev": 20607617.10816697
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 230047300,
+     "P10": 227074080,
+     "P90": 242867140,
+     "Min": 225793000,
+     "Max": 249700900,
+     "Mean": 232336740,
+     "StdDev": 7119416.466838115
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 896383948,
+      "P10": 893808053.2,
+      "P90": 904212577.8,
+      "Min": 893576160,
+      "Max": 913357395,
+      "Mean": 897814170.7333333,
+      "StdDev": 5519333.788576874
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 2347983026,
+      "P10": 2347983012.2,
+      "P90": 2347983120,
+      "Min": 2347983008,
+      "Max": 2347983162,
+      "Mean": 2347983046.8,
+      "StdDev": 48.457934629649955
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 2292297,
+      "P10": 2274627.6,
+      "P90": 2318935,
+      "Min": 2273825,
+      "Max": 2323447,
+      "Mean": 2294616.6,
+      "StdDev": 17890.192739519127
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 1661,
+      "P10": 1263.4,
+      "P90": 2543,
+      "Min": 994,
+      "Max": 3301,
+      "Mean": 1843.8666666666666,
+      "StdDev": 599.64618933247
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 236486700,
+     "P10": 232140780,
+     "P90": 247172180,
+     "Min": 231924900,
+     "Max": 250620300,
+     "Mean": 238650720,
+     "StdDev": 6432062.338472785
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 915442365,
+      "P10": 913079706.4,
+      "P90": 929818442.4,
+      "Min": 910788309,
+      "Max": 972280997,
+      "Mean": 922523308.6,
+      "StdDev": 15247757.716689581
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 2859656119,
+      "P10": 2859656088,
+      "P90": 2859656911.2,
+      "Min": 2859656085,
+      "Max": 2859658286,
+      "Mean": 2859656344.133333,
+      "StdDev": 630.6737742476768
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 2414215,
+      "P10": 2405308.2,
+      "P90": 2428220,
+      "Min": 2402250,
+      "Max": 2429294,
+      "Mean": 2415185.466666667,
+      "StdDev": 9123.288871788245
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 2925,
+      "P10": 2487.4,
+      "P90": 3915.8,
+      "Min": 2408,
+      "Max": 4076,
+      "Mean": 3093.4666666666667,
+      "StdDev": 589.82441293595
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": 3.3287049373904587,
+    "pairedRatioMedianPercent": 3.754608472833465,
+    "pairedRatioP10Percent": 0.855372627676454,
+    "pairedRatioP90Percent": 7.025571191751356,
+    "cyclesRatioMinus1Percent": 2.126144387404838,
+    "dynamicInstructionExpansion": 1.2179202691561537
+   }
+  },
+  {
+   "name": "calls",
+   "description": "non-inlined leaf and 3-deep call chain",
+   "export": "w_calls",
+   "n": 34684477,
+   "resultChecksum": "0xCE6817E5",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 162138777,
+     "P10": 155342995.6,
+     "P90": 178637332.8,
+     "Min": 153241674,
+     "Max": 182092178,
+     "Mean": 165524750.53333333,
+     "StdDev": 9374688.819923257
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 470858196,
+     "P10": 451122814,
+     "P90": 518770174.4,
+     "Min": 445020110,
+     "Max": 528803019,
+     "Mean": 480690737.3333333,
+     "StdDev": 27224378.796135753
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 183613800,
+     "P10": 176392160,
+     "P90": 201934600,
+     "Min": 174322700,
+     "Max": 209252400,
+     "Mean": 187894713.33333334,
+     "StdDev": 10867412.555293573
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 613096348,
+      "P10": 606105611.2,
+      "P90": 623350607,
+      "Min": 604929572,
+      "Max": 631411572,
+      "Mean": 614367793.1333333,
+      "StdDev": 7490856.057845314
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 1144588054,
+      "P10": 1144588021.6,
+      "P90": 1144588200.8,
+      "Min": 1144588014,
+      "Max": 1144588222,
+      "Mean": 1144588087.4666667,
+      "StdDev": 72.81470285856389
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 156,
+      "P10": 101.4,
+      "P90": 332.59999999999997,
+      "Min": 89,
+      "Max": 365,
+      "Mean": 193.46666666666667,
+      "StdDev": 92.63975285763563
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 1013,
+      "P10": 554.8,
+      "P90": 3347.6,
+      "Min": 511,
+      "Max": 4950,
+      "Mean": 1628.4666666666667,
+      "StdDev": 1316.4022326383522
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 169550200,
+     "P10": 163996680,
+     "P90": 187362080,
+     "Min": 160734200,
+     "Max": 205025300,
+     "Mean": 173073220,
+     "StdDev": 11811342.296659475
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 632185033,
+      "P10": 626570633.6,
+      "P90": 689120950.2,
+      "Min": 625404204,
+      "Max": 697261113,
+      "Mean": 643880693.3333334,
+      "StdDev": 25093038.63093132
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 2011702280,
+      "P10": 2011702254.6,
+      "P90": 2011702429.8,
+      "Min": 2011702247,
+      "Max": 2011702573,
+      "Mean": 2011702320.4,
+      "StdDev": 90.87338129821862
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 614,
+      "P10": 464.6,
+      "P90": 873.8,
+      "Min": 358,
+      "Max": 1018,
+      "Mean": 620.9333333333333,
+      "StdDev": 180.55844588651172
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 2482,
+      "P10": 1981.6,
+      "P90": 3954.6,
+      "Min": 1740,
+      "Max": 8511,
+      "Mean": 3031.5333333333333,
+      "StdDev": 1661.8233044575152
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": 4.571036699012465,
+    "pairedRatioMedianPercent": 4.114345279930132,
+    "pairedRatioP10Percent": -2.144543478894134,
+    "pairedRatioP90Percent": 11.549118785026625,
+    "cyclesRatioMinus1Percent": 3.1134886159850383,
+    "dynamicInstructionExpansion": 1.7575775607387214
+   }
+  },
+  {
+   "name": "switch",
+   "description": "bytecode-style 16-way switch (jump table)",
+   "export": "w_switch",
+   "n": 18969353,
+   "resultChecksum": "0xC60CB8A2",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 156332073,
+     "P10": 153742183.4,
+     "P90": 159253488,
+     "Min": 152942978,
+     "Max": 161937074,
+     "Mean": 156384496.2,
+     "StdDev": 2478653.9972115685
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 453994869,
+     "P10": 446474184,
+     "P90": 462478795.2,
+     "Min": 444152570,
+     "Max": 470271869,
+     "Mean": 454147114.73333335,
+     "StdDev": 7198050.904082095
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 177026800,
+     "P10": 174633120,
+     "P90": 180102980,
+     "Min": 173496800,
+     "Max": 183169300,
+     "Mean": 177115553.33333334,
+     "StdDev": 2569595.8222665144
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 607742488,
+      "P10": 607305705.6,
+      "P90": 609045428.2,
+      "Min": 606994360,
+      "Max": 618093386,
+      "Mean": 608542166.3333334,
+      "StdDev": 2702289.109367111
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 273754907,
+      "P10": 273754896.8,
+      "P90": 273754920.8,
+      "Min": 273754894,
+      "Max": 273754939,
+      "Mean": 273754909.26666665,
+      "StdDev": 11.417196720402995
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 17909469,
+      "P10": 17908743.6,
+      "P90": 17910877.6,
+      "Min": 17908147,
+      "Max": 17911793,
+      "Mean": 17909685.2,
+      "StdDev": 931.6953978021543
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 10839,
+      "P10": 5228.6,
+      "P90": 21576.6,
+      "Min": 4359,
+      "Max": 95252,
+      "Mean": 16545.733333333334,
+      "StdDev": 22406.95514301201
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 165076400,
+     "P10": 163539760,
+     "P90": 170737520,
+     "Min": 163292000,
+     "Max": 172517000,
+     "Mean": 166169640,
+     "StdDev": 2896214.6568038967
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 643670580,
+      "P10": 642903731.6,
+      "P90": 644459118.2,
+      "Min": 642674839,
+      "Max": 647023805,
+      "Mean": 643771255.9333333,
+      "StdDev": 1054627.4836256143
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 362594881,
+      "P10": 362594872,
+      "P90": 362594911.6,
+      "Min": 362594871,
+      "Max": 362594932,
+      "Mean": 362594886.4,
+      "StdDev": 18.22792206635586
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 17974663,
+      "P10": 17973652.8,
+      "P90": 17976593.2,
+      "Min": 17973635,
+      "Max": 17977180,
+      "Mean": 17974819.133333333,
+      "StdDev": 1137.8279977136053
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 19930,
+      "P10": 10562.800000000001,
+      "P90": 23829.6,
+      "Min": 7752,
+      "Max": 25047,
+      "Mean": 17644.133333333335,
+      "StdDev": 5745.430816454643
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": 5.593431234037305,
+    "pairedRatioMedianPercent": 6.43443016257379,
+    "pairedRatioP10Percent": 4.702826224266499,
+    "pairedRatioP90Percent": 7.848067325114316,
+    "cyclesRatioMinus1Percent": 5.911729508699404,
+    "dynamicInstructionExpansion": 1.3245237682625357
+   }
+  },
+  {
+   "name": "ind",
+   "description": "indirect calls via function-pointer table",
+   "export": "w_ind",
+   "n": 92477710,
+   "resultChecksum": "0xC1155C8A",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 155791409,
+     "P10": 153922012.8,
+     "P90": 157157646.2,
+     "Min": 153345146,
+     "Max": 158498043,
+     "Mean": 155547919.46666667,
+     "StdDev": 1454635.7479043074
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 452425500,
+     "P10": 446995875.8,
+     "P90": 456392109.8,
+     "Min": 445321171,
+     "Max": 460284772,
+     "Mean": 451717647.6,
+     "StdDev": 4224250.76290675
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 176197900,
+     "P10": 174556240,
+     "P90": 177799700,
+     "Min": 173184000,
+     "Max": 178740000,
+     "Mean": 176038133.33333334,
+     "StdDev": 1590913.1190548881
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 608473079,
+      "P10": 607884445,
+      "P90": 609478076.4,
+      "Min": 607779695,
+      "Max": 611103212,
+      "Mean": 608732090.0666667,
+      "StdDev": 871097.4213492727
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 1248449362,
+      "P10": 1248449356.4,
+      "P90": 1248449370.6,
+      "Min": 1248449356,
+      "Max": 1248449372,
+      "Mean": 1248449362.7333333,
+      "StdDev": 5.175031630913224
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 1571,
+      "P10": 1430.6,
+      "P90": 2028,
+      "Min": 1330,
+      "Max": 2710,
+      "Mean": 1704.3333333333333,
+      "StdDev": 343.51162730719625
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 967,
+      "P10": 700.8,
+      "P90": 1452.6,
+      "Min": 604,
+      "Max": 1677,
+      "Mean": 1051.8666666666666,
+      "StdDev": 337.19809071368184
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 179532600,
+     "P10": 178084680,
+     "P90": 180716920,
+     "Min": 177647100,
+     "Max": 181237000,
+     "Mean": 179523406.66666666,
+     "StdDev": 1058232.028612323
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 703461227,
+      "P10": 702937241.6,
+      "P90": 705226909.4,
+      "Min": 702532019,
+      "Max": 705793136,
+      "Mean": 703868072.0666667,
+      "StdDev": 942364.9387134982
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 2450661914,
+      "P10": 2450661906.6,
+      "P90": 2450661917.2,
+      "Min": 2450661905,
+      "Max": 2450661919,
+      "Mean": 2450661912.5333333,
+      "StdDev": 4.257206774847743
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 6021,
+      "P10": 5719.4,
+      "P90": 6149.6,
+      "Min": 5472,
+      "Max": 6262,
+      "Mean": 5954.466666666666,
+      "StdDev": 212.79395354818396
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 2675,
+      "P10": 2290.4,
+      "P90": 2970,
+      "Min": 2237,
+      "Max": 3106,
+      "Mean": 2588.8,
+      "StdDev": 285.1451259571919
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": 15.239088697118074,
+    "pairedRatioMedianPercent": 15.758744639704037,
+    "pairedRatioP10Percent": 13.67502781596417,
+    "pairedRatioP90Percent": 16.591826591689184,
+    "cyclesRatioMinus1Percent": 15.610903962441359,
+    "dynamicInstructionExpansion": 1.96296460921256
+   }
+  },
+  {
+   "name": "lz",
+   "description": "LZ-style hash match finder + mixing",
+   "export": "w_lz",
+   "n": 833,
+   "resultChecksum": "0x135A56B1",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 148143430,
+     "P10": 146987727.6,
+     "P90": 150668940.6,
+     "Min": 146337286,
+     "Max": 152982182,
+     "Mean": 148627056.4,
+     "StdDev": 1875567.3935273865
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 430214750,
+     "P10": 426858846.8,
+     "P90": 437560826,
+     "Min": 424969408,
+     "Max": 444266397,
+     "Mean": 431620612.73333335,
+     "StdDev": 5448343.830186282
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 168185200,
+     "P10": 166914240,
+     "P90": 171340940,
+     "Min": 166482400,
+     "Max": 173697900,
+     "Mean": 168887186.66666666,
+     "StdDev": 2054991.3749790038
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 582641079,
+      "P10": 581319845.8,
+      "P90": 589569450.6,
+      "Min": 580671145,
+      "Max": 591548485,
+      "Mean": 584461682.5333333,
+      "StdDev": 3522298.936821536
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 1941669964,
+      "P10": 1941669954.2,
+      "P90": 1941669975,
+      "Min": 1941669951,
+      "Max": 1941669979,
+      "Mean": 1941669964.0666666,
+      "StdDev": 8.556256413264146
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 3359868,
+      "P10": 3356300.6,
+      "P90": 3364180.8,
+      "Min": 3353782,
+      "Max": 3366981,
+      "Mean": 3360189.6,
+      "StdDev": 3581.100245934002
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 6120,
+      "P10": 2376.2,
+      "P90": 12683.4,
+      "Min": 2282,
+      "Max": 14296,
+      "Mean": 7427.133333333333,
+      "StdDev": 4151.542636980459
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 149319200,
+     "P10": 147080120,
+     "P90": 151476740,
+     "Min": 146182400,
+     "Max": 166072200,
+     "Mean": 150139706.66666666,
+     "StdDev": 4673105.111695262
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 583617618,
+      "P10": 580306842.2,
+      "P90": 587652206.6,
+      "Min": 579877284,
+      "Max": 646224650,
+      "Mean": 587768645.1333333,
+      "StdDev": 16399136.570626168
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 1941674760,
+      "P10": 1941674752.4,
+      "P90": 1941674772.2,
+      "Min": 1941674748,
+      "Max": 1941675780,
+      "Mean": 1941674827.5333333,
+      "StdDev": 263.58892960350937
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 3338802,
+      "P10": 3330981,
+      "P90": 3345868.4,
+      "Min": 3321458,
+      "Max": 3365372,
+      "Mean": 3340263.1333333333,
+      "StdDev": 9703.669385978737
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 9409,
+      "P10": 5055.2,
+      "P90": 13151.199999999999,
+      "Min": 4702,
+      "Max": 18241,
+      "Mean": 9538.6,
+      "StdDev": 3593.982228273097
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": 0.7936700264061569,
+    "pairedRatioMedianPercent": 0.21676992733929978,
+    "pairedRatioP10Percent": -1.1756846714043867,
+    "pairedRatioP90Percent": 2.0549802088965174,
+    "cyclesRatioMinus1Percent": 0.1676055869036963,
+    "dynamicInstructionExpansion": 1.0000024700387238
+   }
+  },
+  {
+   "name": "matmul",
+   "description": "40x40 integer matrix multiply",
+   "export": "w_matmul",
+   "n": 4010,
+   "resultChecksum": "0xAC708CE1",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 155589771,
+     "P10": 154718595.6,
+     "P90": 159251876.4,
+     "Min": 154349963,
+     "Max": 169985018,
+     "Mean": 156979468.33333334,
+     "StdDev": 3891435.6209629783
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 451839386,
+     "P10": 449309622,
+     "P90": 462474190.2,
+     "Min": 448238484,
+     "Max": 493643595,
+     "Mean": 455877543.26666665,
+     "StdDev": 11300351.839538628
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 176221000,
+     "P10": 175464680,
+     "P90": 180061860,
+     "Min": 174135200,
+     "Max": 193490300,
+     "Mean": 177786600,
+     "StdDev": 4639756.841227165
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 607985452,
+      "P10": 607138679.6,
+      "P90": 611710566.6,
+      "Min": 606220598,
+      "Max": 616569314,
+      "Mean": 608876610.2666667,
+      "StdDev": 2629067.0986440764
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 1855976655,
+      "P10": 1855976649.2,
+      "P90": 1855976669.8,
+      "Min": 1855976648,
+      "Max": 1855976803,
+      "Mean": 1855976666.2,
+      "StdDev": 38.41911726508785
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 6528930,
+      "P10": 6491361,
+      "P90": 6562506,
+      "Min": 6482265,
+      "Max": 6569192,
+      "Mean": 6530030.733333333,
+      "StdDev": 26521.010952145272
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 2871,
+      "P10": 1384,
+      "P90": 5013.599999999999,
+      "Min": 1083,
+      "Max": 6191,
+      "Mean": 3137.2,
+      "StdDev": 1468.1684021742387
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 157714700,
+     "P10": 156402780,
+     "P90": 160472480,
+     "Min": 155887200,
+     "Max": 170455300,
+     "Mean": 158702240,
+     "StdDev": 3556447.1643160153
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 618609007,
+      "P10": 615831578.2,
+      "P90": 622510946.4,
+      "Min": 614592183,
+      "Max": 624406699,
+      "Mean": 618860661.2666667,
+      "StdDev": 2863413.294018782
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 1862234546,
+      "P10": 1862234542,
+      "P90": 1862234563.2,
+      "Min": 1862234540,
+      "Max": 1862234677,
+      "Mean": 1862234557.4,
+      "StdDev": 33.83953731531041
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 6686712,
+      "P10": 6671857,
+      "P90": 6691514,
+      "Min": 6668450,
+      "Max": 6693032,
+      "Mean": 6683898.2,
+      "StdDev": 7578.798634536819
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 4528,
+      "P10": 3080.4,
+      "P90": 6867.6,
+      "Min": 2648,
+      "Max": 7329,
+      "Mean": 4770.733333333334,
+      "StdDev": 1453.662884217789
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": 1.365725385636063,
+    "pairedRatioMedianPercent": 0.9175597998466678,
+    "pairedRatioP10Percent": 0.20091582260195473,
+    "pairedRatioP90Percent": 2.455379754934306,
+    "cyclesRatioMinus1Percent": 1.7473370399000876,
+    "dynamicInstructionExpansion": 1.0033717509232356
+   }
+  },
+  {
+   "name": "x87",
+   "description": "x87 float multiply-accumulate",
+   "export": "w_x87",
+   "n": 41969,
+   "resultChecksum": "0x4539C531",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 156193009,
+     "P10": 153887351.2,
+     "P90": 167338116.2,
+     "Min": 152979599,
+     "Max": 169620771,
+     "Mean": 158515600,
+     "StdDev": 5588386.567680323
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 453590679,
+     "P10": 446895046.6,
+     "P90": 485956950.6,
+     "Min": 444259046,
+     "Max": 492585988,
+     "Mean": 460335925.53333336,
+     "StdDev": 16229021.40330087
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 176872000,
+     "P10": 174380540,
+     "P90": 191085300,
+     "Min": 173608100,
+     "Max": 194091600,
+     "Mean": 180524393.33333334,
+     "StdDev": 7007085.69851839
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 603571752,
+      "P10": 602887226,
+      "P90": 616632116.6,
+      "Min": 602650081,
+      "Max": 624008300,
+      "Mean": 606583220.6,
+      "StdDev": 6651613.870821026
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 386996435,
+      "P10": 386996421.2,
+      "P90": 386996500.8,
+      "Min": 386996419,
+      "Max": 386996583,
+      "Mean": 386996455.46666664,
+      "StdDev": 44.546711705910724
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 42087,
+      "P10": 42046.2,
+      "P90": 42756.2,
+      "Min": 42040,
+      "Max": 43318,
+      "Mean": 42252.933333333334,
+      "StdDev": 379.224861049609
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 2123,
+      "P10": 1039.2,
+      "P90": 5729.599999999999,
+      "Min": 977,
+      "Max": 10420,
+      "Mean": 2987.0666666666666,
+      "StdDev": 2522.5105257225296
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 156465100,
+     "P10": 153812240,
+     "P90": 163842180,
+     "Min": 152643300,
+     "Max": 176590400,
+     "Mean": 158182613.33333334,
+     "StdDev": 6073904.7579280455
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 603487515,
+      "P10": 602891529.2,
+      "P90": 606800993.6,
+      "Min": 602866700,
+      "Max": 634678588,
+      "Mean": 605812014.1333333,
+      "StdDev": 8109660.679498961
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 386998759,
+      "P10": 386998744,
+      "P90": 386998790.2,
+      "Min": 386998735,
+      "Max": 386998827,
+      "Mean": 386998763.6666667,
+      "StdDev": 24.06439772974254
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 42129,
+      "P10": 42099.6,
+      "P90": 42310.6,
+      "Min": 42088,
+      "Max": 43457,
+      "Mean": 42236.53333333333,
+      "StdDev": 345.1080300151713
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 3398,
+      "P10": 2729.8,
+      "P90": 8180.999999999998,
+      "Min": 2134,
+      "Max": 13467,
+      "Mean": 4513.866666666667,
+      "StdDev": 3161.3425915190496
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": 0.17420177877487397,
+    "pairedRatioMedianPercent": -0.21983258042139742,
+    "pairedRatioP10Percent": -2.293245521076237,
+    "pairedRatioP90Percent": 1.6179331496527505,
+    "cyclesRatioMinus1Percent": -0.013956418556848593,
+    "dynamicInstructionExpansion": 1.000006005223278
+   }
+  },
+  {
+   "name": "sse",
+   "description": "SSE2 packed float multiply-accumulate",
+   "export": "w_sse",
+   "n": 294527,
+   "resultChecksum": "0x00721196",
+   "resultsEqualBeforeAndDuringTiming": true,
+   "native": {
+    "ns": {
+     "N": 15,
+     "Median": 162389749,
+     "P10": 158242764.4,
+     "P90": 166639044.4,
+     "Min": 157837808,
+     "Max": 172801288,
+     "Mean": 162671732.66666666,
+     "StdDev": 4303635.301372876
+    },
+    "tscTicks": {
+     "N": 15,
+     "Median": 471586747,
+     "P10": 459543581.4,
+     "P90": 483927153,
+     "Min": 458367904,
+     "Max": 501822122,
+     "Mean": 472405654.93333334,
+     "StdDev": 12498002.10856451
+    },
+    "externalWallNs": {
+     "N": 15,
+     "Median": 184341200,
+     "P10": 179577480,
+     "P90": 188416440,
+     "Min": 179144700,
+     "Max": 194393900,
+     "Mean": 184415866.66666666,
+     "StdDev": 4377039.121478397
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 603906215,
+      "P10": 603696451.2,
+      "P90": 604468689.4,
+      "Min": 603634839,
+      "Max": 606000615,
+      "Mean": 604074409.8,
+      "StdDev": 593233.036754914
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 529265393,
+      "P10": 529265333.6,
+      "P90": 529265503.2,
+      "Min": 529265325,
+      "Max": 529267938,
+      "Mean": 529265572.6,
+      "StdDev": 657.5475865452086
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 295046,
+      "P10": 294843.2,
+      "P90": 295423.4,
+      "Min": 294818,
+      "Max": 295589,
+      "Mean": 295087.6666666667,
+      "StdDev": 228.91940773576897
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 2366,
+      "P10": 1579,
+      "P90": 3918.7999999999997,
+      "Min": 1432,
+      "Max": 4105,
+      "Mean": 2609.0666666666666,
+      "StdDev": 921.9955428050512
+     }
+    }
+   },
+   "translated": {
+    "ns": {
+     "N": 15,
+     "Median": 164502000,
+     "P10": 158216060,
+     "P90": 176570700,
+     "Min": 156638700,
+     "Max": 184491500,
+     "Mean": 166009820,
+     "StdDev": 7920044.151680686
+    },
+    "counters": {
+     "cycles": {
+      "N": 15,
+      "Median": 604019223,
+      "P10": 603862835.2,
+      "P90": 604403149.8,
+      "Min": 603820548,
+      "Max": 605749316,
+      "Mean": 604142415.4,
+      "StdDev": 477205.08627659985
+     },
+     "instructions": {
+      "N": 15,
+      "Median": 529562271,
+      "P10": 529562186,
+      "P90": 529562358.8,
+      "Min": 529562166,
+      "Max": 529563245,
+      "Mean": 529562327.2,
+      "StdDev": 261.29955442529393
+     },
+     "branch_misses": {
+      "N": 15,
+      "Median": 295036,
+      "P10": 294922.4,
+      "P90": 295650,
+      "Min": 294897,
+      "Max": 295916,
+      "Mean": 295138.5333333333,
+      "StdDev": 323.9851995443766
+     },
+     "cache_misses": {
+      "N": 15,
+      "Median": 4062,
+      "P10": 2920.6,
+      "P90": 9397.399999999998,
+      "Min": 2667,
+      "Max": 12755,
+      "Mean": 5190.6,
+      "StdDev": 2948.7246347240653
+     }
+    }
+   },
+   "overheadPercent": {
+    "medianOfMedians": 1.300729272018275,
+    "pairedRatioMedianPercent": 0.7518426763757358,
+    "pairedRatioP10Percent": -2.3037944009538625,
+    "pairedRatioP90Percent": 8.813382267659552,
+    "cyclesRatioMinus1Percent": 0.018712839376888724,
+    "dynamicInstructionExpansion": 1.0005609246399376
+   }
+  }
+ ],
+ "repeatRunsAfterOptimization": [
+  {
+   "int": {
+    "n": 83385231,
+    "nativeMsMedian": 153.287312,
+    "translatedMsMedian": 153.4363,
+    "overheadPercentMedian": 0.09719525905704796,
+    "pairedRatioMedianPercent": 0.07424172080088276,
+    "cyclesNative": 608810179,
+    "cyclesTranslated": 609789169,
+    "instructionsNative": 1500934416,
+    "instructionsTranslated": 1500938667,
+    "branchMissesNative": 61,
+    "branchMissesTranslated": 372,
+    "resultsEqual": true
+   },
+   "fnv": {
+    "n": 2312,
+    "nativeMsMedian": 152.602695,
+    "translatedMsMedian": 152.7425,
+    "overheadPercentMedian": 0.09161371625840964,
+    "pairedRatioMedianPercent": 0.04608701877935051,
+    "cyclesNative": 606803034,
+    "cyclesTranslated": 607022537,
+    "instructionsNative": 909131826,
+    "instructionsTranslated": 909131319,
+    "branchMissesNative": 2432,
+    "branchMissesTranslated": 3770,
+    "resultsEqual": true
+   },
+   "crc": {
+    "n": 1141,
+    "nativeMsMedian": 153.476028,
+    "translatedMsMedian": 153.5395,
+    "overheadPercentMedian": 0.04135629572066257,
+    "pairedRatioMedianPercent": 0.06555312212972453,
+    "cyclesNative": 610481672,
+    "cyclesTranslated": 610580682,
+    "instructionsNative": 598218567,
+    "instructionsTranslated": 598221304,
+    "branchMissesNative": 1418,
+    "branchMissesTranslated": 1968,
+    "resultsEqual": true
+   },
+   "mem": {
+    "n": 4370,
+    "nativeMsMedian": 150.707909,
+    "translatedMsMedian": 150.4573,
+    "overheadPercentMedian": -0.16628788871325684,
+    "pairedRatioMedianPercent": -0.23537010034023753,
+    "cyclesNative": 599466448,
+    "cyclesTranslated": 598140758,
+    "instructionsNative": 153208,
+    "instructionsTranslated": 155943,
+    "branchMissesNative": 5,
+    "branchMissesTranslated": 58,
+    "resultsEqual": true
+   },
+   "fib": {
+    "n": 39,
+    "nativeMsMedian": 227.24781,
+    "translatedMsMedian": 231.1552,
+    "overheadPercentMedian": 1.7194401125361747,
+    "pairedRatioMedianPercent": 1.7989547971248188,
+    "cyclesNative": 902455865,
+    "cyclesTranslated": 918379525,
+    "instructionsNative": 2347982987,
+    "instructionsTranslated": 2859656074,
+    "branchMissesNative": 2277073,
+    "branchMissesTranslated": 2414261,
+    "resultsEqual": true
+   },
+   "calls": {
+    "n": 34684477,
+    "nativeMsMedian": 152.458832,
+    "translatedMsMedian": 158.5233,
+    "overheadPercentMedian": 3.977774144301449,
+    "pairedRatioMedianPercent": 3.615904401743242,
+    "cyclesNative": 606937714,
+    "cyclesTranslated": 630264817,
+    "instructionsNative": 1144587993,
+    "instructionsTranslated": 2011702237,
+    "branchMissesNative": 48,
+    "branchMissesTranslated": 440,
+    "resultsEqual": true
+   },
+   "switch": {
+    "n": 18969353,
+    "nativeMsMedian": 153.546345,
+    "translatedMsMedian": 162.0791,
+    "overheadPercentMedian": 5.557120229726076,
+    "pairedRatioMedianPercent": 5.965365618675933,
+    "cyclesNative": 610296101,
+    "cyclesTranslated": 643609134,
+    "instructionsNative": 273754879,
+    "instructionsTranslated": 362594871,
+    "branchMissesNative": 17909362,
+    "branchMissesTranslated": 17973724,
+    "resultsEqual": true
+   },
+   "ind": {
+    "n": 92477710,
+    "nativeMsMedian": 153.709566,
+    "translatedMsMedian": 178.3803,
+    "overheadPercentMedian": 16.050226828433047,
+    "pairedRatioMedianPercent": 16.140509425023943,
+    "cyclesNative": 611318202,
+    "cyclesTranslated": 709511998,
+    "instructionsNative": 1248449336,
+    "instructionsTranslated": 2450661907,
+    "branchMissesNative": 1218,
+    "branchMissesTranslated": 5634,
+    "resultsEqual": true
+   },
+   "lz": {
+    "n": 833,
+    "nativeMsMedian": 148.728977,
+    "translatedMsMedian": 149.572,
+    "overheadPercentMedian": 0.5668182603044469,
+    "pairedRatioMedianPercent": 0.4397251844294958,
+    "cyclesNative": 590875365,
+    "cyclesTranslated": 594392972,
+    "instructionsNative": 1941669944,
+    "instructionsTranslated": 1941674757,
+    "branchMissesNative": 3360650,
+    "branchMissesTranslated": 3341028,
+    "resultsEqual": true
+   },
+   "matmul": {
+    "n": 4010,
+    "nativeMsMedian": 155.715893,
+    "translatedMsMedian": 157.7356,
+    "overheadPercentMedian": 1.2970461531502053,
+    "pairedRatioMedianPercent": 1.7331609176206575,
+    "cyclesNative": 618530269,
+    "cyclesTranslated": 626505677,
+    "instructionsNative": 1855976630,
+    "instructionsTranslated": 1862234546,
+    "branchMissesNative": 6529703,
+    "branchMissesTranslated": 6665056,
+    "resultsEqual": true
+   },
+   "x87": {
+    "n": 41969,
+    "nativeMsMedian": 162.547229,
+    "translatedMsMedian": 161.6169,
+    "overheadPercentMedian": -0.5723438078418464,
+    "pairedRatioMedianPercent": -0.22770258061776127,
+    "cyclesNative": 612532548,
+    "cyclesTranslated": 606796405,
+    "instructionsNative": 386996483,
+    "instructionsTranslated": 386998801,
+    "branchMissesNative": 42276,
+    "branchMissesTranslated": 42279,
+    "resultsEqual": true
+   },
+   "sse": {
+    "n": 294527,
+    "nativeMsMedian": 157.53331,
+    "translatedMsMedian": 157.3876,
+    "overheadPercentMedian": -0.09249472381428481,
+    "pairedRatioMedianPercent": -0.1677361479434758,
+    "cyclesNative": 603935704,
+    "cyclesTranslated": 604023855,
+    "instructionsNative": 529265321,
+    "instructionsTranslated": 529562165,
+    "branchMissesNative": 294896,
+    "branchMissesTranslated": 294900,
+    "resultsEqual": true
+   }
+  },
+  {
+   "int": {
+    "n": 83385231,
+    "nativeMsMedian": 158.904504,
+    "translatedMsMedian": 158.4814,
+    "overheadPercentMedian": -0.2662630632546459,
+    "pairedRatioMedianPercent": 0.1690298218356423,
+    "cyclesNative": 609536327,
+    "cyclesTranslated": 609449492,
+    "instructionsNative": 1500934469,
+    "instructionsTranslated": 1500938623,
+    "branchMissesNative": 122,
+    "branchMissesTranslated": 376,
+    "resultsEqual": true
+   },
+   "fnv": {
+    "n": 2312,
+    "nativeMsMedian": 162.689651,
+    "translatedMsMedian": 164.0561,
+    "overheadPercentMedian": 0.8399114458730983,
+    "pairedRatioMedianPercent": 0.43742264129169595,
+    "cyclesNative": 606978207,
+    "cyclesTranslated": 607235821,
+    "instructionsNative": 909131919,
+    "instructionsTranslated": 909131485,
+    "branchMissesNative": 2578,
+    "branchMissesTranslated": 4214,
+    "resultsEqual": true
+   },
+   "crc": {
+    "n": 1141,
+    "nativeMsMedian": 158.541965,
+    "translatedMsMedian": 158.4412,
+    "overheadPercentMedian": -0.06355730484354227,
+    "pairedRatioMedianPercent": 0.048853147664873475,
+    "cyclesNative": 610675129,
+    "cyclesTranslated": 610795964,
+    "instructionsNative": 598218612,
+    "instructionsTranslated": 598221350,
+    "branchMissesNative": 1603,
+    "branchMissesTranslated": 2254,
+    "resultsEqual": true
+   },
+   "mem": {
+    "n": 4370,
+    "nativeMsMedian": 161.608638,
+    "translatedMsMedian": 161.527,
+    "overheadPercentMedian": -0.05051586413344911,
+    "pairedRatioMedianPercent": 0.24010688674307445,
+    "cyclesNative": 602926836,
+    "cyclesTranslated": 604591550,
+    "instructionsNative": 153306,
+    "instructionsTranslated": 156040,
+    "branchMissesNative": 7,
+    "branchMissesTranslated": 64,
+    "resultsEqual": true
+   },
+   "fib": {
+    "n": 39,
+    "nativeMsMedian": 239.355978,
+    "translatedMsMedian": 246.0304,
+    "overheadPercentMedian": 2.788491875477628,
+    "pairedRatioMedianPercent": 2.261294068092612,
+    "cyclesNative": 905742007,
+    "cyclesTranslated": 924806081,
+    "instructionsNative": 2347983110,
+    "instructionsTranslated": 2859656191,
+    "branchMissesNative": 2302389,
+    "branchMissesTranslated": 2418143,
+    "resultsEqual": true
+   },
+   "calls": {
+    "n": 34684477,
+    "nativeMsMedian": 157.443999,
+    "translatedMsMedian": 168.4703,
+    "overheadPercentMedian": 7.00331614417391,
+    "pairedRatioMedianPercent": 5.696244172026432,
+    "cyclesNative": 608670438,
+    "cyclesTranslated": 635902442,
+    "instructionsNative": 1144588032,
+    "instructionsTranslated": 2011702265,
+    "branchMissesNative": 107,
+    "branchMissesTranslated": 635,
+    "resultsEqual": true
+   },
+   "switch": {
+    "n": 18969353,
+    "nativeMsMedian": 159.396358,
+    "translatedMsMedian": 167.4023,
+    "overheadPercentMedian": 5.0226630648612325,
+    "pairedRatioMedianPercent": 5.945002615282724,
+    "cyclesNative": 607470818,
+    "cyclesTranslated": 643468870,
+    "instructionsNative": 273754916,
+    "instructionsTranslated": 362594896,
+    "branchMissesNative": 17910564,
+    "branchMissesTranslated": 17974602,
+    "resultsEqual": true
+   },
+   "ind": {
+    "n": 92477710,
+    "nativeMsMedian": 156.29535,
+    "translatedMsMedian": 181.2137,
+    "overheadPercentMedian": 15.943116669817758,
+    "pairedRatioMedianPercent": 15.4797966540672,
+    "cyclesNative": 608009554,
+    "cyclesTranslated": 702664378,
+    "instructionsNative": 1248449368,
+    "instructionsTranslated": 2450661921,
+    "branchMissesNative": 1674,
+    "branchMissesTranslated": 5757,
+    "resultsEqual": true
+   },
+   "lz": {
+    "n": 833,
+    "nativeMsMedian": 152.856581,
+    "translatedMsMedian": 153.3807,
+    "overheadPercentMedian": 0.3428828491198521,
+    "pairedRatioMedianPercent": 0.6091417589746184,
+    "cyclesNative": 585357968,
+    "cyclesTranslated": 585882151,
+    "instructionsNative": 1941669994,
+    "instructionsTranslated": 1941674786,
+    "branchMissesNative": 3363541,
+    "branchMissesTranslated": 3342534,
+    "resultsEqual": true
+   },
+   "matmul": {
+    "n": 4010,
+    "nativeMsMedian": 157.002735,
+    "translatedMsMedian": 159.5343,
+    "overheadPercentMedian": 1.6124336942283213,
+    "pairedRatioMedianPercent": 1.159639901045706,
+    "cyclesNative": 609521619,
+    "cyclesTranslated": 617741697,
+    "instructionsNative": 1855976661,
+    "instructionsTranslated": 1862234555,
+    "branchMissesNative": 6519318,
+    "branchMissesTranslated": 6684305,
+    "resultsEqual": true
+   },
+   "x87": {
+    "n": 41969,
+    "nativeMsMedian": 156.37866,
+    "translatedMsMedian": 156.333,
+    "overheadPercentMedian": -0.029198357371784667,
+    "pairedRatioMedianPercent": -0.024884903723088048,
+    "cyclesNative": 604198784,
+    "cyclesTranslated": 604163272,
+    "instructionsNative": 386996440,
+    "instructionsTranslated": 386998731,
+    "branchMissesNative": 42085,
+    "branchMissesTranslated": 42160,
+    "resultsEqual": true
+   },
+   "sse": {
+    "n": 294527,
+    "nativeMsMedian": 155.748198,
+    "translatedMsMedian": 156.3178,
+    "overheadPercentMedian": 0.36571980113695446,
+    "pairedRatioMedianPercent": -0.03401388062878041,
+    "cyclesNative": 603862510,
+    "cyclesTranslated": 604094332,
+    "instructionsNative": 529265309,
+    "instructionsTranslated": 529562128,
+    "branchMissesNative": 294921,
+    "branchMissesTranslated": 294917,
+    "resultsEqual": true
+   }
+  },
+  {
+   "int": {
+    "n": 83385231,
+    "nativeMsMedian": 155.790827,
+    "translatedMsMedian": 155.5279,
+    "overheadPercentMedian": -0.16876924339068733,
+    "pairedRatioMedianPercent": 0.3991075803198685,
+    "cyclesNative": 608343430,
+    "cyclesTranslated": 608436084,
+    "instructionsNative": 1500934440,
+    "instructionsTranslated": 1500938610,
+    "branchMissesNative": 56,
+    "branchMissesTranslated": 308,
+    "resultsEqual": true
+   },
+   "fnv": {
+    "n": 2312,
+    "nativeMsMedian": 155.090444,
+    "translatedMsMedian": 155.514,
+    "overheadPercentMedian": 0.2731025774869833,
+    "pairedRatioMedianPercent": 0.277424927934633,
+    "cyclesNative": 606897568,
+    "cyclesTranslated": 606919435,
+    "instructionsNative": 909131854,
+    "instructionsTranslated": 909131410,
+    "branchMissesNative": 2445,
+    "branchMissesTranslated": 4060,
+    "resultsEqual": true
+   },
+   "crc": {
+    "n": 1141,
+    "nativeMsMedian": 159.559255,
+    "translatedMsMedian": 157.2474,
+    "overheadPercentMedian": -1.4489005980881542,
+    "pairedRatioMedianPercent": 0.6042436843307852,
+    "cyclesNative": 610767981,
+    "cyclesTranslated": 610719641,
+    "instructionsNative": 598218610,
+    "instructionsTranslated": 598221399,
+    "branchMissesNative": 1554,
+    "branchMissesTranslated": 2176,
+    "resultsEqual": true
+   },
+   "mem": {
+    "n": 4370,
+    "nativeMsMedian": 155.775937,
+    "translatedMsMedian": 156.8481,
+    "overheadPercentMedian": 0.6882725410921386,
+    "pairedRatioMedianPercent": 0.28147030179634935,
+    "cyclesNative": 598603587,
+    "cyclesTranslated": 598262976,
+    "instructionsNative": 153272,
+    "instructionsTranslated": 156034,
+    "branchMissesNative": 5,
+    "branchMissesTranslated": 68,
+    "resultsEqual": true
+   },
+   "fib": {
+    "n": 39,
+    "nativeMsMedian": 228.868348,
+    "translatedMsMedian": 236.4867,
+    "overheadPercentMedian": 3.3287049373904587,
+    "pairedRatioMedianPercent": 3.754608472833465,
+    "cyclesNative": 896383948,
+    "cyclesTranslated": 915442365,
+    "instructionsNative": 2347983026,
+    "instructionsTranslated": 2859656119,
+    "branchMissesNative": 2292297,
+    "branchMissesTranslated": 2414215,
+    "resultsEqual": true
+   },
+   "calls": {
+    "n": 34684477,
+    "nativeMsMedian": 162.138777,
+    "translatedMsMedian": 169.5502,
+    "overheadPercentMedian": 4.571036699012465,
+    "pairedRatioMedianPercent": 4.114345279930132,
+    "cyclesNative": 613096348,
+    "cyclesTranslated": 632185033,
+    "instructionsNative": 1144588054,
+    "instructionsTranslated": 2011702280,
+    "branchMissesNative": 156,
+    "branchMissesTranslated": 614,
+    "resultsEqual": true
+   },
+   "switch": {
+    "n": 18969353,
+    "nativeMsMedian": 156.332073,
+    "translatedMsMedian": 165.0764,
+    "overheadPercentMedian": 5.593431234037305,
+    "pairedRatioMedianPercent": 6.43443016257379,
+    "cyclesNative": 607742488,
+    "cyclesTranslated": 643670580,
+    "instructionsNative": 273754907,
+    "instructionsTranslated": 362594881,
+    "branchMissesNative": 17909469,
+    "branchMissesTranslated": 17974663,
+    "resultsEqual": true
+   },
+   "ind": {
+    "n": 92477710,
+    "nativeMsMedian": 155.791409,
+    "translatedMsMedian": 179.5326,
+    "overheadPercentMedian": 15.239088697118074,
+    "pairedRatioMedianPercent": 15.758744639704037,
+    "cyclesNative": 608473079,
+    "cyclesTranslated": 703461227,
+    "instructionsNative": 1248449362,
+    "instructionsTranslated": 2450661914,
+    "branchMissesNative": 1571,
+    "branchMissesTranslated": 6021,
+    "resultsEqual": true
+   },
+   "lz": {
+    "n": 833,
+    "nativeMsMedian": 148.14343,
+    "translatedMsMedian": 149.3192,
+    "overheadPercentMedian": 0.7936700264061569,
+    "pairedRatioMedianPercent": 0.21676992733929978,
+    "cyclesNative": 582641079,
+    "cyclesTranslated": 583617618,
+    "instructionsNative": 1941669964,
+    "instructionsTranslated": 1941674760,
+    "branchMissesNative": 3359868,
+    "branchMissesTranslated": 3338802,
+    "resultsEqual": true
+   },
+   "matmul": {
+    "n": 4010,
+    "nativeMsMedian": 155.589771,
+    "translatedMsMedian": 157.7147,
+    "overheadPercentMedian": 1.365725385636063,
+    "pairedRatioMedianPercent": 0.9175597998466678,
+    "cyclesNative": 607985452,
+    "cyclesTranslated": 618609007,
+    "instructionsNative": 1855976655,
+    "instructionsTranslated": 1862234546,
+    "branchMissesNative": 6528930,
+    "branchMissesTranslated": 6686712,
+    "resultsEqual": true
+   },
+   "x87": {
+    "n": 41969,
+    "nativeMsMedian": 156.193009,
+    "translatedMsMedian": 156.4651,
+    "overheadPercentMedian": 0.17420177877487397,
+    "pairedRatioMedianPercent": -0.21983258042139742,
+    "cyclesNative": 603571752,
+    "cyclesTranslated": 603487515,
+    "instructionsNative": 386996435,
+    "instructionsTranslated": 386998759,
+    "branchMissesNative": 42087,
+    "branchMissesTranslated": 42129,
+    "resultsEqual": true
+   },
+   "sse": {
+    "n": 294527,
+    "nativeMsMedian": 162.389749,
+    "translatedMsMedian": 164.502,
+    "overheadPercentMedian": 1.300729272018275,
+    "pairedRatioMedianPercent": 0.7518426763757358,
+    "cyclesNative": 603906215,
+    "cyclesTranslated": 604019223,
+    "instructionsNative": 529265393,
+    "instructionsTranslated": 529562271,
+    "branchMissesNative": 295046,
+    "branchMissesTranslated": 295036,
+    "resultsEqual": true
+   }
+  }
+ ],
+ "repeatRunsNote": "All runs are reported, none dropped. The machine is a desktop with background applications, so single runs can be perturbed (e.g. baseline matmul 15.4 percent in one run, 8-9 percent in the others).",
+ "baselineBeforeOptimization": {
+  "description": "Same benchmark, same machine and ns/iteration counts (--reuse-n), run against the unmodified CodeGen of commit 9cc097a built in a separate git worktree; 5 runs, interleaved with or taken around the optimized runs (fbase* before the final layout work, gbase* alongside the final build).",
+  "runs": [
+   {
+    "int": {
+     "n": 83385231,
+     "nativeMsMedian": 158.202794,
+     "translatedMsMedian": 158.3129,
+     "overheadPercentMedian": 0.06959801228290097,
+     "pairedRatioMedianPercent": 0.11226476821895037,
+     "cyclesNative": 609069166,
+     "cyclesTranslated": 610673285,
+     "instructionsNative": 1500934461,
+     "instructionsTranslated": 1500938624,
+     "branchMissesNative": 73,
+     "branchMissesTranslated": 387,
+     "resultsEqual": true
+    },
+    "fnv": {
+     "n": 2312,
+     "nativeMsMedian": 161.889091,
+     "translatedMsMedian": 160.0237,
+     "overheadPercentMedian": -1.1522647934319452,
+     "pairedRatioMedianPercent": -0.5877067787487533,
+     "cyclesNative": 606850821,
+     "cyclesTranslated": 606910152,
+     "instructionsNative": 909131919,
+     "instructionsTranslated": 909136099,
+     "branchMissesNative": 2617,
+     "branchMissesTranslated": 2739,
+     "resultsEqual": true
+    },
+    "crc": {
+     "n": 1141,
+     "nativeMsMedian": 163.074961,
+     "translatedMsMedian": 163.8475,
+     "overheadPercentMedian": 0.47373244504409495,
+     "pairedRatioMedianPercent": 0.04188130250908362,
+     "cyclesNative": 610630197,
+     "cyclesTranslated": 610872630,
+     "instructionsNative": 598218655,
+     "instructionsTranslated": 598221422,
+     "branchMissesNative": 1510,
+     "branchMissesTranslated": 1534,
+     "resultsEqual": true
+    },
+    "mem": {
+     "n": 4370,
+     "nativeMsMedian": 154.43007,
+     "translatedMsMedian": 153.973,
+     "overheadPercentMedian": -0.2959721510195523,
+     "pairedRatioMedianPercent": -0.7806236325533011,
+     "cyclesNative": 597891593,
+     "cyclesTranslated": 597129409,
+     "instructionsNative": 153245,
+     "instructionsTranslated": 156001,
+     "branchMissesNative": 5,
+     "branchMissesTranslated": 65,
+     "resultsEqual": true
+    },
+    "fib": {
+     "n": 39,
+     "nativeMsMedian": 237.743885,
+     "translatedMsMedian": 304.4436,
+     "overheadPercentMedian": 28.055281001233734,
+     "pairedRatioMedianPercent": 27.74074083966449,
+     "cyclesNative": 898394897,
+     "cyclesTranslated": 1141612566,
+     "instructionsNative": 2347983104,
+     "instructionsTranslated": 3678329543,
+     "branchMissesNative": 2303812,
+     "branchMissesTranslated": 2210476,
+     "resultsEqual": true
+    },
+    "calls": {
+     "n": 34684477,
+     "nativeMsMedian": 157.025436,
+     "translatedMsMedian": 230.7517,
+     "overheadPercentMedian": 46.951797032424736,
+     "pairedRatioMedianPercent": 48.10185665797171,
+     "cyclesNative": 609060931,
+     "cyclesTranslated": 896331381,
+     "instructionsNative": 1144588030,
+     "instructionsTranslated": 2948183238,
+     "branchMissesNative": 78,
+     "branchMissesTranslated": 5322,
+     "resultsEqual": true
+    },
+    "switch": {
+     "n": 18969353,
+     "nativeMsMedian": 157.982666,
+     "translatedMsMedian": 220.9512,
+     "overheadPercentMedian": 39.85787529373634,
+     "pairedRatioMedianPercent": 40.00608885877839,
+     "cyclesNative": 607718932,
+     "cyclesTranslated": 842623305,
+     "instructionsNative": 273754922,
+     "instructionsTranslated": 433665124,
+     "branchMissesNative": 17909969,
+     "branchMissesTranslated": 17844525,
+     "resultsEqual": true
+    },
+    "ind": {
+     "n": 92477710,
+     "nativeMsMedian": 163.495766,
+     "translatedMsMedian": 252.4632,
+     "overheadPercentMedian": 54.41574187309535,
+     "pairedRatioMedianPercent": 54.34908023312759,
+     "cyclesNative": 613717746,
+     "cyclesTranslated": 942833099,
+     "instructionsNative": 1248449426,
+     "instructionsTranslated": 3282961501,
+     "branchMissesNative": 2358,
+     "branchMissesTranslated": 10816,
+     "resultsEqual": true
+    },
+    "lz": {
+     "n": 833,
+     "nativeMsMedian": 152.951719,
+     "translatedMsMedian": 152.8898,
+     "overheadPercentMedian": -0.04048270944898569,
+     "pairedRatioMedianPercent": -0.6751226185547909,
+     "cyclesNative": 589769926,
+     "cyclesTranslated": 590626888,
+     "instructionsNative": 1941669979,
+     "instructionsTranslated": 1941672293,
+     "branchMissesNative": 3368588,
+     "branchMissesTranslated": 3319080,
+     "resultsEqual": true
+    },
+    "matmul": {
+     "n": 4010,
+     "nativeMsMedian": 157.006497,
+     "translatedMsMedian": 170.1034,
+     "overheadPercentMedian": 8.341631238355696,
+     "pairedRatioMedianPercent": 8.024956444955267,
+     "cyclesNative": 611245113,
+     "cyclesTranslated": 661730681,
+     "instructionsNative": 1855976662,
+     "instructionsTranslated": 1855978992,
+     "branchMissesNative": 6526603,
+     "branchMissesTranslated": 6260377,
+     "resultsEqual": true
+    },
+    "x87": {
+     "n": 41969,
+     "nativeMsMedian": 155.467668,
+     "translatedMsMedian": 155.117,
+     "overheadPercentMedian": -0.2255568662675289,
+     "pairedRatioMedianPercent": -0.32570967011732455,
+     "cyclesNative": 603602797,
+     "cyclesTranslated": 603419610,
+     "instructionsNative": 386996432,
+     "instructionsTranslated": 386998744,
+     "branchMissesNative": 42061,
+     "branchMissesTranslated": 42308,
+     "resultsEqual": true
+    },
+    "sse": {
+     "n": 294527,
+     "nativeMsMedian": 156.344081,
+     "translatedMsMedian": 156.0814,
+     "overheadPercentMedian": -0.1680146752725431,
+     "pairedRatioMedianPercent": -0.6766360179566333,
+     "cyclesNative": 603938790,
+     "cyclesTranslated": 603957491,
+     "instructionsNative": 529265314,
+     "instructionsTranslated": 529267624,
+     "branchMissesNative": 294832,
+     "branchMissesTranslated": 295006,
+     "resultsEqual": true
+    }
+   },
+   {
+    "int": {
+     "n": 83385231,
+     "nativeMsMedian": 156.817783,
+     "translatedMsMedian": 156.5692,
+     "overheadPercentMedian": -0.15851709879102227,
+     "pairedRatioMedianPercent": 0.04355364786203797,
+     "cyclesNative": 608382004,
+     "cyclesTranslated": 608476404,
+     "instructionsNative": 1500934447,
+     "instructionsTranslated": 1500938626,
+     "branchMissesNative": 54,
+     "branchMissesTranslated": 379,
+     "resultsEqual": true
+    },
+    "fnv": {
+     "n": 2312,
+     "nativeMsMedian": 156.38501,
+     "translatedMsMedian": 156.7439,
+     "overheadPercentMedian": 0.2294913048251912,
+     "pairedRatioMedianPercent": -0.12492104044424801,
+     "cyclesNative": 606756146,
+     "cyclesTranslated": 606794363,
+     "instructionsNative": 909131860,
+     "instructionsTranslated": 909136043,
+     "branchMissesNative": 2490,
+     "branchMissesTranslated": 2705,
+     "resultsEqual": true
+    },
+    "crc": {
+     "n": 1141,
+     "nativeMsMedian": 158.542784,
+     "translatedMsMedian": 157.7187,
+     "overheadPercentMedian": -0.5197865075965868,
+     "pairedRatioMedianPercent": -0.35445561163636174,
+     "cyclesNative": 610408826,
+     "cyclesTranslated": 610406736,
+     "instructionsNative": 598218613,
+     "instructionsTranslated": 598221351,
+     "branchMissesNative": 1455,
+     "branchMissesTranslated": 1465,
+     "resultsEqual": true
+    },
+    "mem": {
+     "n": 4370,
+     "nativeMsMedian": 155.463615,
+     "translatedMsMedian": 155.1327,
+     "overheadPercentMedian": -0.2128568797271302,
+     "pairedRatioMedianPercent": -0.24673714931681134,
+     "cyclesNative": 600604611,
+     "cyclesTranslated": 598655537,
+     "instructionsNative": 153251,
+     "instructionsTranslated": 155990,
+     "branchMissesNative": 6,
+     "branchMissesTranslated": 63,
+     "resultsEqual": true
+    },
+    "fib": {
+     "n": 39,
+     "nativeMsMedian": 233.771583,
+     "translatedMsMedian": 294.5781,
+     "overheadPercentMedian": 26.01108150942366,
+     "pairedRatioMedianPercent": 26.458484398431658,
+     "cyclesNative": 899176230,
+     "cyclesTranslated": 1137845941,
+     "instructionsNative": 2347983047,
+     "instructionsTranslated": 3678329409,
+     "branchMissesNative": 2293819,
+     "branchMissesTranslated": 2211610,
+     "resultsEqual": true
+    },
+    "calls": {
+     "n": 34684477,
+     "nativeMsMedian": 158.871788,
+     "translatedMsMedian": 238.4113,
+     "overheadPercentMedian": 50.065221145493744,
+     "pairedRatioMedianPercent": 50.679627412227646,
+     "cyclesNative": 610416197,
+     "cyclesTranslated": 909617369,
+     "instructionsNative": 1144588038,
+     "instructionsTranslated": 2948183245,
+     "branchMissesNative": 105,
+     "branchMissesTranslated": 5861,
+     "resultsEqual": true
+    },
+    "switch": {
+     "n": 18969353,
+     "nativeMsMedian": 160.577959,
+     "translatedMsMedian": 225.0919,
+     "overheadPercentMedian": 40.17608730473401,
+     "pairedRatioMedianPercent": 38.76667594215437,
+     "cyclesNative": 608677750,
+     "cyclesTranslated": 842196682,
+     "instructionsNative": 273754951,
+     "instructionsTranslated": 433665136,
+     "branchMissesNative": 17910178,
+     "branchMissesTranslated": 17844289,
+     "resultsEqual": true
+    },
+    "ind": {
+     "n": 92477710,
+     "nativeMsMedian": 158.433413,
+     "translatedMsMedian": 242.4903,
+     "overheadPercentMedian": 53.05502507857987,
+     "pairedRatioMedianPercent": 53.52689611017891,
+     "cyclesNative": 610070822,
+     "cyclesTranslated": 935736362,
+     "instructionsNative": 1248449379,
+     "instructionsTranslated": 3282961400,
+     "branchMissesNative": 1711,
+     "branchMissesTranslated": 9790,
+     "resultsEqual": true
+    },
+    "lz": {
+     "n": 833,
+     "nativeMsMedian": 151.486315,
+     "translatedMsMedian": 150.8518,
+     "overheadPercentMedian": -0.41885961778131975,
+     "pairedRatioMedianPercent": -0.22147249796614643,
+     "cyclesNative": 583914273,
+     "cyclesTranslated": 582882700,
+     "instructionsNative": 1941669981,
+     "instructionsTranslated": 1941672272,
+     "branchMissesNative": 3362755,
+     "branchMissesTranslated": 3310851,
+     "resultsEqual": true
+    },
+    "matmul": {
+     "n": 4010,
+     "nativeMsMedian": 161.574787,
+     "translatedMsMedian": 186.4704,
+     "overheadPercentMedian": 15.408105102437798,
+     "pairedRatioMedianPercent": 10.63782763725014,
+     "cyclesNative": 611148226,
+     "cyclesTranslated": 666546102,
+     "instructionsNative": 1855976703,
+     "instructionsTranslated": 1855979032,
+     "branchMissesNative": 6535745,
+     "branchMissesTranslated": 6260618,
+     "resultsEqual": true
+    },
+    "x87": {
+     "n": 41969,
+     "nativeMsMedian": 156.228209,
+     "translatedMsMedian": 160.0825,
+     "overheadPercentMedian": 2.46709030633514,
+     "pairedRatioMedianPercent": 1.4095164688907147,
+     "cyclesNative": 603188163,
+     "cyclesTranslated": 603859910,
+     "instructionsNative": 386996445,
+     "instructionsTranslated": 386998758,
+     "branchMissesNative": 42083,
+     "branchMissesTranslated": 42462,
+     "resultsEqual": true
+    },
+    "sse": {
+     "n": 294527,
+     "nativeMsMedian": 160.762646,
+     "translatedMsMedian": 161.7442,
+     "overheadPercentMedian": 0.6105609881539298,
+     "pairedRatioMedianPercent": 0.5114087343071505,
+     "cyclesNative": 604053370,
+     "cyclesTranslated": 604010342,
+     "instructionsNative": 529265368,
+     "instructionsTranslated": 529267657,
+     "branchMissesNative": 295005,
+     "branchMissesTranslated": 295212,
+     "resultsEqual": true
+    }
+   },
+   {
+    "int": {
+     "n": 83385231,
+     "nativeMsMedian": 152.680109,
+     "translatedMsMedian": 152.2901,
+     "overheadPercentMedian": -0.25544191876363254,
+     "pairedRatioMedianPercent": -0.31260314709613546,
+     "cyclesNative": 608564950,
+     "cyclesTranslated": 609340843,
+     "instructionsNative": 1500934414,
+     "instructionsTranslated": 1500938575,
+     "branchMissesNative": 66,
+     "branchMissesTranslated": 417,
+     "resultsEqual": true
+    },
+    "fnv": {
+     "n": 2312,
+     "nativeMsMedian": 152.733953,
+     "translatedMsMedian": 152.758,
+     "overheadPercentMedian": 0.015744370866910273,
+     "pairedRatioMedianPercent": -0.014909302832166738,
+     "cyclesNative": 606943993,
+     "cyclesTranslated": 606963198,
+     "instructionsNative": 909131828,
+     "instructionsTranslated": 909136009,
+     "branchMissesNative": 2432,
+     "branchMissesTranslated": 2756,
+     "resultsEqual": true
+    },
+    "crc": {
+     "n": 1141,
+     "nativeMsMedian": 153.49747,
+     "translatedMsMedian": 153.5621,
+     "overheadPercentMedian": 0.04210492850469372,
+     "pairedRatioMedianPercent": 0.012684889066760796,
+     "cyclesNative": 610514793,
+     "cyclesTranslated": 610477156,
+     "instructionsNative": 598218567,
+     "instructionsTranslated": 598221330,
+     "branchMissesNative": 1401,
+     "branchMissesTranslated": 1657,
+     "resultsEqual": true
+    },
+    "mem": {
+     "n": 4370,
+     "nativeMsMedian": 150.551409,
+     "translatedMsMedian": 150.7011,
+     "overheadPercentMedian": 0.09942849488708827,
+     "pairedRatioMedianPercent": 0.21785637766660315,
+     "cyclesNative": 598965685,
+     "cyclesTranslated": 599756108,
+     "instructionsNative": 153208,
+     "instructionsTranslated": 155970,
+     "branchMissesNative": 5,
+     "branchMissesTranslated": 58,
+     "resultsEqual": true
+    },
+    "fib": {
+     "n": 39,
+     "nativeMsMedian": 225.017812,
+     "translatedMsMedian": 285.0841,
+     "overheadPercentMedian": 26.6940147831497,
+     "pairedRatioMedianPercent": 27.48859095477163,
+     "cyclesNative": 896726236,
+     "cyclesTranslated": 1141027207,
+     "instructionsNative": 2347982984,
+     "instructionsTranslated": 3678329362,
+     "branchMissesNative": 2270750,
+     "branchMissesTranslated": 2241957,
+     "resultsEqual": true
+    },
+    "calls": {
+     "n": 34684477,
+     "nativeMsMedian": 151.629039,
+     "translatedMsMedian": 223.4542,
+     "overheadPercentMedian": 47.36900099986785,
+     "pairedRatioMedianPercent": 47.58619153241197,
+     "cyclesNative": 605342338,
+     "cyclesTranslated": 890637715,
+     "instructionsNative": 1144587993,
+     "instructionsTranslated": 2948183186,
+     "branchMissesNative": 41,
+     "branchMissesTranslated": 5773,
+     "resultsEqual": true
+    },
+    "switch": {
+     "n": 18969353,
+     "nativeMsMedian": 149.466685,
+     "translatedMsMedian": 207.452,
+     "overheadPercentMedian": 38.794809023830304,
+     "pairedRatioMedianPercent": 38.73896993378479,
+     "cyclesNative": 607374551,
+     "cyclesTranslated": 840754056,
+     "instructionsNative": 273754875,
+     "instructionsTranslated": 433665049,
+     "branchMissesNative": 17908723,
+     "branchMissesTranslated": 17840639,
+     "resultsEqual": true
+    },
+    "ind": {
+     "n": 92477710,
+     "nativeMsMedian": 150.421752,
+     "translatedMsMedian": 229.9872,
+     "overheadPercentMedian": 52.89490844382667,
+     "pairedRatioMedianPercent": 53.08924847508818,
+     "cyclesNative": 609194616,
+     "cyclesTranslated": 931239852,
+     "instructionsNative": 1248449333,
+     "instructionsTranslated": 3282961350,
+     "branchMissesNative": 1163,
+     "branchMissesTranslated": 8910,
+     "resultsEqual": true
+    },
+    "lz": {
+     "n": 833,
+     "nativeMsMedian": 143.892321,
+     "translatedMsMedian": 142.6783,
+     "overheadPercentMedian": -0.8437010339141016,
+     "pairedRatioMedianPercent": -0.65194552168093,
+     "cyclesNative": 584265636,
+     "cyclesTranslated": 580744262,
+     "instructionsNative": 1941669939,
+     "instructionsTranslated": 1941672254,
+     "branchMissesNative": 3359208,
+     "branchMissesTranslated": 3290538,
+     "resultsEqual": true
+    },
+    "matmul": {
+     "n": 4010,
+     "nativeMsMedian": 153.650576,
+     "translatedMsMedian": 166.1211,
+     "overheadPercentMedian": 8.116158314954847,
+     "pairedRatioMedianPercent": 8.207448361220028,
+     "cyclesNative": 612534520,
+     "cyclesTranslated": 662642228,
+     "instructionsNative": 1855976627,
+     "instructionsTranslated": 1855978958,
+     "branchMissesNative": 6509675,
+     "branchMissesTranslated": 6259972,
+     "resultsEqual": true
+    },
+    "x87": {
+     "n": 41969,
+     "nativeMsMedian": 152.143647,
+     "translatedMsMedian": 152.1967,
+     "overheadPercentMedian": 0.0348703354008606,
+     "pairedRatioMedianPercent": -0.04416808283382867,
+     "cyclesNative": 604441026,
+     "cyclesTranslated": 604961491,
+     "instructionsNative": 386996399,
+     "instructionsTranslated": 386998716,
+     "branchMissesNative": 42060,
+     "branchMissesTranslated": 42386,
+     "resultsEqual": true
+    },
+    "sse": {
+     "n": 294527,
+     "nativeMsMedian": 151.931079,
+     "translatedMsMedian": 151.9929,
+     "overheadPercentMedian": 0.04069016056944541,
+     "pairedRatioMedianPercent": 0.029675636740589262,
+     "cyclesNative": 604013416,
+     "cyclesTranslated": 604078158,
+     "instructionsNative": 529265274,
+     "instructionsTranslated": 529267591,
+     "branchMissesNative": 294772,
+     "branchMissesTranslated": 294921,
+     "resultsEqual": true
+    }
+   },
+   {
+    "int": {
+     "n": 83385231,
+     "nativeMsMedian": 153.178812,
+     "translatedMsMedian": 153.2137,
+     "overheadPercentMedian": 0.022775995938650873,
+     "pairedRatioMedianPercent": -0.0764796427249137,
+     "cyclesNative": 608773333,
+     "cyclesTranslated": 608848879,
+     "instructionsNative": 1500934417,
+     "instructionsTranslated": 1500939296,
+     "branchMissesNative": 61,
+     "branchMissesTranslated": 346,
+     "resultsEqual": true
+    },
+    "fnv": {
+     "n": 2312,
+     "nativeMsMedian": 152.682756,
+     "translatedMsMedian": 152.678,
+     "overheadPercentMedian": -0.0031149555618448233,
+     "pairedRatioMedianPercent": 0.027153610050301147,
+     "cyclesNative": 606925712,
+     "cyclesTranslated": 606973244,
+     "instructionsNative": 909131828,
+     "instructionsTranslated": 909135976,
+     "branchMissesNative": 2419,
+     "branchMissesTranslated": 2699,
+     "resultsEqual": true
+    },
+    "crc": {
+     "n": 1141,
+     "nativeMsMedian": 153.813842,
+     "translatedMsMedian": 153.7897,
+     "overheadPercentMedian": -0.015695596499043507,
+     "pairedRatioMedianPercent": 0.07512480078553097,
+     "cyclesNative": 611086542,
+     "cyclesTranslated": 611108961,
+     "instructionsNative": 598218569,
+     "instructionsTranslated": 598221332,
+     "branchMissesNative": 1476,
+     "branchMissesTranslated": 1536,
+     "resultsEqual": true
+    },
+    "mem": {
+     "n": 4370,
+     "nativeMsMedian": 154.81807,
+     "translatedMsMedian": 155.5671,
+     "overheadPercentMedian": 0.4838130329360091,
+     "pairedRatioMedianPercent": 0.3914046486664047,
+     "cyclesNative": 615021144,
+     "cyclesTranslated": 617968995,
+     "instructionsNative": 153211,
+     "instructionsTranslated": 155976,
+     "branchMissesNative": 6,
+     "branchMissesTranslated": 54,
+     "resultsEqual": true
+    },
+    "fib": {
+     "n": 39,
+     "nativeMsMedian": 224.965435,
+     "translatedMsMedian": 286.3404,
+     "overheadPercentMedian": 27.28195333652035,
+     "pairedRatioMedianPercent": 27.24429956373864,
+     "cyclesNative": 895431137,
+     "cyclesTranslated": 1138397802,
+     "instructionsNative": 2347982986,
+     "instructionsTranslated": 3678329364,
+     "branchMissesNative": 2272806,
+     "branchMissesTranslated": 2238234,
+     "resultsEqual": true
+    },
+    "calls": {
+     "n": 34684477,
+     "nativeMsMedian": 152.820075,
+     "translatedMsMedian": 226.1653,
+     "overheadPercentMedian": 47.994496141949924,
+     "pairedRatioMedianPercent": 47.68682702680849,
+     "cyclesNative": 607575972,
+     "cyclesTranslated": 899689512,
+     "instructionsNative": 1144587994,
+     "instructionsTranslated": 2948183190,
+     "branchMissesNative": 39,
+     "branchMissesTranslated": 5440,
+     "resultsEqual": true
+    },
+    "switch": {
+     "n": 18969353,
+     "nativeMsMedian": 153.08491,
+     "translatedMsMedian": 211.9667,
+     "overheadPercentMedian": 38.46348408866687,
+     "pairedRatioMedianPercent": 38.437418944277965,
+     "cyclesNative": 608694541,
+     "cyclesTranslated": 842616488,
+     "instructionsNative": 273754879,
+     "instructionsTranslated": 433665053,
+     "branchMissesNative": 17909010,
+     "branchMissesTranslated": 17842007,
+     "resultsEqual": true
+    },
+    "ind": {
+     "n": 92477710,
+     "nativeMsMedian": 158.98517,
+     "translatedMsMedian": 242.9299,
+     "overheadPercentMedian": 52.80035238506837,
+     "pairedRatioMedianPercent": 57.50195073504485,
+     "cyclesNative": 630356222,
+     "cyclesTranslated": 967114506,
+     "instructionsNative": 1248449343,
+     "instructionsTranslated": 3282961364,
+     "branchMissesNative": 1605,
+     "branchMissesTranslated": 9039,
+     "resultsEqual": true
+    },
+    "lz": {
+     "n": 833,
+     "nativeMsMedian": 148.484433,
+     "translatedMsMedian": 147.8922,
+     "overheadPercentMedian": -0.398851911971132,
+     "pairedRatioMedianPercent": -0.6342767882716926,
+     "cyclesNative": 589839194,
+     "cyclesTranslated": 588409330,
+     "instructionsNative": 1941669943,
+     "instructionsTranslated": 1941672259,
+     "branchMissesNative": 3363452,
+     "branchMissesTranslated": 3307958,
+     "resultsEqual": true
+    },
+    "matmul": {
+     "n": 4010,
+     "nativeMsMedian": 153.077145,
+     "translatedMsMedian": 167.1539,
+     "overheadPercentMedian": 9.19585676882071,
+     "pairedRatioMedianPercent": 9.254207134974134,
+     "cyclesNative": 608321071,
+     "cyclesTranslated": 664580332,
+     "instructionsNative": 1855976628,
+     "instructionsTranslated": 1855978958,
+     "branchMissesNative": 6543214,
+     "branchMissesTranslated": 6260081,
+     "resultsEqual": true
+    },
+    "x87": {
+     "n": 41969,
+     "nativeMsMedian": 152.174738,
+     "translatedMsMedian": 152.1247,
+     "overheadPercentMedian": -0.03288193602803968,
+     "pairedRatioMedianPercent": -0.04228722907333449,
+     "cyclesNative": 604259114,
+     "cyclesTranslated": 604789448,
+     "instructionsNative": 386996400,
+     "instructionsTranslated": 386998717,
+     "branchMissesNative": 42075,
+     "branchMissesTranslated": 42351,
+     "resultsEqual": true
+    },
+    "sse": {
+     "n": 294527,
+     "nativeMsMedian": 151.884979,
+     "translatedMsMedian": 151.9068,
+     "overheadPercentMedian": 0.01436679265038876,
+     "pairedRatioMedianPercent": 0.033342230302157994,
+     "cyclesNative": 603907284,
+     "cyclesTranslated": 603946849,
+     "instructionsNative": 529265274,
+     "instructionsTranslated": 529267591,
+     "branchMissesNative": 294900,
+     "branchMissesTranslated": 295038,
+     "resultsEqual": true
+    }
+   },
+   {
+    "int": {
+     "n": 83385231,
+     "nativeMsMedian": 152.766576,
+     "translatedMsMedian": 152.8323,
+     "overheadPercentMedian": 0.04302249989551754,
+     "pairedRatioMedianPercent": 0.07516751284168954,
+     "cyclesNative": 607699079,
+     "cyclesTranslated": 607989934,
+     "instructionsNative": 1500934415,
+     "instructionsTranslated": 1500938577,
+     "branchMissesNative": 24,
+     "branchMissesTranslated": 327,
+     "resultsEqual": true
+    },
+    "fnv": {
+     "n": 2312,
+     "nativeMsMedian": 152.585198,
+     "translatedMsMedian": 152.5334,
+     "overheadPercentMedian": -0.03394693632078338,
+     "pairedRatioMedianPercent": -0.006499950746918781,
+     "cyclesNative": 606867593,
+     "cyclesTranslated": 606934159,
+     "instructionsNative": 909131828,
+     "instructionsTranslated": 909136010,
+     "branchMissesNative": 2378,
+     "branchMissesTranslated": 2661,
+     "resultsEqual": true
+    },
+    "crc": {
+     "n": 1141,
+     "nativeMsMedian": 153.590591,
+     "translatedMsMedian": 153.6156,
+     "overheadPercentMedian": 0.016282898475217245,
+     "pairedRatioMedianPercent": 0.14251634024677884,
+     "cyclesNative": 610686248,
+     "cyclesTranslated": 610727778,
+     "instructionsNative": 598218569,
+     "instructionsTranslated": 598221331,
+     "branchMissesNative": 1388,
+     "branchMissesTranslated": 1459,
+     "resultsEqual": true
+    },
+    "mem": {
+     "n": 4370,
+     "nativeMsMedian": 152.534459,
+     "translatedMsMedian": 152.4005,
+     "overheadPercentMedian": -0.08782212286864155,
+     "pairedRatioMedianPercent": 0.02775537903638714,
+     "cyclesNative": 605379755,
+     "cyclesTranslated": 601155394,
+     "instructionsNative": 153209,
+     "instructionsTranslated": 155970,
+     "branchMissesNative": 5,
+     "branchMissesTranslated": 65,
+     "resultsEqual": true
+    },
+    "fib": {
+     "n": 39,
+     "nativeMsMedian": 226.434963,
+     "translatedMsMedian": 287.8249,
+     "overheadPercentMedian": 27.111509718576453,
+     "pairedRatioMedianPercent": 27.00305255045896,
+     "cyclesNative": 899524386,
+     "cyclesTranslated": 1143126257,
+     "instructionsNative": 2347982986,
+     "instructionsTranslated": 3678329368,
+     "branchMissesNative": 2280061,
+     "branchMissesTranslated": 2237084,
+     "resultsEqual": true
+    },
+    "calls": {
+     "n": 34684477,
+     "nativeMsMedian": 152.362204,
+     "translatedMsMedian": 226.6305,
+     "overheadPercentMedian": 48.744566598682184,
+     "pairedRatioMedianPercent": 48.48807512143918,
+     "cyclesNative": 605895221,
+     "cyclesTranslated": 898205724,
+     "instructionsNative": 1144587994,
+     "instructionsTranslated": 2948183190,
+     "branchMissesNative": 53,
+     "branchMissesTranslated": 5918,
+     "resultsEqual": true
+    },
+    "switch": {
+     "n": 18969353,
+     "nativeMsMedian": 152.802042,
+     "translatedMsMedian": 211.3511,
+     "overheadPercentMedian": 38.316934272383605,
+     "pairedRatioMedianPercent": 38.485380272453675,
+     "cyclesNative": 607761696,
+     "cyclesTranslated": 840869578,
+     "instructionsNative": 273754878,
+     "instructionsTranslated": 433665051,
+     "branchMissesNative": 17908710,
+     "branchMissesTranslated": 17841158,
+     "resultsEqual": true
+    },
+    "ind": {
+     "n": 92477710,
+     "nativeMsMedian": 153.21727,
+     "translatedMsMedian": 234.0735,
+     "overheadPercentMedian": 52.772269079066604,
+     "pairedRatioMedianPercent": 52.77094180042279,
+     "cyclesNative": 609210554,
+     "cyclesTranslated": 930886973,
+     "instructionsNative": 1248449335,
+     "instructionsTranslated": 3282961354,
+     "branchMissesNative": 1310,
+     "branchMissesTranslated": 9497,
+     "resultsEqual": true
+    },
+    "lz": {
+     "n": 833,
+     "nativeMsMedian": 147.586194,
+     "translatedMsMedian": 147.2464,
+     "overheadPercentMedian": -0.23023427245505435,
+     "pairedRatioMedianPercent": -0.24735162478848327,
+     "cyclesNative": 586284665,
+     "cyclesTranslated": 585127177,
+     "instructionsNative": 1941669942,
+     "instructionsTranslated": 1941672259,
+     "branchMissesNative": 3359464,
+     "branchMissesTranslated": 3301620,
+     "resultsEqual": true
+    },
+    "matmul": {
+     "n": 4010,
+     "nativeMsMedian": 155.81427,
+     "translatedMsMedian": 169.6189,
+     "overheadPercentMedian": 8.859669913416779,
+     "pairedRatioMedianPercent": 8.833630464374597,
+     "cyclesNative": 619104106,
+     "cyclesTranslated": 673837292,
+     "instructionsNative": 1855976630,
+     "instructionsTranslated": 1855978962,
+     "branchMissesNative": 6521271,
+     "branchMissesTranslated": 6260570,
+     "resultsEqual": true
+    },
+    "x87": {
+     "n": 41969,
+     "nativeMsMedian": 152.89804,
+     "translatedMsMedian": 152.9062,
+     "overheadPercentMedian": 0.005336889864637762,
+     "pairedRatioMedianPercent": 0.07616840608291042,
+     "cyclesNative": 607386710,
+     "cyclesTranslated": 607375496,
+     "instructionsNative": 386996400,
+     "instructionsTranslated": 386998717,
+     "branchMissesNative": 42187,
+     "branchMissesTranslated": 42495,
+     "resultsEqual": true
+    },
+    "sse": {
+     "n": 294527,
+     "nativeMsMedian": 151.783389,
+     "translatedMsMedian": 151.8583,
+     "overheadPercentMedian": 0.04935388549005548,
+     "pairedRatioMedianPercent": 0.04232931336081158,
+     "cyclesNative": 603825778,
+     "cyclesTranslated": 603941375,
+     "instructionsNative": 529265273,
+     "instructionsTranslated": 529267591,
+     "branchMissesNative": 294698,
+     "branchMissesTranslated": 294903,
+     "resultsEqual": true
+    }
+   }
+  ],
+  "metaCommit": "9cc097a1c355cb7a7c424527d19d584119a5f61e"
+ },
+ "translatorRobustness": {
+  "description": "25 real PE32 DLLs/EXEs found on the benchmark machine (Wine builtin and redistributable libraries, 0.1-2 MB) translated with --translate-stress (translation only, nothing executed). No exceptions; diagnostics identical before/after.",
+  "dlls": {
+   "dnsapi.dll": {
+    "before": {
+     "translateMs": 241.7,
+     "hostCodeBytes": 61440,
+     "imageBytes": 94208,
+     "errorDiagnostics": 12,
+     "totalDiagnostics": 31
+    },
+    "after": {
+     "translateMs": 348.0,
+     "hostCodeBytes": 77824,
+     "imageBytes": 94208,
+     "errorDiagnostics": 12,
+     "totalDiagnostics": 31
+    }
+   },
+   "dplayx.dll": {
+    "before": {
+     "translateMs": 265.3,
+     "hostCodeBytes": 188416,
+     "imageBytes": 258048,
+     "errorDiagnostics": 8,
+     "totalDiagnostics": 32
+    },
+    "after": {
+     "translateMs": 365.9,
+     "hostCodeBytes": 245760,
+     "imageBytes": 258048,
+     "errorDiagnostics": 8,
+     "totalDiagnostics": 32
+    }
+   },
+   "comctl32.dll": {
+    "before": {
+     "translateMs": 1136.9,
+     "hostCodeBytes": 1204224,
+     "imageBytes": 1417216,
+     "errorDiagnostics": 12,
+     "totalDiagnostics": 187
+    },
+    "after": {
+     "translateMs": 1979.9,
+     "hostCodeBytes": 1564672,
+     "imageBytes": 1417216,
+     "errorDiagnostics": 12,
+     "totalDiagnostics": 187
+    }
+   },
+   "oleaut32.dll": {
+    "before": {
+     "translateMs": 372.3,
+     "hostCodeBytes": 671744,
+     "imageBytes": 897024,
+     "errorDiagnostics": 223,
+     "totalDiagnostics": 351
+    },
+    "after": {
+     "translateMs": 574.9,
+     "hostCodeBytes": 815104,
+     "imageBytes": 897024,
+     "errorDiagnostics": 223,
+     "totalDiagnostics": 351
+    }
+   },
+   "uninstaller.exe": {
+    "before": {
+     "translateMs": 23.9,
+     "hostCodeBytes": 24576,
+     "imageBytes": 90112,
+     "errorDiagnostics": 8,
+     "totalDiagnostics": 19
+    },
+    "after": {
+     "translateMs": 29.1,
+     "hostCodeBytes": 28672,
+     "imageBytes": 90112,
+     "errorDiagnostics": 8,
+     "totalDiagnostics": 19
+    }
+   },
+   "msvdsp.dll": {
+    "before": {
+     "translateMs": 4.9,
+     "hostCodeBytes": 16384,
+     "imageBytes": 65536,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 15
+    },
+    "after": {
+     "translateMs": 10.9,
+     "hostCodeBytes": 20480,
+     "imageBytes": 65536,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 15
+    }
+   },
+   "windows.networking.hostname.dll": {
+    "before": {
+     "translateMs": 16.2,
+     "hostCodeBytes": 20480,
+     "imageBytes": 57344,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 15
+    },
+    "after": {
+     "translateMs": 25.2,
+     "hostCodeBytes": 28672,
+     "imageBytes": 57344,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 15
+    }
+   },
+   "mlang.dll": {
+    "before": {
+     "translateMs": 25.2,
+     "hostCodeBytes": 69632,
+     "imageBytes": 176128,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 13
+    },
+    "after": {
+     "translateMs": 40.8,
+     "hostCodeBytes": 86016,
+     "imageBytes": 176128,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 13
+    }
+   },
+   "cryptui.dll": {
+    "before": {
+     "translateMs": 64.8,
+     "hostCodeBytes": 163840,
+     "imageBytes": 1114112,
+     "errorDiagnostics": 26,
+     "totalDiagnostics": 52
+    },
+    "after": {
+     "translateMs": 122.1,
+     "hostCodeBytes": 221184,
+     "imageBytes": 1114112,
+     "errorDiagnostics": 26,
+     "totalDiagnostics": 52
+    }
+   },
+   "hlink.dll": {
+    "before": {
+     "translateMs": 35.8,
+     "hostCodeBytes": 61440,
+     "imageBytes": 135168,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 18
+    },
+    "after": {
+     "translateMs": 46.6,
+     "hostCodeBytes": 81920,
+     "imageBytes": 135168,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 18
+    }
+   },
+   "itss.dll": {
+    "before": {
+     "translateMs": 44.6,
+     "hostCodeBytes": 86016,
+     "imageBytes": 159744,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 153
+    },
+    "after": {
+     "translateMs": 61.8,
+     "hostCodeBytes": 106496,
+     "imageBytes": 159744,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 153
+    }
+   },
+   "xactengine2_9.dll": {
+    "before": {
+     "translateMs": 128.7,
+     "hostCodeBytes": 278528,
+     "imageBytes": 372736,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 82
+    },
+    "after": {
+     "translateMs": 216.4,
+     "hostCodeBytes": 335872,
+     "imageBytes": 372736,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 82
+    }
+   },
+   "dispex.dll": {
+    "before": {
+     "translateMs": 20.5,
+     "hostCodeBytes": 16384,
+     "imageBytes": 94208,
+     "errorDiagnostics": 0,
+     "totalDiagnostics": 16
+    },
+    "after": {
+     "translateMs": 10.3,
+     "hostCodeBytes": 24576,
+     "imageBytes": 94208,
+     "errorDiagnostics": 0,
+     "totalDiagnostics": 16
+    }
+   },
+   "d3dcompiler_41.dll": {
+    "before": {
+     "translateMs": 2165.0,
+     "hostCodeBytes": 3633152,
+     "imageBytes": 1867776,
+     "errorDiagnostics": 10,
+     "totalDiagnostics": 33170
+    },
+    "after": {
+     "translateMs": 4605.7,
+     "hostCodeBytes": 4042752,
+     "imageBytes": 1867776,
+     "errorDiagnostics": 10,
+     "totalDiagnostics": 33170
+    }
+   },
+   "cabinet.dll": {
+    "before": {
+     "translateMs": 82.1,
+     "hostCodeBytes": 135168,
+     "imageBytes": 155648,
+     "errorDiagnostics": 50,
+     "totalDiagnostics": 359
+    },
+    "after": {
+     "translateMs": 117.6,
+     "hostCodeBytes": 155648,
+     "imageBytes": 155648,
+     "errorDiagnostics": 50,
+     "totalDiagnostics": 359
+    }
+   },
+   "xapofx1_4.dll": {
+    "before": {
+     "translateMs": 13.9,
+     "hostCodeBytes": 28672,
+     "imageBytes": 65536,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 13
+    },
+    "after": {
+     "translateMs": 15.5,
+     "hostCodeBytes": 32768,
+     "imageBytes": 65536,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 13
+    }
+   },
+   "atl90.dll": {
+    "before": {
+     "translateMs": 35.8,
+     "hostCodeBytes": 77824,
+     "imageBytes": 159744,
+     "errorDiagnostics": 6,
+     "totalDiagnostics": 28
+    },
+    "after": {
+     "translateMs": 74.6,
+     "hostCodeBytes": 102400,
+     "imageBytes": 159744,
+     "errorDiagnostics": 6,
+     "totalDiagnostics": 28
+    }
+   },
+   "tasklist.exe": {
+    "before": {
+     "translateMs": 11.4,
+     "hostCodeBytes": 20480,
+     "imageBytes": 86016,
+     "errorDiagnostics": 7,
+     "totalDiagnostics": 19
+    },
+    "after": {
+     "translateMs": 20.5,
+     "hostCodeBytes": 28672,
+     "imageBytes": 86016,
+     "errorDiagnostics": 7,
+     "totalDiagnostics": 19
+    }
+   },
+   "msdmo.dll": {
+    "before": {
+     "translateMs": 36.3,
+     "hostCodeBytes": 32768,
+     "imageBytes": 110592,
+     "errorDiagnostics": 10,
+     "totalDiagnostics": 21
+    },
+    "after": {
+     "translateMs": 34.0,
+     "hostCodeBytes": 40960,
+     "imageBytes": 110592,
+     "errorDiagnostics": 10,
+     "totalDiagnostics": 21
+    }
+   },
+   "d3dx10_39.dll": {
+    "before": {
+     "translateMs": 425.5,
+     "hostCodeBytes": 741376,
+     "imageBytes": 471040,
+     "errorDiagnostics": 16,
+     "totalDiagnostics": 3930
+    },
+    "after": {
+     "translateMs": 595.4,
+     "hostCodeBytes": 864256,
+     "imageBytes": 471040,
+     "errorDiagnostics": 16,
+     "totalDiagnostics": 3930
+    }
+   },
+   "xaudio2_5.dll": {
+    "before": {
+     "translateMs": 100.4,
+     "hostCodeBytes": 229376,
+     "imageBytes": 315392,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 39
+    },
+    "after": {
+     "translateMs": 152.7,
+     "hostCodeBytes": 274432,
+     "imageBytes": 315392,
+     "errorDiagnostics": 3,
+     "totalDiagnostics": 39
+    }
+   },
+   "ole32.dll": {
+    "before": {
+     "translateMs": 313.2,
+     "hostCodeBytes": 651264,
+     "imageBytes": 839680,
+     "errorDiagnostics": 95,
+     "totalDiagnostics": 415
+    },
+    "after": {
+     "translateMs": 660.1,
+     "hostCodeBytes": 831488,
+     "imageBytes": 839680,
+     "errorDiagnostics": 95,
+     "totalDiagnostics": 415
+    }
+   },
+   "msvcp60.dll": {
+    "before": {
+     "translateMs": 346.9,
+     "hostCodeBytes": 663552,
+     "imageBytes": 1007616,
+     "errorDiagnostics": 6,
+     "totalDiagnostics": 304
+    },
+    "after": {
+     "translateMs": 741.1,
+     "hostCodeBytes": 798720,
+     "imageBytes": 1007616,
+     "errorDiagnostics": 6,
+     "totalDiagnostics": 304
+    }
+   },
+   "wintab32.dll": {
+    "before": {
+     "translateMs": 15.3,
+     "hostCodeBytes": 40960,
+     "imageBytes": 69632,
+     "errorDiagnostics": 28,
+     "totalDiagnostics": 36
+    },
+    "after": {
+     "translateMs": 25.4,
+     "hostCodeBytes": 49152,
+     "imageBytes": 69632,
+     "errorDiagnostics": 28,
+     "totalDiagnostics": 36
+    }
+   },
+   "ddraw.dll": {
+    "before": {
+     "translateMs": 229.1,
+     "hostCodeBytes": 499712,
+     "imageBytes": 557056,
+     "errorDiagnostics": 8,
+     "totalDiagnostics": 79
+    },
+    "after": {
+     "translateMs": 410.0,
+     "hostCodeBytes": 581632,
+     "imageBytes": 557056,
+     "errorDiagnostics": 8,
+     "totalDiagnostics": 79
+    }
+   }
+  },
+  "medianTranslateTimeRatio": 1.5555555555555556,
+  "medianHostCodeSizeRatio": 1.2380952380952381
+ },
+ "optimizations": [
+  {
+   "id": "O1",
+   "name": "Loop/function alignment preserved",
+   "hypothesis": "The translation is longer than the original (addr32 prefixes), so loops that the compiler aligned fall across 32-byte fetch windows; matmul inner loop 21 bytes at host offset 0x..30.",
+   "evidence": "matmul +8.1..9.2 percent with identical instruction count (cycles x1.08); 15 alternating samples with/without padding: 7.8-9.0 percent vs 2.0-2.3 percent.",
+   "change": "Branch targets preceded by compiler NOP padding (and dead function entries) are re-aligned to 16 bytes (32 for loops that fit a 32-byte window) with multi-byte NOPs; the compiler padding is dropped. Padding is iterated to a fixed point (pads only grow, so branch relaxation converges).",
+   "before_percent": {
+    "matmul": 8.9
+   },
+   "after_percent": {
+    "matmul": 1.4
+   }
+  },
+  {
+   "id": "O2",
+   "name": "Inline dispatch + cmp/jae bounds check where flags are provably dead",
+   "hypothesis": "Every ret/indirect branch pays 12 instructions: shared dispatch jump, SSE movd/pminud/movd clamp (flag preserving) and a shared predictor entry.",
+   "evidence": "Unsafe upper bound experiment (not shipped): replacing the SSE clamp by cmp/jae took ind 47.6 to 27.2, calls 39.6 to 25.0, switch 34.0 to 22.5, fib 27.2 to 18.9 percent (single 9-sample runs).",
+   "change": "When no statically known dispatch target (return sites, non-speculative function entries) consumes arithmetic flags, ret/call [mem|reg]/table jmp use cmp+jae; otherwise the exact flag-preserving SSE clamp is kept (existing test FlagsSurviveCallRetAndIndirectJump). Untranslated or out-of-range targets still trap.",
+   "before_percent": {
+    "fib": 27.1,
+    "calls": 48.0,
+    "switch": 38.8,
+    "ind": 52.9
+   }
+  },
+  {
+   "id": "O3",
+   "name": "Static return-site prediction",
+   "hypothesis": "Most rets return to a handful of call sites known at translation time; compare-and-branch is cheaper than the table dispatch and predicted per site by the conditional predictor.",
+   "evidence": "single 9-sample run after O2: fib 17.7 to 10.4, calls 27.8 to 4.7 percent.",
+   "change": "ret compares the popped address against up to 4 statically known return sites (direct callers of the functions that can reach the ret, or all indirect-call sites for address-taken functions) and jumps straight to the translated site; any other value falls through to the generic dispatch."
+  },
+  {
+   "id": "O4",
+   "name": "Argument pushes + call return push share one ESP adjustment",
+   "hypothesis": "push a; call f lowers to two lea esp adjustments.",
+   "evidence": "fib 9.1 to 0.6 percent in a single run (noisy), instruction count x1.26 to x1.22.",
+   "change": "TryMergePushRun absorbs a following direct call."
+  },
+  {
+   "id": "O5",
+   "name": "Host-offset shadow tables for read-only jump/pointer tables",
+   "hypothesis": "switch dispatch pays the generic 9-instruction translation of a guest VA that is already known statically.",
+   "evidence": "single 9-sample run: switch 19.7 to 10.0 percent, instructions x1.53 to x1.32.",
+   "change": "jmp/call [table+idx*4] with the table in a non-writable section and relocated pointers to translated blocks goes through an in-code table of host offsets after an idx<count check; the generic path is kept for every other index. Layout is iterated to a fixed point so the tables are exact."
+  }
+ ],
+ "knownLimits": [
+  "Goal <=1 percent overhead is met (within noise, |median| <= 1 percent) for int, fnv, crc, mem (rep movs/scas), lz, x87, sse.",
+  "Not met: ind (+15.9 percent: gcc hoists the table load into a register, so call edx has no table to shadow and uses the generic 9-instruction dispatch), switch (+5.6), calls (+4.6), fib (+2.8), matmul (+1.4, sensitive to code alignment).",
+  "The remaining call/ret cost is structural: guest call = 3 host instructions instead of 1 and no return-stack-buffer prediction; closing it needs native call/ret on a separate host stack.",
+  "ABI transitions are dominated by managed-side synchronization in GuestModule.Invoke (about 110 ns per empty export call, of which an uncontended RWLS read lock pair ~28 ns and Monitor ~19 ns).",
+  "Translation time is 1.5-2.5x slower and host code 10-30 percent larger than before these optimizations (alignment fixed-point passes, inlined dispatch, return-site compares)."
+ ]
+}

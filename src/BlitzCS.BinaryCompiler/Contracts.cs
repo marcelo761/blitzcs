@@ -70,8 +70,8 @@ public sealed record TranslationArtifact(
     int CodeSize,
     uint DispatchTableOffset,   // offset (in HostImage) of uint32[] indexed by (guestRva) -> host offset, 0 = not translated
     uint ImportThunkTableOffset,// offset of uint64[] (one per PeImport, same order) the loader fills with managed function pointers
-    uint ContextOffset,         // offset of the 64-byte GuestContext in the RW data area: [0]=saved native RSP (u64), rest reserved/scratch
-    uint EnterGuestOffset,      // host routine, SysV: ulong EnterGuest(ulong hostTarget /*rdi*/, uint guestEsp /*esi*/) -> eax (zero-extended in rax)
+    uint ContextOffset,         // legacy: offset of an unused 64-byte area in the RW data area (the live context is per call, see EnterGuest)
+    uint EnterGuestOffset,      // host routine, SysV: ulong EnterGuest(ulong hostTarget /*rdi*/, uint guestEsp /*esi*/, ulong callContext /*rdx*/) -> eax. callContext points to a zeroed 64-byte caller-owned block: [0]=saved native RSP, [16]=trap kind (u32, 1=untranslated target, 2=rejected instruction), [24]=trap guest VA. It is kept in R14 for the whole call, so calls on different threads (and nested calls) never share state.
     uint ExitGuestRva,          // synthetic guest RVA (>= SizeOfImage, covered by the dispatch table); loader places it as the outermost return address
     uint ImportStubBaseRva,     // synthetic guest RVA of import stub 0; stub i is at ImportStubBaseRva + 16*i; the loader writes ImageBase+that into IAT slot i
     IReadOnlyList<AddressMapEntry> AddressMap,
@@ -83,5 +83,5 @@ public enum OptimizationProfile { Debug, Release, ReleasePgo }
 
 public sealed record BinaryCompilerOptions(OptimizationProfile Profile = OptimizationProfile.Release, string TargetArchitecture = "x64", string TargetOs = "linux-sysv")
 {
-    public const string CompilerVersion = "0.1.0";
+    public const string CompilerVersion = "0.3.0";
 }

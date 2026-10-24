@@ -59,3 +59,9 @@ public sealed class GuestExportException : GuestException
 {
     public GuestExportException(string message) : base(message) { }
 }
+
+/// <summary>Translated code hit an explicit trap (untranslated indirect target or an instruction rejected at build time). Never a silent zero result.</summary>
+public sealed class GuestTrapException : GuestException
+{
+    public GuestTrapException(string message) : base(message) { }
+}

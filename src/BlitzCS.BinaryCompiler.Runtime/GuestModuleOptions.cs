@@ -14,6 +14,12 @@ public sealed class GuestModuleOptions
     /// <summary>Load despite Error diagnostics in the artifact. Default false: unsupported input never loads silently.</summary>
     public bool AllowTranslationErrors { get; init; }
 
+    /// <summary>
+    /// Bind imports that the resolver does not provide to a faulting stub instead of failing the load. Calling such an import aborts the
+    /// guest call with a <see cref="GuestImportException"/> naming dll!name, so a missing host service is never silently skipped.
+    /// </summary>
+    public bool AllowUnboundImports { get; init; }
+
     /// <summary>Run DllMain(DLL_PROCESS_ATTACH/DETACH) for DLLs with a non-zero entry point.</summary>
     public bool RunEntryPoint { get; init; } = true;
 }

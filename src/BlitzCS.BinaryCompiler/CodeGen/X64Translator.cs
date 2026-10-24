@@ -33,17 +33,26 @@ public sealed class X64Translator
         var tableRel = boundRel + 16;
         var dataLength = tableRel + 4 * tableEntries;
 
-        var (gen, enc) = Generate(0x10000000UL);
+        // Layout passes: the first sizes the code, later ones embed the previous pass's label offsets (host-offset jump tables) and
+        // repeat until the layout is a fixed point, so those tables are exact by construction.
+        var (gen, enc) = Generate(0x10000000UL, null, null);
         var codeSize = (enc.Code.Length + 4095) & ~4095;
-        (gen, enc) = Generate((ulong)codeSize);
-        if (enc.Code.Length > codeSize) throw new InvalidOperationException("Host code size changed between layout passes.");
-
-        (X64CodeGen, CodeEmitter.Result) Generate(ulong dataBase)
+        for (var attempt = 0; ; attempt++)
         {
-            var g = new X64CodeGen(image, cfg, release, dataBase, thunkRel, boundRel, tableRel, tableEntries, exitRva, stubBase);
+            var (nextGen, nextEnc) = Generate((ulong)codeSize, enc.OffsetOf, gen.E);
+            var stable = nextGen.ShadowTablesMatch(nextEnc.OffsetOf, nextEnc.Code);
+            (gen, enc) = (nextGen, nextEnc);
+            if (enc.Code.Length > codeSize) { codeSize = (enc.Code.Length + 4095) & ~4095; stable = false; }
+            if (stable) break;
+            if (attempt == 6) throw new InvalidOperationException("Host code layout did not reach a fixed point.");
+        }
+
+        (X64CodeGen, CodeEmitter.Result) Generate(ulong dataBase, Func<ulong, uint>? previousOffsets, CodeEmitter? seed)
+        {
+            var g = new X64CodeGen(image, cfg, release, dataBase, thunkRel, boundRel, tableRel, tableEntries, exitRva, stubBase) { PreviousOffsets = previousOffsets };
             g.EmitRuntime();
             g.EmitGuestCode();
-            return (g, g.E.Encode());
+            return (g, g.E.Encode(seed));
         }
 
         var host = new byte[codeSize + dataLength];

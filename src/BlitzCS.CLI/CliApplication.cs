@@ -29,7 +29,7 @@ public static class CliApplication
             }
             if (semanticsOnly)
             {
-                var semanticCatalog = args.Length == 4
+                using var semanticCatalog = args.Length == 4
                     ? ExternalCatalog.Load(args[3])
                     : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
                 var unbound = BasicCompiler.CheckSemantics(File.ReadAllText(sourcePath), sourcePath, semanticCatalog.Functions);
@@ -39,14 +39,15 @@ public static class CliApplication
                 return 0;
             }
             var outputPath = Path.GetFullPath(args[3]);
-            var catalog = args.Length == 6
+            using var catalog = args.Length == 6
                 ? ExternalCatalog.Load(args[5])
                 : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
+            var binaries = BinaryTranslationStep.Prepare(catalog, outputPath);
             var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions, out var sourceInputs);
             DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram",
                 referencePaths: catalog.Functions.ReferencePaths, nativeLibraryPaths: catalog.NativeLibraries,
                 inputPaths: args.Length == 6 ? sourceInputs.Append(args[5]) : sourceInputs);
-            BinaryTranslationStep.Run(catalog, outputPath, output);
+            binaries.Publish(output);
             output.WriteLine(outputPath);
             return 0;
         }

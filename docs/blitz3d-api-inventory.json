@@ -26398,16 +26398,37 @@
       },
       "states": {
         "signature_known": true,
-        "typed_declaration": false,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "typed_declaration": true,
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "KeyDown",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "KeyDown",
+          "parameters": [
+            "Integer"
+          ]
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 31
     },
@@ -26441,15 +26462,36 @@
       "states": {
         "signature_known": true,
         "typed_declaration": true,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "KeyHit",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "KeyHit",
+          "parameters": [
+            "Integer"
+          ]
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 33
     },
@@ -26476,16 +26518,35 @@
       },
       "states": {
         "signature_known": true,
-        "typed_declaration": false,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "typed_declaration": true,
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "GetKey",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "GetKey",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 5
     },
@@ -26512,16 +26573,35 @@
       },
       "states": {
         "signature_known": true,
-        "typed_declaration": false,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "typed_declaration": true,
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "WaitKey",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "WaitKey",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 2
     },
@@ -26549,15 +26629,34 @@
       "states": {
         "signature_known": true,
         "typed_declaration": true,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "FlushKeys",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "FlushKeys",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 18
     },
@@ -26591,15 +26690,36 @@
       "states": {
         "signature_known": true,
         "typed_declaration": true,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "MouseDown",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "MouseDown",
+          "parameters": [
+            "Integer"
+          ]
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 5
     },
@@ -26633,15 +26753,36 @@
       "states": {
         "signature_known": true,
         "typed_declaration": true,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "MouseHit",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "MouseHit",
+          "parameters": [
+            "Integer"
+          ]
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 12
     },
@@ -26668,16 +26809,35 @@
       },
       "states": {
         "signature_known": true,
-        "typed_declaration": false,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "typed_declaration": true,
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "GetMouse",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "GetMouse",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 0
     },
@@ -26704,14 +26864,30 @@
       },
       "states": {
         "signature_known": true,
-        "typed_declaration": false,
-        "executable_binding": false,
-        "functional": "not established",
+        "typed_declaration": true,
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
         "validated": "not established"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
+      "managed_binding": [
+        {
+          "name": "WaitMouse",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "WaitMouse",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
       "validation_evidence": [],
       "validation_scope": null,
       "descriptor_conflict": false,
@@ -26740,14 +26916,30 @@
       },
       "states": {
         "signature_known": true,
-        "typed_declaration": false,
-        "executable_binding": false,
-        "functional": "not established",
+        "typed_declaration": true,
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
         "validated": "not established"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
+      "managed_binding": [
+        {
+          "name": "MouseWait",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "MouseWait",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
       "validation_evidence": [],
       "validation_scope": null,
       "descriptor_conflict": false,
@@ -26776,16 +26968,35 @@
       },
       "states": {
         "signature_known": true,
-        "typed_declaration": false,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "typed_declaration": true,
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "MouseX",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "MouseX",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 15
     },
@@ -26812,16 +27023,35 @@
       },
       "states": {
         "signature_known": true,
-        "typed_declaration": false,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "typed_declaration": true,
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "MouseY",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "MouseY",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 14
     },
@@ -26848,16 +27078,35 @@
       },
       "states": {
         "signature_known": true,
-        "typed_declaration": false,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "typed_declaration": true,
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "MouseZ",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "MouseZ",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 0
     },
@@ -26885,15 +27134,34 @@
       "states": {
         "signature_known": true,
         "typed_declaration": true,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "MouseXSpeed",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "MouseXSpeed",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 16
     },
@@ -26921,15 +27189,34 @@
       "states": {
         "signature_known": true,
         "typed_declaration": true,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "MouseYSpeed",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "MouseYSpeed",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 17
     },
@@ -26957,15 +27244,34 @@
       "states": {
         "signature_known": true,
         "typed_declaration": true,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "MouseZSpeed",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "MouseZSpeed",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 12
     },
@@ -26993,15 +27299,34 @@
       "states": {
         "signature_known": true,
         "typed_declaration": true,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "FlushMouse",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "FlushMouse",
+          "parameters": []
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 8
     },
@@ -27039,16 +27364,38 @@
       },
       "states": {
         "signature_known": true,
-        "typed_declaration": false,
-        "executable_binding": false,
-        "functional": "not established",
-        "validated": "not established"
+        "typed_declaration": true,
+        "executable_binding": true,
+        "functional": "implemented; focused managed and native tests cited",
+        "validated": "scoped historical comparison"
       },
-      "managed_binding": [],
-      "managed_sources": [],
-      "functional_evidence": [],
-      "validation_evidence": [],
-      "validation_scope": null,
+      "managed_binding": [
+        {
+          "name": "MoveMouse",
+          "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+          "type": "Blitz3DCS.Windowing.LegacyInput",
+          "method": "MoveMouse",
+          "parameters": [
+            "Integer",
+            "Integer"
+          ]
+        }
+      ],
+      "managed_sources": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs"
+      ],
+      "functional_evidence": [
+        "src/Blitz3DCS.Windowing/LegacyInput.cs",
+        "tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs",
+        "tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs",
+        "tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs"
+      ],
+      "functional_scope": "explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter",
+      "validation_evidence": [
+        "docs/evidence/m20-original-input.json",
+        "docs/evidence/m20-managed-input.json"
+      ],
+      "validation_scope": "scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity",
       "descriptor_conflict": false,
       "scp_lexical_occurrences": 10
     },

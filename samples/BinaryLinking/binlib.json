@@ -1,0 +1,22 @@
+{
+  "functions": [
+    { "name": "AddInts", "parameters": ["Integer", "Integer"], "returnType": "Integer",
+      "binary": { "library": "binlib.dll", "export": "add32", "convention": "cdecl" } },
+    { "name": "AddDefault", "parameters": ["Integer", "Integer"], "returnType": "Integer", "defaults": [10],
+      "binary": { "library": "binlib.dll", "export": "add32", "convention": "cdecl" } },
+    { "name": "Sum3", "parameters": ["Integer", "Integer", "Integer"], "returnType": "Integer",
+      "binary": { "library": "binlib.dll", "export": "sum3", "convention": "cdecl" } },
+    { "name": "Clamp", "parameters": ["Integer", "Integer", "Integer"], "returnType": "Integer",
+      "binary": { "library": "binlib.dll", "export": "clamp", "convention": "cdecl" } },
+    { "name": "TextLength", "parameters": ["String"], "returnType": "Integer",
+      "binary": { "library": "binlib.dll", "export": "str_length", "convention": "cdecl" } },
+    { "name": "TextFirst", "parameters": ["String"], "returnType": "Integer",
+      "binary": { "library": "binlib.dll", "export": "str_first", "convention": "cdecl" } },
+    { "name": "FloatBits", "parameters": ["Float"], "returnType": "Integer",
+      "binary": { "library": "binlib.dll", "export": "float_bits", "convention": "cdecl" } },
+    { "name": "Bump", "parameters": ["Integer"], "returnType": "Void",
+      "binary": { "library": "binlib.dll", "export": "bump", "convention": "cdecl" } },
+    { "name": "Counter", "parameters": [], "returnType": "Integer",
+      "binary": { "library": "binlib.dll", "export": "counter", "convention": "cdecl" } }
+  ]
+}

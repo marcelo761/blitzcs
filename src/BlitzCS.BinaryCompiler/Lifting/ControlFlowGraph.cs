@@ -51,14 +51,15 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
     {
         foreach (var s in image.Sections.Where(s => s.IsExecutable))
         {
-            var size = s.VirtualSize != 0 ? s.VirtualSize : s.RawSize;
+            // Only bytes that exist in the file are code: the zero-filled tail of a section is not an instruction stream.
+            var size = s.VirtualSize != 0 ? Math.Min(s.VirtualSize, s.RawSize) : s.RawSize;
             var end = (uint)Math.Min((ulong)s.VirtualAddress + size, (ulong)mapped.Length);
             if (end > s.VirtualAddress) exec.Add((s.VirtualAddress, end));
         }
         foreach (var r in image.Relocations.Where(r => r.Type == 3)) relocSet.Add(r.Rva);
 
-        foreach (var e in image.Exports.Where(e => e.ForwarderTarget is null).OrderBy(e => e.Rva)) Enqueue(e.Rva, true);
-        if (image.EntryPointRva != 0) Enqueue(image.EntryPointRva, true);
+        foreach (var e in image.Exports.Where(e => e.ForwarderTarget is null).OrderBy(e => e.Rva)) EnqueueRoot(e.Rva, $"export '{e.Name ?? "#" + e.Ordinal}'");
+        if (image.EntryPointRva != 0) EnqueueRoot(image.EntryPointRva, "entry point");
         Drain();
 
         speculative = true;
@@ -84,6 +85,16 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
             Instructions = insts, Leaders = leaders, FunctionEntries = entries, Undecodable = undecodable,
             Blocks = BuildBlocks(), Diagnostics = diags,
         };
+    }
+
+    private void EnqueueRoot(uint rva, string what)
+    {
+        if (IsExec(rva)) { Enqueue(rva, true); return; }
+        var section = image.Sections.FirstOrDefault(s => rva >= s.VirtualAddress && rva < s.VirtualAddress + Math.Max(s.VirtualSize, s.RawSize));
+        var detail = section is { RawSize: 0 }
+            ? $"lies in section '{section.Name}', which has no data in the file; code there is produced at run time (packed or self-modifying image) and cannot be translated ahead of time"
+            : "does not lie in file-backed executable memory";
+        diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Error, "BC_ROOT_NOT_FILE_BACKED", $"The {what} at RVA 0x{rva:X} {detail}.", rva));
     }
 
     private static bool InsideDecoded(GuestInstruction[] starts, uint t)

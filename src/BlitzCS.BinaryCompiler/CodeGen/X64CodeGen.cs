@@ -10,7 +10,7 @@ namespace BlitzCS.BinaryCompiler.CodeGen;
 /// </summary>
 internal sealed class X64CodeGen
 {
-    public const int CtxNativeRsp = 0, CtxTrapKind = 16, CtxTrapAddress = 24;
+    public const int CtxNativeRsp = 0, CtxTrapKind = 16, CtxTrapAddress = 24, CtxFault = 32;
 
     private readonly PeImage image;
     private readonly ControlFlowGraph cfg;
@@ -19,8 +19,19 @@ internal sealed class X64CodeGen
     private readonly uint tableOffset, boundOffset, thunkOffset, tableEntries, exitRva, stubBaseRva;
     public readonly CodeEmitter E = new();
     public readonly List<BinaryDiagnostic> Diagnostics = [];
+    private readonly bool flagsDeadAtDispatchTargets;
+    private readonly HashSet<uint> tableJumps = [];
+    private readonly Dictionary<uint, List<uint>> returnCandidates = [];
+    private readonly Dictionary<uint, GuestInstruction> instrMap;
+    private readonly HashSet<uint> entrySet;
+    private readonly List<(ulong Table, List<ulong> Targets)> shadowTables = [];
+    private byte[]? mappedImage;
+    private HashSet<uint>? relocRvas;
 
-    public ulong EnterLabel, ExitCommonLabel, DispatchLabel, Trap1Label, Trap2Label;
+    /// <summary>Label offsets of the previous layout pass; the host-offset jump tables embedded in the code are filled from it and then verified against the final layout.</summary>
+    public Func<ulong, uint>? PreviousOffsets { get; set; }
+
+    public ulong FaultExitLabel, EnterLabel, ExitCommonLabel, DispatchLabel, Trap1Label, Trap2Label;
     public readonly Dictionary<uint, ulong> GuestLabels = [];
     public readonly List<uint> LabeledRvas = [];
     public readonly List<ulong> ImportBodyLabels = [];
@@ -33,13 +44,143 @@ internal sealed class X64CodeGen
         this.image = image; this.cfg = cfg; this.release = release; this.dataBase = dataBase;
         this.thunkOffset = thunkOffset; this.boundOffset = boundOffset; this.tableOffset = tableOffset; this.tableEntries = tableEntries;
         this.exitRva = exitRva; this.stubBaseRva = stubBaseRva;
+        instrMap = new Dictionary<uint, GuestInstruction>(cfg.Instructions);
+        entrySet = [.. cfg.FunctionEntries];
+        foreach (var d in cfg.Diagnostics) if (d.Code == "CFG_JUMP_TABLE" && d.GuestRva is { } at) tableJumps.Add(at);
+        flagsDeadAtDispatchTargets = release && DispatchTargetsIgnoreFlags();
+    }
+
+    private const RflagsBits ArithmeticFlags = RflagsBits.OF | RflagsBits.SF | RflagsBits.ZF | RflagsBits.AF | RflagsBits.CF | RflagsBits.PF;
+
+    /// <summary>
+    /// True when no statically known dynamic-dispatch target consumes the arithmetic flags it is entered with, so the cheaper
+    /// flag-clobbering `cmp`+`jae` bounds check may replace the flag-preserving SSE clamp for ret, indirect call and
+    /// table-driven jmp. The targets are every call return site and every non-speculative function entry (exports,
+    /// direct call targets, jump-table targets). Relocation-derived pointer candidates are excluded: they cannot be told apart from
+    /// data tables stored in .text, and a function called through a pointer is assumed to follow the ABI (flags are not an input). A target whose first flag-touching instruction reads a flag
+    /// (e.g. `stc; call f` ... `sbb eax,eax`) disables the optimization for the whole image, which then keeps the exact
+    /// flag-preserving dispatch. Calls and returns are assumed not to consume flags (the i386 ABIs leave EFLAGS undefined
+    /// across calls; only DF is specified, and `cmp` never changes DF).
+    /// </summary>
+    private bool DispatchTargetsIgnoreFlags()
+    {
+        var targets = new HashSet<uint>();
+        foreach (var g in instrMap.Values)
+            if (g.Instr.FlowControl is FlowControl.Call or FlowControl.IndirectCall) targets.Add(g.NextRva);
+        foreach (var e in entrySet) targets.Add(e);
+        foreach (var rva in targets)
+            if (instrMap.TryGetValue(rva, out var gi) && !gi.Speculative && !FlagsDeadIn(rva)) return false;
+        return true;
+    }
+
+
+    private const int MaxReturnCandidates = 4, MaxEntryScan = 4096;
+
+    /// <summary>
+    /// Statically predicted return sites of the `ret` at <paramref name="retRva"/>: the sites of direct calls to every function entry
+    /// that can reach the ret without crossing a call (tail `jmp`s included), plus, for entries nobody calls directly (address-taken
+    /// functions), the sites of all indirect calls. The prediction only selects a faster path: a return to any other address still
+    /// goes through the generic bounds-checked dispatch, so an unpredicted or tampered return address behaves exactly as before
+    /// (which is also why an incomplete analysis, e.g. across an unrecovered indirect jump, can only cost speed).
+    /// </summary>
+    private List<uint> ReturnCandidates(uint retRva)
+    {
+        if (returnCandidates.TryGetValue(retRva, out var cached)) return cached;
+        BuildReturnIndexIfNeeded();
+        var result = new List<uint>();
+        // Prediction only pays when the return can come from a handful of sites; with more callers than MaxReturnCandidates it is not made at all.
+        var tooMany = false;
+        if (retEntries!.TryGetValue(retRva, out var entries))
+            foreach (var e in entries)
+            {
+                var sites = directCallers!.TryGetValue(e, out var direct) ? direct : exportRvas!.Contains(e) ? [] : indirectSites!;
+                if (sites.Count > MaxReturnCandidates) { tooMany = true; break; }
+                foreach (var s in sites)
+                    if (labeled.Contains(s) && !result.Contains(s)) result.Add(s);
+                if (result.Count > MaxReturnCandidates) { tooMany = true; break; }
+            }
+        if (tooMany) result.Clear();
+        returnCandidates[retRva] = result;
+        return result;
+    }
+
+    private Dictionary<uint, List<uint>>? directCallers, retEntries;
+    private List<uint>? indirectSites;
+    private HashSet<uint>? exportRvas;
+
+    /// <summary>Indexes direct/indirect call sites and, for every `ret`, the function entries that reach it without crossing a call.</summary>
+    private void BuildReturnIndexIfNeeded()
+    {
+        if (retEntries is not null) return;
+        directCallers = []; retEntries = []; indirectSites = [];
+        exportRvas = image.Exports.Select(e => e.Rva).ToHashSet();
+        foreach (var g in instrMap.Values)
+        {
+            if (g.Instr.FlowControl == FlowControl.Call && g.Instr.Op0Kind == OpKind.NearBranch32)
+            {
+                var t = unchecked((uint)g.Instr.NearBranchTarget - image.ImageBase);
+                if (!directCallers.TryGetValue(t, out var l)) directCallers[t] = l = [];
+                l.Add(g.NextRva);
+            }
+            else if (g.Instr.FlowControl == FlowControl.IndirectCall) indirectSites.Add(g.NextRva);
+        }
+        var seen = new HashSet<uint>(); var work = new Stack<uint>();
+        foreach (var entry in entrySet)
+        {
+            seen.Clear(); work.Push(entry); seen.Add(entry);
+            while (work.Count > 0)
+            {
+                var at = work.Pop();
+                if (!instrMap.TryGetValue(at, out var g)) continue;
+                var ins = g.Instr;
+                void Go(uint to) { if (seen.Count < MaxEntryScan && seen.Add(to)) work.Push(to); }
+                switch (ins.FlowControl)
+                {
+                    case FlowControl.Return:
+                        if (!retEntries.TryGetValue(at, out var list)) retEntries[at] = list = [];
+                        list.Add(entry); break;
+                    case FlowControl.Next or FlowControl.Call or FlowControl.IndirectCall: Go(g.NextRva); break;
+                    case FlowControl.ConditionalBranch:
+                        Go(g.NextRva);
+                        if (ins.Op0Kind == OpKind.NearBranch32) Go(unchecked((uint)ins.NearBranchTarget - image.ImageBase));
+                        break;
+                    case FlowControl.UnconditionalBranch:
+                        if (ins.Op0Kind == OpKind.NearBranch32) Go(unchecked((uint)ins.NearBranchTarget - image.ImageBase));
+                        break;
+                }
+            }
+        }
+    }
+
+    private bool FlagsDeadIn(uint rva)
+    {
+        var live = ArithmeticFlags;
+        for (var step = 0; step < 32; step++)
+        {
+            if (!instrMap.TryGetValue(rva, out var g)) return false;
+            var ins = g.Instr;
+            if ((ins.RflagsRead & live) != 0) return false;
+            live &= ~ins.RflagsModified;
+            if (live == 0) return true;
+            switch (ins.FlowControl)
+            {
+                case FlowControl.Next: rva = g.NextRva; break;
+                case FlowControl.UnconditionalBranch when ins.Op0Kind == OpKind.NearBranch32:
+                    rva = unchecked((uint)ins.NearBranchTarget - image.ImageBase); break;
+                case FlowControl.Call or FlowControl.IndirectCall or FlowControl.Return or FlowControl.IndirectBranch:
+                    return true; // ABI: callees and callers do not take flags as input
+                default: return false;
+            }
+        }
+        return false;
     }
 
     // ---- operand helpers -------------------------------------------------------------------------------------------
     private static int DispSize(Register b, long d) => d == 0 ? (b is Register.EBP or Register.R13D or Register.R13 or Register.RBP ? 1 : 0) : d is >= -128 and <= 127 ? 1 : 4;
     private static MemoryOperand M(Register b, long d = 0) => new(b, d, DispSize(b, d));
     private static MemoryOperand M(Register b, Register i, int scale, long d = 0) => new(b, i, scale, d, DispSize(b, d));
-    private MemoryOperand Ctx(int off) => new(Register.RIP, (long)dataBase + off, 8);
+    // The per-call context block lives in caller memory and is addressed through R14 (callee-saved, never touched by guest code).
+    private static MemoryOperand Ctx(int off) => new(Register.R14, (long)off, 1);
     private static MemoryOperand MemOf(Instruction i)
     {
         var d = (int)(uint)i.MemoryDisplacement64;
@@ -69,7 +210,7 @@ internal sealed class X64CodeGen
     // ---- runtime routines ------------------------------------------------------------------------------------------
     public void EmitRuntime()
     {
-        Trap1Label = E.NewLabel(); Trap2Label = E.NewLabel(); ExitCommonLabel = E.NewLabel(); DispatchLabel = E.NewLabel(); EnterLabel = E.NewLabel();
+        FaultExitLabel = E.NewLabel(); Trap1Label = E.NewLabel(); Trap2Label = E.NewLabel(); ExitCommonLabel = E.NewLabel(); DispatchLabel = E.NewLabel(); EnterLabel = E.NewLabel();
         var trapStore = E.NewLabel();
         // Host offset 0 is the trap routine: dispatch table entries that are 0 land here (untranslated indirect target).
         E.Place(Trap1Label);
@@ -82,11 +223,17 @@ internal sealed class X64CodeGen
         A(Instruction.Create(Code.Mov_rm32_imm32, Ctx(CtxTrapKind), 2u));
         Jmp(trapStore);
 
-        // ulong EnterGuest(ulong hostTarget /*rdi*/, uint guestEsp /*esi*/)
+        // A managed import raised a fault: abandon the guest call at once instead of letting guest code run on with a bogus result.
+        E.Place(FaultExitLabel);
+        A(Instruction.Create(Code.Xor_r32_rm32, Register.EAX, Register.EAX));
+        Jmp(ExitCommonLabel);
+
+        // ulong EnterGuest(ulong hostTarget /*rdi*/, uint guestEsp /*esi*/, ulong callContext /*rdx*/)
         E.Place(EnterLabel);
         foreach (var r in new[] { Register.RBX, Register.RBP, Register.R12, Register.R13, Register.R14, Register.R15 })
             A(Instruction.Create(Code.Push_r64, r));
-        A(Instruction.Create(Code.Push_rm64, Ctx(CtxNativeRsp)));
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R14, Register.RDX));
+        A(Instruction.Create(Code.Push_r64, Register.RDX)); // padding: keeps the saved native RSP 16-byte aligned for the import stubs' managed calls
         A(Instruction.Create(Code.Mov_rm64_r64, Ctx(CtxNativeRsp), Register.RSP));
         A(Instruction.Create(Code.Mov_rm32_imm32, Ctx(CtxTrapKind), 0u));
         A(Instruction.Create(Code.Lea_r64_m, Register.R12, new MemoryOperand(Register.RIP, 0L, 8)));
@@ -98,10 +245,10 @@ internal sealed class X64CodeGen
         A(Instruction.Create(Code.Cld));
         A(Instruction.Create(Code.Jmp_rm64, Register.R8));
 
-        // Shared exit: guest EAX is the result. Restores the previous context slot so nested entries work.
+        // Shared exit: guest EAX is the result. R14 (the caller's context) is restored by the pops, so nested entries work.
         E.Place(ExitCommonLabel);
         A(Instruction.Create(Code.Mov_r64_rm64, Register.RSP, Ctx(CtxNativeRsp)));
-        A(Instruction.Create(Code.Pop_rm64, Ctx(CtxNativeRsp)));
+        A(Instruction.Create(Code.Pop_r64, Register.R9)); // padding
         foreach (var r in new[] { Register.R15, Register.R14, Register.R13, Register.R12, Register.RBP, Register.RBX })
             A(Instruction.Create(Code.Pop_r64, r));
         A(Instruction.Create(Code.Mov_r32_rm32, Register.EAX, Register.EAX));
@@ -110,14 +257,7 @@ internal sealed class X64CodeGen
         // Dispatch: r8d = guest VA. Flags are preserved (only lea/mov/SSE are used). Out-of-range indexes clamp to the
         // reserved last entry (0), which targets the trap routine; r9d keeps the original VA for the trap report.
         E.Place(DispatchLabel);
-        A(Instruction.Create(Code.Mov_r32_rm32, Register.R9D, Register.R8D));
-        A(Instruction.Create(Code.Lea_r32_m, Register.R8D, M(Register.R8D, unchecked((int)(0u - image.ImageBase)))));
-        A(Instruction.Create(Code.Movd_xmm_rm32, Register.XMM15, Register.R8D));
-        A(Instruction.Create(Code.Pminud_xmm_xmmm128, Register.XMM15, new MemoryOperand(Register.RIP, (long)dataBase + boundOffset, 8)));
-        A(Instruction.Create(Code.Movd_rm32_xmm, Register.R8D, Register.XMM15));
-        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, M(Register.R13, Register.R8, 4)));
-        A(Instruction.Create(Code.Lea_r64_m, Register.R8, M(Register.R12, Register.R8, 1)));
-        A(Instruction.Create(Code.Jmp_rm64, Register.R8));
+        EmitDispatchPreservingFlags();
 
         for (var k = 0; k < image.Imports.Count; k++)
         {
@@ -132,6 +272,8 @@ internal sealed class X64CodeGen
             A(Instruction.Create(Code.Mov_r32_rm32, Register.EDI, Register.R8D));
             A(Instruction.Create(Code.Cld));
             A(Instruction.Create(Code.Call_rm64, new MemoryOperand(Register.RIP, (long)dataBase + thunkOffset + 8L * k, 8)));
+            A(Instruction.Create(Code.Cmp_rm32_imm8, Ctx(CtxFault), 0));
+            Jcc(ConditionCode.ne, FaultExitLabel);
             A(Instruction.Create(Code.Pop_r64, Register.R9));
             A(Instruction.Create(Code.Pop_r64, Register.R8));
             A(Instruction.Create(Code.Pop_r64, Register.RDI));
@@ -145,6 +287,42 @@ internal sealed class X64CodeGen
             A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R10D));
             Jmp(DispatchLabel);
         }
+    }
+
+    /// <summary>r8d = guest VA -> jump to its translation (see the comment at the Dispatch routine). Clobbers r8/r9/xmm15, preserves flags.</summary>
+    private void EmitDispatchPreservingFlags()
+    {
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R9D, Register.R8D));
+        A(Instruction.Create(Code.Lea_r32_m, Register.R8D, M(Register.R8D, unchecked((int)(0u - image.ImageBase)))));
+        A(Instruction.Create(Code.Movd_xmm_rm32, Register.XMM15, Register.R8D));
+        A(Instruction.Create(Code.Pminud_xmm_xmmm128, Register.XMM15, new MemoryOperand(Register.RIP, (long)dataBase + boundOffset, 8)));
+        A(Instruction.Create(Code.Movd_rm32_xmm, Register.R8D, Register.XMM15));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, M(Register.R13, Register.R8, 4)));
+        A(Instruction.Create(Code.Lea_r64_m, Register.R8, M(Register.R12, Register.R8, 1)));
+        A(Instruction.Create(Code.Jmp_rm64, Register.R8));
+    }
+
+    /// <summary>Same contract as <see cref="EmitDispatchPreservingFlags"/> except that the arithmetic flags are clobbered (see <see cref="DispatchTargetsIgnoreFlags"/>).</summary>
+    private void EmitDispatchClobberingFlags()
+    {
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R9D, Register.R8D));
+        A(Instruction.Create(Code.Lea_r32_m, Register.R8D, M(Register.R8D, unchecked((int)(0u - image.ImageBase)))));
+        A(Instruction.Create(Code.Cmp_rm32_imm32, Register.R8D, (int)(tableEntries - 1)));
+        Jcc(ConditionCode.ae, Trap1Label); // out of range: r9d still holds the guest VA for the trap report
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, M(Register.R13, Register.R8, 4)));
+        A(Instruction.Create(Code.Lea_r64_m, Register.R8, M(Register.R12, Register.R8, 1)));
+        A(Instruction.Create(Code.Jmp_rm64, Register.R8));
+    }
+
+    /// <summary>
+    /// Release inlines the dispatch sequence at every ret/indirect site: each site then owns its indirect-branch predictor
+    /// entry and saves a jump. <paramref name="mayClobberFlags"/> additionally allows the cmp/jae bounds check.
+    /// </summary>
+    private void JmpDispatch(bool mayClobberFlags)
+    {
+        if (!release) Jmp(DispatchLabel);
+        else if (mayClobberFlags && flagsDeadAtDispatchTargets) EmitDispatchClobberingFlags();
+        else EmitDispatchPreservingFlags();
     }
 
     // ---- guest code ------------------------------------------------------------------------------------------------
@@ -193,10 +371,16 @@ internal sealed class X64CodeGen
         for (var k = 0; k < list.Count; k++)
         {
             var g = list[k];
+            // Keep the compiler's intent: a branch target the original code deliberately aligned to 16 bytes (it is preceded by NOP
+            // padding: loop heads, function entries) is aligned in the translation too. The guest padding is dropped above and
+            // replaced by a multi-byte NOP sized for the translated layout; targets that are only aligned by coincidence are left alone.
+            if (release && !labeled.Contains(g.Rva) && IsPaddingBeforeAlignedLabel(list, k)) continue;   // our own NOP padding replaces it
+            if (release && labeled.Contains(g.Rva) && (IsIntentionallyAligned(list, k) || IsDeadPaddedFunctionEntry(list, k))) E.AlignNext();
             if (labeled.Contains(g.Rva)) { E.Place(GuestLabel(g.Rva)); LabeledRvas.Add(g.Rva); }
-            var consumed = release ? TryMergePushRun(list, k) : 0;
+            var endsInCall = false;
+            var consumed = release ? TryMergePushRun(list, k, out endsInCall) : 0;
             bool falls;
-            if (consumed > 1) { k += consumed - 1; g = list[k]; falls = true; }
+            if (consumed > 0) { k += consumed - 1; g = list[k]; falls = !endsInCall; }
             else falls = Lower(g);
             if (falls && (k + 1 == list.Count || list[k + 1].Rva != g.NextRva))
                 Jmp(TargetLabel(Va(g.NextRva), g.Rva));
@@ -207,7 +391,110 @@ internal sealed class X64CodeGen
             A(Instruction.Create(Code.Mov_r32_imm32, Register.R9D, va));
             Jmp(kind == 2 ? Trap2Label : Trap1Label);
         }
+        EmitShadowTables();
     }
+
+
+    /// <summary>A guest instruction that only exists to pad code to an alignment boundary (nop, xchg ax,ax, lea/mov of a register onto itself).</summary>
+    private static bool IsNopIdiom(Instruction i)
+    {
+        switch (i.Mnemonic)
+        {
+            case Mnemonic.Nop: return true;
+            case Mnemonic.Xchg: return i.Op0Kind == OpKind.Register && i.Op1Kind == OpKind.Register && i.Op0Register == i.Op1Register;
+            case Mnemonic.Mov: return i.Op0Kind == OpKind.Register && i.Op1Kind == OpKind.Register && i.Op0Register == i.Op1Register && i.Op0Register.IsGPR32();
+            case Mnemonic.Lea:
+                return i.Op0Register.IsGPR32() && i.MemoryBase == i.Op0Register && i.MemoryIndex == Register.None && i.MemoryDisplacement64 == 0
+                    && i.MemorySegment != Register.FS && i.MemorySegment != Register.GS;
+            default: return false;
+        }
+    }
+
+    /// <summary>True when guest NOP-idioms from <paramref name="k"/> on run straight into an instruction that is a branch target at a 16-byte aligned address.</summary>
+    private bool IsPaddingBeforeAlignedLabel(List<GuestInstruction> list, int k)
+    {
+        var j = k;
+        while (j < list.Count && IsNopIdiom(list[j].Instr) && !labeled.Contains(list[j].Rva) && j + 1 < list.Count && list[j + 1].Rva == list[j].NextRva) j++;
+        return j > k && j < list.Count && labeled.Contains(list[j].Rva) && (Va(list[j].Rva) & 15) == 0;
+    }
+
+
+    private const int MaxShadowEntries = 4096;
+
+    /// <summary>
+    /// Release: `jmp`/`call [table + index*4]` (table in a read-only section whose leading entries are relocated pointers to translated
+    /// blocks: switch jump tables, function-pointer arrays) goes through a table of host offsets embedded in the code instead of
+    /// loading the guest VA and translating it at run time. Because the guest table cannot change, entry i of the shadow is exactly
+    /// what the generic dispatch would compute for entry i of the guest table. The index is
+    /// range-checked against the recovered entry count; anything else (including a tampered index) takes the generic
+    /// bounds-checked dispatch emitted right after, so behavior is unchanged. Returns false when the shortcut does not apply.
+    /// </summary>
+    private bool TryEmitShadowTable(GuestInstruction g, ulong generic, bool isCall)
+    {
+        var i = g.Instr;
+        if (!flagsDeadAtDispatchTargets || i.Op0Kind != OpKind.Memory || i.MemoryBase != Register.None
+            || i.MemoryIndex == Register.None || i.MemoryIndexScale != 4 || !i.MemoryIndex.IsGPR32() || i.MemoryIndex == Register.ESP) return false;
+        var tableVa = (uint)i.MemoryDisplacement64;
+        if (tableVa < image.ImageBase) return false;
+        var table = tableVa - image.ImageBase;
+        var section = image.Sections.FirstOrDefault(s => table >= s.VirtualAddress && table < s.VirtualAddress + Math.Max(s.VirtualSize, s.RawSize));
+        if (section is null || section.IsWritable) return false;                 // a writable table could change after translation
+        mappedImage ??= image.MapImage();
+        relocRvas ??= image.Relocations.Where(r => r.Type == 3).Select(r => r.Rva).ToHashSet();
+        var relocs = relocRvas;
+        var targets = new List<uint>();
+        for (var n = 0; n < MaxShadowEntries; n++)
+        {
+            var at = (ulong)table + (ulong)n * 4;
+            if (at + 4 > (ulong)mappedImage.Length || !relocs.Contains((uint)at)) break;
+            var v = BitConverter.ToUInt32(mappedImage, (int)at);
+            var rva = unchecked(v - image.ImageBase);
+            if (v < image.ImageBase || !cfg.Instructions.ContainsKey(rva) || !labeled.Contains(rva)) break; // the shortcut covers the leading run of translated blocks only
+            targets.Add(rva);
+        }
+        if (targets.Count == 0) return false;
+        var tableLabel = E.NewLabel();
+        shadowTables.Add((tableLabel, targets.Select(GuestLabel).ToList()));
+        A(Instruction.Create(Code.Cmp_rm32_imm32, i.MemoryIndex, targets.Count));
+        Jcc(ConditionCode.ae, generic);
+        A(Instruction.Create(Code.Lea_r64_m, Register.R9, new MemoryOperand(Register.RIP, (long)tableLabel, 8)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, M(Register.R9, i.MemoryIndex.GetFullRegister(), 4)));
+        if (isCall) PushReturn(g.NextRva);
+        A(Instruction.Create(Code.Lea_r64_m, Register.R8, M(Register.R12, Register.R8, 1)));
+        A(Instruction.Create(Code.Jmp_rm64, Register.R8));
+        return true;
+    }
+
+    private void EmitShadowTables()
+    {
+        foreach (var (table, targets) in shadowTables)
+        {
+            E.Place(table);
+            foreach (var label in targets) A(Instruction.CreateDeclareDword(PreviousOffsets?.Invoke(label) ?? 0u));
+        }
+    }
+
+    /// <summary>True when every embedded host-offset table matches the final code layout, i.e. the previous pass laid the code out exactly like this one.</summary>
+    public bool ShadowTablesMatch(Func<ulong, uint> offsetOf, byte[] code)
+    {
+        foreach (var (table, targets) in shadowTables)
+        {
+            var at = (int)offsetOf(table);
+            for (var n = 0; n < targets.Count; n++)
+                if (BitConverter.ToUInt32(code, at + 4 * n) != offsetOf(targets[n])) return false;
+        }
+        return true;
+    }
+
+    private bool IsIntentionallyAligned(List<GuestInstruction> list, int k)
+        => (Va(list[k].Rva) & 15) == 0 && k > 0 && list[k - 1].NextRva == list[k].Rva && IsNopIdiom(list[k - 1].Instr);
+
+    /// <summary>
+    /// A function entry that nothing falls into (the previous instruction ends in ret/jmp or there is a gap): its padding is never executed, so
+    /// aligning it is free, and it re-synchronizes the layout so that branch-size changes in earlier code cannot move later alignments.
+    /// </summary>
+    private bool IsDeadPaddedFunctionEntry(List<GuestInstruction> list, int k)
+        => entrySet.Contains(list[k].Rva) && (k == 0 || list[k - 1].NextRva != list[k].Rva || !CfgFallsThrough(list[k - 1].Instr));
 
     private static bool CfgFalls(GuestInstruction g) => CfgFallsThrough(g.Instr) && g.Instr.FlowControl != FlowControl.Call;
     private static bool CfgFallsThrough(Instruction i) => i.FlowControl is not (FlowControl.UnconditionalBranch or FlowControl.IndirectBranch or FlowControl.Return or FlowControl.Interrupt or FlowControl.Exception);
@@ -223,21 +510,34 @@ internal sealed class X64CodeGen
         }
     }
 
-    /// <summary>Release only: a run of register/immediate pushes in one block is lowered with a single ESP adjustment.</summary>
-    private int TryMergePushRun(List<GuestInstruction> list, int k)
+    /// <summary>
+    /// Release only: a run of register/immediate pushes in one block is lowered with a single ESP adjustment. A direct `call rel32`
+    /// that directly follows the run joins it, so the argument pushes and the return-address push share that adjustment.
+    /// Returns the number of guest instructions consumed (0 = nothing merged).
+    /// </summary>
+    private int TryMergePushRun(List<GuestInstruction> list, int k, out bool endsInCall)
     {
+        endsInCall = false;
         if (!IsSimplePush(list[k].Instr, out _, out _)) return 0;
         var n = 1;
         while (k + n < list.Count && n < 8 && list[k + n].Rva == list[k + n - 1].NextRva && !labeled.Contains(list[k + n].Rva)
                && IsSimplePush(list[k + n].Instr, out _, out _)) n++;
-        if (n < 2) return 0;
+        var callAt = k + n;
+        var withCall = callAt < list.Count && list[callAt].Rva == list[callAt - 1].NextRva && !labeled.Contains(list[callAt].Rva)
+                       && list[callAt].Instr.Code == Code.Call_rel32_32 && list[callAt].Instr.FlowControl == FlowControl.Call;
+        if (n < 2 && !withCall) return 0;
         for (var j = 0; j < n; j++)
         {
             IsSimplePush(list[k + j].Instr, out var imm, out var reg);
             if (imm is { } v) StoreImmAtSp(-4 * (j + 1), v); else StoreAtSp(-4 * (j + 1), reg);
         }
-        SpAdd(-4 * n);
-        return n;
+        if (!withCall) { SpAdd(-4 * n); return n; }
+        var call = list[callAt];
+        StoreImmAtSp(-4 * (n + 1), Va(call.NextRva));
+        SpAdd(-4 * (n + 1));
+        Jmp(TargetLabel(ResolveThread((uint)call.Instr.NearBranchTarget), call.Rva));
+        endsInCall = true;
+        return n + 1;
     }
 
     private void Unsupported(GuestInstruction g, string code, string reason)
@@ -333,26 +633,41 @@ internal sealed class X64CodeGen
                 Jmp(TargetLabel(ResolveThread((uint)i.NearBranchTarget), g.Rva));
                 return false;
             case Code.Call_rm32:
+            {
+                var generic = E.NewLabel();
+                if (TryEmitShadowTable(g, generic, true)) E.Place(generic);
                 LoadBranchSource(i);
                 PushReturn(g.NextRva);
-                Jmp(DispatchLabel);
+                JmpDispatch(true);
                 return false;
+            }
             case Code.Retnd:
             case Code.Retnd_imm16:
             {
                 int pop = i.Code == Code.Retnd_imm16 ? i.Immediate16 : 0;
                 LoadFromSp(Register.R8D, 0);
                 SpAdd(4 + pop);
-                Jmp(DispatchLabel);
+                if (flagsDeadAtDispatchTargets)
+                    foreach (var site in ReturnCandidates(g.Rva))
+                    {
+                        A(Instruction.Create(Code.Cmp_rm32_imm32, Register.R8D, (int)Va(site)));
+                        Jcc(ConditionCode.e, GuestLabel(site));
+                    }
+                JmpDispatch(true);
                 return false;
             }
             case Code.Jmp_rel8_32 or Code.Jmp_rel32_32:
                 Jmp(TargetLabel(ResolveThread((uint)i.NearBranchTarget), g.Rva));
                 return false;
             case Code.Jmp_rm32:
+            {
+                var generic = E.NewLabel();
+                var shadow = TryEmitShadowTable(g, generic, false);
+                if (shadow) E.Place(generic);
                 LoadBranchSource(i);
-                Jmp(DispatchLabel);
+                JmpDispatch(tableJumps.Contains(g.Rva));
                 return false;
+            }
             case Code.Loop_rel8_32_ECX or Code.Loope_rel8_32_ECX or Code.Loopne_rel8_32_ECX:
             {
                 var fall = E.NewLabel();

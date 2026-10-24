@@ -8,7 +8,7 @@ Reference: [upstream source](https://github.com/blitz-research/blitz3d/tree/6beb
 
 Complete machine-readable signatures, defaults, returns, source lines, direct includes, binding states and evidence: [JSON inventory](blitz3d-api-inventory.json).
 
-Baseline: 536 signature_known, 115 typed_declaration, 52 executable_binding.
+Baseline: 536 signature_known, 125 typed_declaration, 70 executable_binding.
 
 A configured managed binding is distinct from a known signature. Functional source presence and historical comparisons are separate fields. No inventory entry implies complete semantic parity.
 
@@ -72,24 +72,24 @@ The 17 audio registrations are built-in Blitz3D audio. FSOUND external declarati
 
 | Descriptor (return prefix and argument defaults) | Original module | Known signature | Declaration | Binding | Functional | Validation |
 | --- | --- | --- | --- | --- | --- | --- |
-| `%KeyDown%key` | `bbinput.cpp:243` | yes | none | none established | not established | not established |
-| `%KeyHit%key` | `bbinput.cpp:244` | yes | typed | none established | not established | not established |
-| `%GetKey` | `bbinput.cpp:245` | yes | none | none established | not established | not established |
-| `%WaitKey` | `bbinput.cpp:246` | yes | none | none established | not established | not established |
-| `FlushKeys` | `bbinput.cpp:247` | yes | typed | none established | not established | not established |
-| `%MouseDown%button` | `bbinput.cpp:249` | yes | typed | none established | not established | not established |
-| `%MouseHit%button` | `bbinput.cpp:250` | yes | typed | none established | not established | not established |
-| `%GetMouse` | `bbinput.cpp:251` | yes | none | none established | not established | not established |
-| `%WaitMouse` | `bbinput.cpp:252` | yes | none | none established | not established | not established |
-| `%MouseWait` | `bbinput.cpp:253` | yes | none | none established | not established | not established |
-| `%MouseX` | `bbinput.cpp:254` | yes | none | none established | not established | not established |
-| `%MouseY` | `bbinput.cpp:255` | yes | none | none established | not established | not established |
-| `%MouseZ` | `bbinput.cpp:256` | yes | none | none established | not established | not established |
-| `%MouseXSpeed` | `bbinput.cpp:257` | yes | typed | none established | not established | not established |
-| `%MouseYSpeed` | `bbinput.cpp:258` | yes | typed | none established | not established | not established |
-| `%MouseZSpeed` | `bbinput.cpp:259` | yes | typed | none established | not established | not established |
-| `FlushMouse` | `bbinput.cpp:260` | yes | typed | none established | not established | not established |
-| `MoveMouse%x%y` | `bbinput.cpp:261` | yes | none | none established | not established | not established |
+| `%KeyDown%key` | `bbinput.cpp:243` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%KeyHit%key` | `bbinput.cpp:244` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%GetKey` | `bbinput.cpp:245` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%WaitKey` | `bbinput.cpp:246` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `FlushKeys` | `bbinput.cpp:247` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%MouseDown%button` | `bbinput.cpp:249` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%MouseHit%button` | `bbinput.cpp:250` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%GetMouse` | `bbinput.cpp:251` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%WaitMouse` | `bbinput.cpp:252` | yes | typed | managed source | implemented; focused managed and native tests cited | not established |
+| `%MouseWait` | `bbinput.cpp:253` | yes | typed | managed source | implemented; focused managed and native tests cited | not established |
+| `%MouseX` | `bbinput.cpp:254` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%MouseY` | `bbinput.cpp:255` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%MouseZ` | `bbinput.cpp:256` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%MouseXSpeed` | `bbinput.cpp:257` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%MouseYSpeed` | `bbinput.cpp:258` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `%MouseZSpeed` | `bbinput.cpp:259` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `FlushMouse` | `bbinput.cpp:260` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
+| `MoveMouse%x%y` | `bbinput.cpp:261` | yes | typed | managed source | implemented; focused managed and native tests cited | scoped historical comparison |
 | `%JoyType%port=0` | `bbinput.cpp:263` | yes | none | none established | not established | not established |
 | `%JoyDown%button%port=0` | `bbinput.cpp:264` | yes | none | none established | not established | not established |
 | `%JoyHit%button%port=0` | `bbinput.cpp:265` | yes | none | none established | not established | not established |
@@ -694,4 +694,4 @@ The 17 audio registrations are built-in Blitz3D audio. FSOUND external declarati
 
 Descriptor markers: `%` integer, `#` float, `$` string; no return marker means void. Internal `_bb…` registrations omit their ABI and are not public callable signatures.
 
-The full 18-function string family has managed implementations and focused test evidence; historical validation is limited to the 16 deterministic functions with a completed comparison. CurrentDate and CurrentTime use the real local host clock and have no historical clock differential. Next family candidate: scalar math, followed by stream/file I/O. SCP lexical counts help rank candidates but do not prove resolved call frequency.
+The full 18-function string family has managed implementations and focused test evidence; historical validation is limited to the 16 deterministic functions with a completed comparison. CurrentDate and CurrentTime use the real local host clock and have no historical clock differential. The keyboard/mouse family has 18 executable bindings through an explicit SDL3 window host, with validation scope documented separately in m20-windowing-input.md. Graphics declarations remain distinct from rendering implementations. Next family candidates include scalar math and stream/file I/O. SCP lexical counts help rank candidates but do not prove resolved call frequency.
