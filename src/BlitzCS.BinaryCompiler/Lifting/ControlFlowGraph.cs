@@ -166,6 +166,27 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
 
     private int rejectedAsData;
 
+    /// <summary>
+    /// True when the bytes right before <paramref name="t"/> are padding (int3, nop) or end with an instruction after which control cannot fall through
+    /// (ret, jmp rel8/rel32, an indirect jmp, int3, ud2). Found by decoding a short instruction that ends exactly at <paramref name="t"/>, trying each
+    /// possible length, so a function placed right after a tail jump is recognised the same way as one placed after a ret.
+    /// </summary>
+    private bool PrecededByFlowEnd(uint t)
+    {
+        if (mapped[t - 1] is 0xCC or 0x90) return true;
+        for (var length = 1; length <= 8 && length <= t; length++)
+        {
+            var start = t - (uint)length;
+            if (!IsExec(start)) break;
+            var decoder = Iced.Intel.Decoder.Create(32, new ByteArrayCodeReader(mapped, (int)start, length), image.ImageBase + start);
+            var ins = decoder.Decode();
+            if (ins.IsInvalid || ins.Length != length) continue;
+            if (ins.FlowControl is FlowControl.Return or FlowControl.UnconditionalBranch or FlowControl.IndirectBranch) return true;
+            if (ins.Code is Code.Ud2 or Code.Int3) return true;
+        }
+        return false;
+    }
+
     /// <summary>Instructions that compiled user-mode code does not contain; meeting one in a trial decode means the bytes are data.</summary>
     private static bool IsUserModeNonsense(Mnemonic m) => m is Mnemonic.In or Mnemonic.Out or Mnemonic.Insb or Mnemonic.Insw or Mnemonic.Insd
         or Mnemonic.Outsb or Mnemonic.Outsw or Mnemonic.Outsd or Mnemonic.Cli or Mnemonic.Sti or Mnemonic.Hlt or Mnemonic.Bound or Mnemonic.Into
@@ -180,9 +201,7 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
     private bool LooksLikeFunctionStart(uint t)
     {
         if (t == 0 || t >= mapped.Length) return false;
-        var before = mapped[t - 1];
-        var afterRet = before is 0xC3 or 0xCC or 0x90 || (t >= 3 && mapped[t - 3] == 0xC2);
-        if (!afterRet) return false;
+        if (!PrecededByFlowEnd(t)) return false;
         var end = ExecEnd(t);
         if (end == 0) return false;
         var decoder = Iced.Intel.Decoder.Create(32, new ByteArrayCodeReader(mapped, (int)t, (int)Math.Min(end - t, 512u)), image.ImageBase + t);

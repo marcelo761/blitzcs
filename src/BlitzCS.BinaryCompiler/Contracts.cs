@@ -103,7 +103,7 @@ public sealed record BinaryCompilerOptions(OptimizationProfile Profile = Optimiz
     /// <summary>The host OS/ABI the artifact is generated for (see <see cref="BinaryTargets"/>). Defaults to the OS of the running process; validated by the translator.</summary>
     public string TargetOs { get; init; } = TargetOs ?? BinaryTargets.Host;
 
-    public const string CompilerVersion = "0.6.0";
+    public const string CompilerVersion = "0.7.0";
 }
 
 /// <summary>Target OS/ABI identifiers. Artifacts are target specific: the runtime routines (EnterGuest, import stubs) follow the host calling convention, and the loader refuses a mismatching artifact.</summary>

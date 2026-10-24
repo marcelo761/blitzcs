@@ -65,4 +65,41 @@ public sealed class CfgPointerRootsTests
         var b = Translate(CallThroughTable(), OptimizationProfile.Release, f => f.Relocate(PeFixtureBuilder.DataRva), true, Le(CodeVa + 7));
         Assert.DoesNotContain(b.Artifact.Diagnostics, d => d.Code is "CFG_POINTER_SCAN_ROOTS" or "CFG_IMMEDIATE_ROOTS");
     }
+
+    [Theory]
+    [InlineData("jmp8")]
+    [InlineData("jmp32")]
+    [InlineData("ret")]
+    [InlineData("retimm")]
+    public void FunctionPlacedAfterAnyFlowEndingInstructionIsRecognised(string preceding)
+    {
+        // _f: call dword ptr [DataVa] ; ret ; <preceding instruction> ; F: mov eax, 42 ; ret
+        var code = Asm(a =>
+        {
+            var skip = a.CreateLabel();
+            a.call(__dword_ptr[DataVa]); a.ret();
+            switch (preceding)
+            {
+                case "jmp8": a.jmp(skip); break;
+                case "jmp32": a.db(0xE9, 0, 0, 0, 0); break;
+                case "ret": a.ret(); break;
+                case "retimm": a.ret(4); break;
+            }
+            a.Label(ref skip); a.mov(eax, 42); a.ret();
+        });
+        var offset = Array.IndexOf(code, (byte)0xB8);   // F starts at the mov eax, imm32 opcode
+        foreach (var profile in Profiles)
+            Assert.Equal(42u, Run(code, Le(CodeVa + (uint)offset), profile));
+    }
+
+    [Fact]
+    public void AddressAfterAnOrdinaryInstructionIsStillNotAFunctionStart()
+    {
+        // The word points right after "mov eax, 1" (not a flow-ending instruction): data-like, must not become a root.
+        var code = Asm(a => { a.call(__dword_ptr[DataVa]); a.ret(); a.mov(ebx, 1); a.mov(eax, 42); a.ret(); });
+        var offset = Array.LastIndexOf(code, (byte)0xB8);
+        var b = Translate(code, OptimizationProfile.Release, null, true, Le(CodeVa + (uint)offset));
+        using var m = GuestModule.Load(b.Artifact, b.Image, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false });
+        Assert.Throws<GuestTrapException>(() => m.Bind("_f", GuestCallingConvention.Cdecl, 0).Call());
+    }
 }

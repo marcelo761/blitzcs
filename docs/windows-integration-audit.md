@@ -22,7 +22,7 @@ Status: **fixed** (changed in this pass, with a test), **open** (reported, owner
 | F-09 | - | ok | NativeInterop's PE preflight never sees `binaryLibraries`; a PE32 file in a 64-bit process is refused with a clear message |
 | F-10 | Medium | open (Win32) | The file sandbox refuses every reparse point: cloud-sync placeholders and linked folders on a real Windows host (risk) |
 | F-11 | High (audio) | open (A1) | The virtual sink snapshots a waveOut buffer at `waveOutWrite`; FMOD rewrites its looped buffer in place, so the recording is silent. One-line change verified |
-| F-12 | High (demo) | open (translator) | `FSOUND_Close` with WINMM output traps on an untranslated code address (a function that follows a `jmp`); cause and verified change below |
+| F-12 | High (demo) | fixed (`PrecededByFlowEnd`, compiler 0.7.0) | `FSOUND_Close` with WINMM output trapped on an untranslated code address (a function that follows a `jmp`) |
 | F-13 | Medium | open (translator) | `FSOUND_SetMixer(5)` (FPU mixer) crashes the process with an access violation in translated code |
 | F-14 | Medium | open (risk) | A hardware fault in guest code is fatal and cannot be reported: the OS cannot dispatch it from the guest stack |
 | F-15 | - | risk | Control Flow Guard: no `SetProcessValidCallTargets` is needed (default for executable pages); the packaged exe is CFG-enabled |
@@ -148,9 +148,10 @@ build time)` (`BinaryLibraryException` for `_FSOUND_Close@0`). With NOSOUND, `Cl
 `LooksLikeFunctionStart` (`ControlFlowGraph.cs:180-184`) accepts a target only if the previous byte is `ret`/`int3`/`nop` or `ret imm16`. The bytes before 0xFB60 are `... eb e6` (the end of a
 `jmp short`), so the function is rejected.
 
-Verified in a scratch copy of the sources (not applied to the tree; translator output is pinned by `TargetOsTests` and cached by compiler version): also accepting a preceding `jmp rel8`
-(`mapped[t-2] == 0xEB`) or `jmp rel32` (`mapped[t-5] == 0xE9`) translates the function, and the whole WINMM program, `FSOUND_Close` included, prints `closed` and exits 0 under Wine. Until the
-translator owner decides, `main.bb` stays on NOSOUND and the WINMM test stops before `FSOUND_Close`.
+Fixed: `LooksLikeFunctionStart` now asks `PrecededByFlowEnd`, which decodes the instruction that ends exactly at the candidate (every length 1 to 8) and accepts it when control cannot fall
+through (ret, any jmp, an indirect jmp, int3, ud2) or when the preceding byte is int3/nop padding. A function after a `jmp rel8`/`rel32`/`ret imm16` is now recognised; an address after an ordinary
+instruction is still data. Tests: `CfgPointerRootsTests.FunctionPlacedAfterAnyFlowEndingInstructionIsRecognised` and `AddressAfterAnOrdinaryInstructionIsStillNotAFunctionStart`; the end-to-end
+check is `FmodDemoTests.TheSameProgramDrivesFmodsWinmmOutputThroughTheVirtualSink`, which now runs the program to `FSOUND_Close` and expects `closed`.
 
 ### F-13 `FSOUND_SetMixer(FSOUND_MIXER_QUALITY_FPU = 5)` kills the process (Medium; translator)
 

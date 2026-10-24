@@ -144,8 +144,8 @@ public sealed class FmodDemoTests : E2EBase
 
     /// <summary>
     /// The one-line switch of the sample: output type WINMM (waveOut) instead of NOSOUND. The catalog sends the library's waveOut to the in-process virtual sink and records what it
-    /// plays, so no sound device is touched on any host. The program stops before FSOUND_Close: closing a WINMM output reaches a code address the translator does not discover yet
-    /// (docs/windows-integration-audit.md, F-12), and the process must still end with FMOD's mixer thread running.
+    /// plays, so no sound device is touched on any host. The program runs to FSOUND_Close: closing a WINMM output reaches a function that sits right after a tail jump,
+    /// which the translator did not recognise as a function start before (docs/windows-integration-audit.md, F-12).
     /// </summary>
     [PackedSampleFact]
     public void TheSameProgramDrivesFmodsWinmmOutputThroughTheVirtualSink()
@@ -157,15 +157,14 @@ public sealed class FmodDemoTests : E2EBase
             var catalog = JsonNode.Parse(CatalogFor(RealLibraries.PackedSample!))!;
             catalog["binaryLibraries"]![0]!["audio"] = "virtual";
             catalog["binaryLibraries"]![0]!["audioRecord"] = "fmod-output.wav";
-            var source = Source("FSOUND_OUTPUT_WINMM").Replace("FSOUND_Close()\nPrint \"closed\"", "Print \"left open\"", StringComparison.Ordinal);
-            Assert.Contains("left open", source);
+            var source = Source("FSOUND_OUTPUT_WINMM");
             File.WriteAllBytes(Path.Combine(Root, "tone.wav"), ToneWav());
             var stdout = Build(source, catalog.ToJsonString(), out var exit, out var err);
             Assert.True(exit == 0, err + stdout);
             File.Copy(Path.Combine(Root, "tone.wav"), Path.Combine(Root, "out", "tone.wav"));
 
             var stopwatch = Stopwatch.StartNew();
-            var expected = ExpectedNoSound.Replace("output 0\n", "output 1\n").Replace("closed\n", "left open\n");
+            var expected = ExpectedNoSound.Replace("output 0\n", "output 1\n");
             Assert.Equal(expected, Run());
             Assert.True(stopwatch.Elapsed >= TimeSpan.FromSeconds(1.5), $"the demo ran for {stopwatch.Elapsed}");
 
