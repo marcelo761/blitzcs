@@ -65,9 +65,12 @@ internal static class BinaryBindingGenerator
                 var parameters = string.Join(", ", b.Parameters.Select((p, i) => $"{ClrType(p)} a{i}"));
                 var arguments = string.Join(", ", b.Parameters.Select((p, i) => $"{rt}BinaryArgument.From{p switch { ExternalValueType.Integer => "Int32", ExternalValueType.Float => "Single", _ => "String" }}(a{i})"));
                 var call = $"E{m}.Call({arguments})";
-                text.Append(b.ReturnType == ExternalValueType.Void
-                    ? $"    public static void {MethodName(b.BasicName)}({parameters}) {{ {call}; }}\n"
-                    : $"    public static int {MethodName(b.BasicName)}({parameters}) => (int){call};\n");
+                text.Append(b.ReturnType switch
+                {
+                    ExternalValueType.Void => $"    public static void {MethodName(b.BasicName)}({parameters}) {{ {call}; }}\n",
+                    ExternalValueType.Float => $"    public static float {MethodName(b.BasicName)}({parameters}) => E{m}.CallSingle({arguments});\n",
+                    _ => $"    public static int {MethodName(b.BasicName)}({parameters}) => (int){call};\n",
+                });
             }
             text.Append("}\n");
         }

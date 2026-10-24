@@ -213,3 +213,11 @@ That is a loader topic and was not changed here.
 * Loader: `GuestModule` never reads the trap record (`CtxTrapKind`/`CtxTrapAddress`), so a trap (return to an untranslated
   address, unsupported instruction) makes the export return 0 instead of raising an exception; tests currently observe it as a
   zero result.
+
+## Multi-module change (rebasing, extended import return)
+
+Rerun with identical iteration counts (`--reuse-n`, 9 samples, cpu 3) before (HEAD) and after the multi-module work, same machine, interleaved native/translated
+samples: the instruction-count ratios are identical for every workload (int 1.00, fib 1.22, calls 1.76, switch 1.32, ind 1.96, matmul 1.00 ...), and no workload
+got slower relative to its native baseline (translated/native: int 1.00 -> 1.00, calls 1.24 -> 0.97, ind 1.32 -> 1.16, matmul 1.07 -> 1.02; the absolute times of the two
+runs differ because the machine was not isolated). The only generated-code change is `test r9d,r9d; js` in each import body, which these workloads do not execute.
+Rebased builds have the same layout as preferred-base builds (`RebaseTests.RebasedCodeHasTheSameShapeAndRunsIdenticallyAtBothBases`).

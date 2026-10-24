@@ -96,6 +96,44 @@ public static class PeReader
         }
         bool Rd32(uint rva, out uint v) { v = 0; if (!Off(rva, 4, out var o)) return false; v = U32(b, o); return true; }
 
+        // Delay-load directory (IMAGE_DELAYLOAD_DESCRIPTOR, 32 bytes). Each delay IAT slot becomes an ordinary import (PeImport.IsDelay): the loader binds
+        // it like an eager import, so the slot never reaches the delay-load helper. Only the RVA form (Attributes bit 0) is supported.
+        void ReadDelayImports(uint dirRva, List<PeImport> into)
+        {
+            if (dirRva == 0) return;
+            for (uint d = 0; d < 4096; d++)
+            {
+                var drva = dirRva + d * 32;
+                if (!Off(drva, 32, out var o)) { Err("PE050", "Delay import descriptor outside image.", drva); return; }
+                uint attrs = U32(b, o), nameRva = U32(b, o + 4), iatRva = U32(b, o + 12), intRva = U32(b, o + 16);
+                if (attrs == 0 && nameRva == 0 && iatRva == 0 && intRva == 0 && U32(b, o + 8) == 0) return; // terminator
+                if ((attrs & 1) == 0)
+                {
+                    Err("PE052", "Delay import descriptor uses virtual addresses (Attributes bit 0 clear, pre-VC7 format); only the RVA form is supported.", drva);
+                    continue;
+                }
+                var dll = nameRva == 0 ? null : Str(nameRva);
+                if (dll is null) { Err("PE011", "Delay import DLL name unreadable.", drva); continue; }
+                if (iatRva == 0 || intRva == 0) { Err("PE012", $"Delay import {dll} has no import address table or import name table.", drva); continue; }
+                for (uint i = 0; i < MaxImports; i++)
+                {
+                    if (!Rd32(intRva + i * 4, out var th)) { Err("PE013", $"Delay import name table of {dll} runs outside image.", intRva + i * 4); break; }
+                    if (th == 0) break;
+                    var iat = iatRva + i * 4;
+                    if (!Off(iat, 4, out _)) { Err("PE013", $"Delay import address table of {dll} runs outside image.", iat); break; }
+                    if ((th & 0x80000000) != 0) into.Add(new PeImport(dll, null, (ushort)(th & 0xFFFF), iat, true));
+                    else
+                    {
+                        var n = Str(th + 2);
+                        if (n is null) { Err("PE014", $"Delay import name of {dll} unreadable.", th); continue; }
+                        into.Add(new PeImport(dll, n, null, iat, true));
+                    }
+                    if (i == MaxImports - 1) Err("PE013", $"Too many delay imports in {dll}.", intRva);
+                }
+            }
+            Err("PE050", "Delay import directory has no terminating descriptor.", dirRva);
+        }
+
         var imports = new List<PeImport>();
         var (impRva, impSize) = Dir(1);
         if (impRva != 0)
@@ -195,7 +233,7 @@ public static class PeReader
             if (!Off(tlsRva, 16, out var o)) Err("PE040", "TLS directory outside image.", tlsRva);
             else tls = new PeTls(U32(b, o), U32(b, o + 4), U32(b, o + 8), U32(b, o + 12), Off(tlsRva + 16, 4, out var zo) ? U32(b, zo) : 0);
         }
-        if (Dir(13).Rva != 0) Err("PE050", "Unsupported delay import directory.", Dir(13).Rva);
+        ReadDelayImports(Dir(13).Rva, imports);
         if (Dir(14).Rva != 0) Err("PE051", "Managed (CLR) images are not supported.", Dir(14).Rva);
 
         return new PeImage

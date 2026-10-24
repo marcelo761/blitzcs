@@ -25,6 +25,7 @@ public sealed unsafe class GuestMemory
     private readonly GuestModule module;
     private readonly object gate = new();
     private volatile GuestRegion[] regions = [];
+    private volatile GuestMemory[] peers = [];
 
     internal GuestMemory(GuestModule module) => this.module = module;
 
@@ -36,6 +37,17 @@ public sealed unsafe class GuestMemory
     internal void Remove(ulong start)
     {
         lock (gate) regions = [.. regions.Where(r => r.Start != start)];
+    }
+
+    /// <summary>Makes the regions of <paramref name="peer"/> (another module of the same <see cref="GuestModuleSet"/>) addressable here: one process, one guest address space.</summary>
+    internal void LinkPeer(GuestMemory peer)
+    {
+        lock (gate) if (!peers.Contains(peer)) peers = [.. peers, peer];
+    }
+
+    internal void UnlinkPeer(GuestMemory peer)
+    {
+        lock (gate) peers = [.. peers.Where(p => p != peer)];
     }
 
     internal void Clear()
@@ -56,6 +68,10 @@ public sealed unsafe class GuestMemory
         foreach (var r in regions)
             if (address >= r.Start && end <= r.End)
                 return !write || r.CoversWrite(address, Math.Max(end, address + 1UL)) ? r : null;
+        foreach (var peer in peers)
+            foreach (var r in peer.regions)
+                if (address >= r.Start && end <= r.End)
+                    return !write || r.CoversWrite(address, Math.Max(end, address + 1UL)) ? r : null;
         return null;
     }
 

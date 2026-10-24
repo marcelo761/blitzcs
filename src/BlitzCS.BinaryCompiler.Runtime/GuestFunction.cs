@@ -59,6 +59,17 @@ public readonly struct GuestCallResult
     public double Xmm0Double { get { Require(GuestReturn.Xmm0); return BitConverter.UInt64BitsToDouble(xmm0Low); } }
 }
 
+/// <summary>Where the hidden struct-return pointer travels.</summary>
+public enum StructReturnPointer
+{
+    /// <summary>The Windows/MSVC rule: first stack word for cdecl, stdcall and thiscall (after <c>this</c> in ECX); ECX for fastcall (first declared argument moves to EDX).</summary>
+    ByConvention = 0,
+    /// <summary>First stack word, after any register arguments.</summary>
+    Stack = 1,
+    /// <summary>ECX (GCC's thiscall: the pointer takes ECX and <c>this</c> goes on the stack; fastcall: pointer in ECX, first argument in EDX).</summary>
+    Ecx = 2,
+}
+
 /// <summary>A bound guest export. Calls are allocation-free and coordinated with module disposal.</summary>
 public sealed class GuestFunction
 {
@@ -77,21 +88,96 @@ public sealed class GuestFunction
     public string Name { get; }
     public GuestCallingConvention Convention { get; }
 
-    /// <summary>Number of 32-bit stack words the export takes, including a hidden struct-return pointer when one is used.</summary>
+    /// <summary>
+    /// Number of 32-bit argument words the export takes, including the ones passed in registers (thiscall: <c>this</c>; fastcall: the first two) and
+    /// a hidden struct-return pointer when one is used.
+    /// </summary>
     public int ArgCount { get; }
+
+    /// <summary>How many leading arguments travel in registers: thiscall 1 (ECX = this), fastcall up to 2 (ECX, EDX); none for cdecl/stdcall.</summary>
+    public int RegisterArgCount => Convention switch
+    {
+        GuestCallingConvention.Thiscall => Math.Min(1, ArgCount),
+        GuestCallingConvention.Fastcall => Math.Min(2, ArgCount),
+        _ => 0,
+    };
+
+    /// <summary>
+    /// Argument words are always given in declaration order; this method moves the register ones into ECX/EDX and puts the rest on the stack
+    /// (the callee pops the stack part for thiscall and fastcall, like stdcall; the runtime discards the whole frame either way).
+    /// </summary>
+    private GuestCallResult Run(ReadOnlySpan<uint> args, GuestReturn kind)
+    {
+        var r = Math.Min(RegisterArgCount, args.Length);
+        return module.Invoke(hostTarget, args[r..], kind, r > 0 ? args[0] : 0u, r > 1 ? args[1] : 0u);
+    }
 
     /// <summary>Calls the export with exactly <see cref="ArgCount"/> 32-bit stack arguments and returns EAX. A guest that returns a value in ST0 makes this call fail with <see cref="GuestAbiException"/> (use <see cref="CallDouble"/>/<see cref="CallSingle"/>).</summary>
     public uint Call(params ReadOnlySpan<uint> args)
     {
         CheckArgs(args.Length);
-        return module.Invoke(hostTarget, args);
+        if (RegisterArgCount == 0) return module.Invoke(hostTarget, args);
+        return Run(args, GuestReturn.Eax).Eax;
     }
 
     /// <summary>Calls the export and captures the return registers selected by <paramref name="kind"/>.</summary>
     public GuestCallResult Invoke(GuestReturn kind, params ReadOnlySpan<uint> args)
     {
         CheckArgs(args.Length);
-        return module.Invoke(hostTarget, args, kind);
+        return Run(args, kind);
+    }
+
+    /// <summary>
+    /// Thiscall/fastcall call with an explicit register assignment: <paramref name="registerCount"/> (0..1 thiscall, 0..2 fastcall) values travel in ECX, EDX,
+    /// the rest in <paramref name="stackArgs"/>. Needed when the register arguments are not simply the first declared words (MSVC fastcall: floats never take
+    /// a register). The total must equal <see cref="ArgCount"/>.
+    /// </summary>
+    public GuestCallResult InvokeRegisters(GuestReturn kind, int registerCount, uint ecx, uint edx, ReadOnlySpan<uint> stackArgs)
+    {
+        var max = Convention switch { GuestCallingConvention.Thiscall => 1, GuestCallingConvention.Fastcall => 2, _ => 0 };
+        if (registerCount < 0 || registerCount > max)
+            throw new ArgumentOutOfRangeException(nameof(registerCount), registerCount, $"{Convention} export '{Name}' passes at most {max} argument(s) in registers.");
+        if (registerCount + stackArgs.Length != ArgCount)
+            throw new ArgumentException($"Export '{Name}' was bound with {ArgCount} argument(s) but {registerCount + stackArgs.Length} were supplied.", nameof(stackArgs));
+        return module.Invoke(hostTarget, stackArgs, kind, registerCount > 0 ? ecx : 0u, registerCount > 1 ? edx : 0u);
+    }
+
+    /// <summary>
+    /// Calls the export with a mix of plain words and checked guest buffers (see <see cref="GuestArg"/>): input buffers are filled before the call,
+    /// output buffers are copied back afterwards and every buffer is freed even when the call fails. The guest only ever sees guest addresses.
+    /// </summary>
+    public GuestCallOutcome InvokeWithBuffers(GuestReturn kind, params ReadOnlySpan<GuestArg> args)
+    {
+        CheckArgs(args.Length);
+        var words = new uint[args.Length];
+        var buffers = new GuestBuffer?[args.Length];
+        var outputs = new byte[]?[args.Length];
+        try
+        {
+            for (var i = 0; i < args.Length; i++)
+            {
+                var a = args[i];
+                if (!a.IsBuffer) { words[i] = a.Word; continue; }
+                var buffer = module.Memory.Allocate(Math.Max(1, a.Size));
+                buffers[i] = buffer;
+                if (a.Input is { Length: > 0 } input) buffer.Write(0, input);
+                words[i] = buffer.Address;
+            }
+            var registers = Run(words, kind);
+            for (var i = 0; i < args.Length; i++)
+                if (args[i].IsOutput && buffers[i] is { } b)
+                {
+                    var bytes = new byte[args[i].Size];
+                    if (bytes.Length > 0) b.Read(0, bytes);
+                    outputs[i] = bytes;
+                }
+            return new GuestCallOutcome(registers, outputs);
+        }
+        finally
+        {
+            foreach (var b in buffers)
+                try { b?.Dispose(); } catch (Exception e) when (e is GuestException or ObjectDisposedException) { }
+        }
     }
 
     /// <summary>64-bit integer return in EDX:EAX.</summary>
@@ -123,20 +209,42 @@ public sealed class GuestFunction
     }
 
     /// <summary>
-    /// Struct returned through a hidden first stack argument (any size; the Windows rule for structs that are not 1, 2, 4 or 8 bytes). The runtime allocates the
-    /// result buffer, passes its address as the first argument (<see cref="ArgCount"/> includes it), and verifies that the callee returned it in EAX.
-    /// The callee pops the pointer (stdcall) or the caller does (cdecl); either way the call frame is discarded, so both are handled.
+    /// Struct returned through a hidden pointer (any size not returned in registers). The runtime allocates the result buffer, passes its address as
+    /// described by <see cref="StructReturnPointer.ByConvention"/> (<see cref="ArgCount"/> includes it), verifies that the callee returned it in EAX
+    /// (both MSVC and GCC do) and returns the bytes. The callee pops the pointer for stdcall/thiscall/fastcall and the caller for cdecl; since the call
+    /// frame is discarded either way, both are handled.
     /// </summary>
-    public byte[] CallStructViaHiddenPointer(int size, params ReadOnlySpan<uint> args)
+    public byte[] CallStructViaHiddenPointer(int size, params ReadOnlySpan<uint> args) => CallStructViaHiddenPointer(size, StructReturnPointer.ByConvention, args);
+
+    /// <summary>As <see cref="CallStructViaHiddenPointer(int, ReadOnlySpan{uint})"/> with an explicit placement of the hidden pointer (see <see cref="StructReturnPointer"/>).</summary>
+    public byte[] CallStructViaHiddenPointer(int size, StructReturnPointer placement, params ReadOnlySpan<uint> args)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(size);
         if (args.Length + 1 != ArgCount)
-            throw new ArgumentException($"Export '{Name}' was bound with {ArgCount} stack word(s) including the hidden struct pointer, but {args.Length} explicit argument(s) were supplied.", nameof(args));
+            throw new ArgumentException($"Export '{Name}' was bound with {ArgCount} argument word(s) including the hidden struct pointer, but {args.Length} explicit argument(s) were supplied.", nameof(args));
+        var registers = Convention switch { GuestCallingConvention.Thiscall => 1, GuestCallingConvention.Fastcall => 2, _ => 0 };
+        if (placement == StructReturnPointer.ByConvention) placement = Convention == GuestCallingConvention.Fastcall ? StructReturnPointer.Ecx : StructReturnPointer.Stack;
+        if (placement == StructReturnPointer.Ecx && registers == 0)
+            throw new ArgumentException($"{Convention} export '{Name}' has no register to carry the hidden struct pointer.", nameof(placement));
+        if (Convention == GuestCallingConvention.Thiscall && args.Length == 0)
+            throw new ArgumentException($"Thiscall export '{Name}' needs the 'this' argument.", nameof(args));
         using var buffer = module.Memory.Allocate(Math.Max(1, size));
-        Span<uint> all = args.Length < 15 ? stackalloc uint[args.Length + 1] : new uint[args.Length + 1];
-        all[0] = buffer.Address;
-        args.CopyTo(all[1..]);
-        var result = module.Invoke(hostTarget, all, GuestReturn.Eax);
+        GuestCallResult result;
+        if (placement == StructReturnPointer.Stack)
+        {
+            // Declared register arguments keep their registers; the pointer is the first stack word.
+            var r = Math.Min(registers, args.Length);
+            var stack = new uint[args.Length - r + 1];
+            stack[0] = buffer.Address;
+            args[r..].CopyTo(stack.AsSpan(1));
+            result = module.Invoke(hostTarget, stack, GuestReturn.Eax, r > 0 ? args[0] : 0u, r > 1 ? args[1] : 0u);
+        }
+        else
+        {
+            // ECX = pointer; fastcall's first declared argument moves to EDX, everything else (thiscall's 'this' included) is on the stack.
+            var r = Math.Min(registers - 1, args.Length);
+            result = module.Invoke(hostTarget, args[r..], GuestReturn.Eax, buffer.Address, r > 0 ? args[0] : 0u);
+        }
         if (result.Eax != buffer.Address)
             throw new GuestAbiException($"Export '{Name}' did not return the hidden struct pointer in EAX (expected 0x{buffer.Address:X8}, got 0x{result.Eax:X8}); it does not follow the struct-return convention.");
         var bytes = new byte[size];

@@ -79,7 +79,7 @@ public sealed class RuntimeLoaderTests
         Assert.Equal(GuestCallingConvention.Cdecl, m.Bind("mystery", GuestCallingConvention.Cdecl, 0).Convention);
         Assert.Throws<ArgumentException>(() => m.Bind("add", GuestCallingConvention.Stdcall, 2));
         Assert.Throws<ArgumentException>(() => m.Bind("add_std", GuestCallingConvention.Stdcall, 3)); // ArgBytes says 8
-        Assert.Throws<NotSupportedException>(() => m.Bind("fast", GuestCallingConvention.Fastcall, 1));
+        Assert.Equal(GuestCallingConvention.Fastcall, m.Bind("fast", GuestCallingConvention.Fastcall, 1).Convention); // register conventions are bindable (AbiRegisterConventionTests)
         Assert.Throws<GuestExportException>(() => m.Bind("nope", GuestCallingConvention.Cdecl, 0));
         Assert.Throws<ArgumentException>(() => m.Bind("add", GuestCallingConvention.Cdecl, 2).Call(1u));
     }

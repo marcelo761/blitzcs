@@ -171,7 +171,6 @@ public sealed class LinkingTests : IDisposable
     }
 
     [Theory]
-    [InlineData("Float", "float return from binary library unsupported")]
     [InlineData("String", "string return from binary library unsupported")]
     public void UnsupportedReturnTypesAreBuildErrors(string returnType, string message)
     {

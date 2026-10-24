@@ -7,7 +7,7 @@ public sealed class ArtifactFormatException(string message) : Exception(message)
 
 public sealed class ArtifactSerializer
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
     private static readonly byte[] Magic = "BCSA"u8.ToArray();
     private const int MaxString = 1 << 20;
 
@@ -28,6 +28,7 @@ public sealed class ArtifactSerializer
             foreach (var i in a.Imports) { Str(w, i.Dll); OptStr(w, i.Name); w.Write(i.Ordinal.HasValue); w.Write(i.Ordinal ?? (ushort)0); w.Write(i.IatRva); }
             w.Write(a.Diagnostics.Count);
             foreach (var d in a.Diagnostics) { w.Write((int)d.Severity); Str(w, d.Code); Str(w, d.Message); w.Write(d.GuestRva.HasValue); w.Write(d.GuestRva ?? 0u); }
+            w.Write(a.RebasedFromImageBase.HasValue); w.Write(a.RebasedFromImageBase ?? 0u);
         }
         var body = ms.ToArray();
         var res = new byte[body.Length + 32];
@@ -86,8 +87,9 @@ public sealed class ArtifactSerializer
             var code2 = ReadStr(); var msg = ReadStr(); var has = r.ReadBoolean(); var rva = r.ReadUInt32();
             diags.Add(new BinaryDiagnostic((DiagnosticSeverity)sev, code2, msg, has ? rva : null));
         }
+        var rebased = r.ReadBoolean(); var rebasedBase = r.ReadUInt32();
         if (Remaining() != 0) throw new ArtifactFormatException("Trailing bytes in artifact.");
-        return new TranslationArtifact(fv, src, key, gb, gs, host, code, disp, thunk, ctx, enter, exit, stubs, map, exports, imports, diags);
+        return new TranslationArtifact(fv, src, key, gb, gs, host, code, disp, thunk, ctx, enter, exit, stubs, map, exports, imports, diags, rebased ? rebasedBase : null);
     }
 
     private static void Str(BinaryWriter w, string s) { var b = Encoding.UTF8.GetBytes(s); w.Write(b.Length); w.Write(b); }

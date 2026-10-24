@@ -138,8 +138,6 @@ internal static class ExternalCatalog
         if (!item.TryGetProperty("returnType", out var returnElement))
             throw new ArgumentException($"External function '{name}': binary functions require a returnType.");
         var returnType = ParseType(returnElement.GetString(), true);
-        if (returnType == ExternalValueType.Float)
-            throw new ArgumentException($"External function '{name}' ({libraryName}!{requested}): float return from binary library unsupported; the guest runtime returns only EAX, not st0.");
         if (returnType == ExternalValueType.String)
             throw new ArgumentException($"External function '{name}' ({libraryName}!{requested}): string return from binary library unsupported; the pointer ownership is not known.");
         var convention = GuestCallingConvention.Unknown;
@@ -147,15 +145,19 @@ internal static class ExternalCatalog
             convention = conventionElement.GetString()?.ToLowerInvariant() switch
             {
                 "cdecl" => GuestCallingConvention.Cdecl, "stdcall" => GuestCallingConvention.Stdcall,
-                _ => throw new ArgumentException($"External function '{name}': binary.convention must be 'cdecl' or 'stdcall' (thiscall/fastcall pass registers and are unsupported).")
+                "thiscall" => GuestCallingConvention.Thiscall, "fastcall" => GuestCallingConvention.Fastcall,
+                _ => throw new ArgumentException($"External function '{name}': binary.convention must be 'cdecl', 'stdcall', 'thiscall' or 'fastcall'.")
             };
+        if (convention == GuestCallingConvention.Thiscall && (parameters.Length == 0 || parameters[0] != ExternalValueType.Integer))
+            throw new ArgumentException($"External function '{name}': a thiscall binding needs an Integer first parameter, which is passed as 'this' in ECX.");
         var library = Path.GetFullPath(libraryName, catalogDirectory);
         if (!File.Exists(library)) throw new FileNotFoundException($"Binary library '{libraryName}' for '{name}' does not exist.", library);
         if (!BinaryBuild.IsPe32X86(library)) throw new ArgumentException($"Binary library '{libraryName}' is not a PE32 x86 image.");
         var image = PeReader.Read(File.ReadAllBytes(library));
         var exact = image.Exports.Where(e => e.Name == requested).ToArray();
         var candidates = exact.Length > 0 ? exact : image.Exports.Where(e => e.Name is not null
-            && (e.Name == "_" + requested || e.Name.StartsWith("_" + requested + "@", StringComparison.Ordinal) || e.Name.StartsWith(requested + "@", StringComparison.Ordinal))).ToArray();
+            && (e.Name == "_" + requested || e.Name.StartsWith("_" + requested + "@", StringComparison.Ordinal) || e.Name.StartsWith(requested + "@", StringComparison.Ordinal)
+                || e.Name.StartsWith("@" + requested + "@", StringComparison.Ordinal))).ToArray();
         if (candidates.Length == 0)
             throw new ArgumentException($"Binary library '{libraryName}' has no export '{requested}' (declared by '{name}').");
         if (candidates.Length > 1)

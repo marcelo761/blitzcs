@@ -1,4 +1,5 @@
 using BlitzCS.BinaryCompiler;
+using BlitzCS.Compiler;
 
 namespace BlitzCS.CLI;
 
@@ -56,15 +57,17 @@ internal static class BinaryTranslationStep
         var label = $"'{binding.BasicName}' ({Path.GetFileName(binding.LibraryPath)}!{binding.Export})";
         var export = artifact.Exports.FirstOrDefault(e => e.Name == binding.Export)
             ?? throw new ArgumentException($"External function {label}: the translation has no such export.");
-        if (export.Convention is GuestCallingConvention.Thiscall or GuestCallingConvention.Fastcall)
-            throw new ArgumentException($"External function {label} is {export.Convention}, which passes arguments in registers and is unsupported.");
         var effective = binding.Convention != GuestCallingConvention.Unknown ? binding.Convention : export.Convention;
         if (effective == GuestCallingConvention.Unknown)
-            throw new ArgumentException($"External function {label}: the calling convention cannot be inferred from the export; set binary.convention to 'cdecl' or 'stdcall'.");
+            throw new ArgumentException($"External function {label}: the calling convention cannot be inferred from the export; set binary.convention to 'cdecl', 'stdcall', 'thiscall' or 'fastcall'.");
         if (export.Convention != GuestCallingConvention.Unknown && binding.Convention != GuestCallingConvention.Unknown && export.Convention != binding.Convention)
             throw new ArgumentException($"External function {label}: the catalog says {binding.Convention} but the export decoration says {export.Convention}.");
-        if (effective == GuestCallingConvention.Stdcall && export.ArgBytes is { } bytes && bytes != 4 * binding.Parameters.Count)
-            throw new ArgumentException($"External function {label}: stdcall export pops {bytes} byte(s) but the declaration passes {4 * binding.Parameters.Count}.");
+        if (effective is GuestCallingConvention.Stdcall or GuestCallingConvention.Fastcall && export.ArgBytes is { } bytes && bytes != 4 * binding.Parameters.Count)
+            throw new ArgumentException(effective == GuestCallingConvention.Stdcall
+                ? $"External function {label}: stdcall export pops {bytes} byte(s) but the declaration passes {4 * binding.Parameters.Count}."
+                : $"External function {label}: the fastcall decoration says {bytes} byte(s) of parameters but the declaration passes {4 * binding.Parameters.Count}.");
+        if (effective == GuestCallingConvention.Thiscall && (binding.Parameters.Count == 0 || binding.Parameters[0] != ExternalValueType.Integer))
+            throw new ArgumentException($"External function {label}: a thiscall binding needs an Integer first parameter, which is passed as 'this' in ECX.");
     }
 }
 

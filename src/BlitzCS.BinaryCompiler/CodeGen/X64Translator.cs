@@ -45,6 +45,7 @@ public sealed class X64Translator
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(options);
+        if (options.LoadBase is { } loadBase && loadBase != image.ImageBase) image = image.Rebase(loadBase);
         var mapped = image.MapImage();
         var cfg = ControlFlowGraph.Build(image, mapped);
         var release = options.Profile != OptimizationProfile.Debug;
@@ -111,7 +112,7 @@ public sealed class X64Translator
                 ? new BinaryDiagnostic(DiagnosticSeverity.Info, "TLS_HANDLED", "Implicit TLS is modelled: per-thread TLS data, the TLS index and TLS callbacks are provided by the runtime.")
                 : new BinaryDiagnostic(DiagnosticSeverity.Error, "BC_TLS_UNSUPPORTED", problem));
         }
-        diagnostics.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "BC_FIXED_BASE", $"Translated code is bound to the fixed guest base 0x{image.ImageBase:X8}."));
+        diagnostics.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "BC_FIXED_BASE", $"Translated code is bound to the fixed guest base 0x{image.ImageBase:X8}" + (image.RebasedFrom is { } rf ? $" (rebased from 0x{rf.OriginalImageBase:X8})." : ".")));
 
         var exports = new List<TranslatedExport>();
         foreach (var e in image.Exports.OrderBy(e => e.Ordinal))
@@ -133,6 +134,6 @@ public sealed class X64Translator
         return new TranslationArtifact(
             ArtifactSerializer.CurrentVersion, image.Sha256, cacheKey, image.ImageBase, image.SizeOfImage, host, codeSize,
             (uint)(codeSize + tableRel), (uint)(codeSize + thunkRel), (uint)(codeSize + ctxRel), enc.OffsetOf(gen.EnterLabel),
-            exitRva, stubBase, addressMap, exports, image.Imports, diagnostics);
+            exitRva, stubBase, addressMap, exports, image.Imports, diagnostics, image.RebasedFrom?.OriginalImageBase);
     }
 }

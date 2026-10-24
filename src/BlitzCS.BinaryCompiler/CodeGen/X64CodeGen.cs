@@ -10,9 +10,12 @@ namespace BlitzCS.BinaryCompiler.CodeGen;
 /// </summary>
 internal sealed partial class X64CodeGen
 {
+    /// <summary>Guest ECX / EDX at entry (runtime -> EnterGuest; thiscall and fastcall register arguments, zero otherwise).</summary>
+    public const int CtxEcxIn = 8, CtxEdxIn = 12;
     public const int CtxNativeRsp = 0, CtxTrapKind = 16, CtxTrapAddress = 24, CtxFault = 32, CtxTeb = 40,
         CtxEdx = 48, CtxMode = 56, CtxSt0Raw = 64, CtxSt0Double = 80, CtxSt0Single = 88, CtxXmm0 = 96, CtxStatus = 112, CtxSavedFcw = 116, CtxCurrentFcw = 118,
-        CtxSavedMxcsr = 120, CtxCurrentMxcsr = 124, CtxSize = 128;
+        CtxSavedMxcsr = 120, CtxCurrentMxcsr = 124, CtxSize = 128,
+        CtxImportFlags = 60; // u32: extended-return flags staged by a managed import (1 = EDX valid in CtxEdx, 2 = ST0 80-bit image valid in CtxSt0Raw)
     /// <summary>Capture request bits in CtxMode (runtime -> EnterGuest).</summary>
     public const uint ModeSt0 = 2, ModeXmm0 = 4;
     /// <summary>Status bits in CtxStatus (ExitCommon -> runtime): 1 = x87 stack not empty on entry (guest not run), 2 = x87 stack unbalanced when the guest returned (reset), 4 = ST0 requested but the x87 stack was empty.</summary>
@@ -265,8 +268,11 @@ internal sealed partial class X64CodeGen
         A(Instruction.Create(Code.Lea_r64_m, Register.R13, new MemoryOperand(Register.RIP, (long)dataBase + tableOffset, 8)));
         A(Instruction.Create(Code.Mov_r64_rm64, Register.R8, Register.RDI));
         A(Instruction.Create(Code.Mov_r32_rm32, Register.ESP, Register.ESI));
-        foreach (var r in new[] { Register.EAX, Register.EBX, Register.ECX, Register.EDX, Register.EBP, Register.ESI, Register.EDI })
+        foreach (var r in new[] { Register.EAX, Register.EBX, Register.EBP, Register.ESI, Register.EDI })
             A(Instruction.Create(Code.Xor_r32_rm32, r, r));
+        // Register arguments of thiscall/fastcall come from the (zeroed by default) call context; cdecl/stdcall calls leave both zero.
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.ECX, Ctx(CtxEcxIn)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EDX, Ctx(CtxEdxIn)));
         A(Instruction.Create(Code.Cld));
         A(Instruction.Create(Code.Jmp_rm64, Register.R8));
 
@@ -285,6 +291,7 @@ internal sealed partial class X64CodeGen
         E.Place(DispatchLabel);
         EmitDispatchPreservingFlags();
 
+        var importExt = E.NewLabel();
         for (var k = 0; k < image.Imports.Count; k++)
         {
             var body = E.NewLabel(); ImportBodyLabels.Add(body);
@@ -306,6 +313,8 @@ internal sealed partial class X64CodeGen
             A(Instruction.Create(Code.Pop_r64, Register.RSI));
             A(Instruction.Create(Code.Mov_r64_rm64, Register.R9, Register.RAX));
             A(Instruction.Create(Code.Shr_rm64_imm8, Register.R9, (byte)32));
+            A(Instruction.Create(Code.Test_rm32_r32, Register.R9D, Register.R9D)); // bit 63 of the import result = extended return (EDX / ST0), see ImportExtLabel
+            Jcc(ConditionCode.s, importExt);
             A(Instruction.Create(Code.Mov_r32_rm32, Register.EAX, Register.EAX));
             A(Instruction.Create(Code.Mov_r32_rm32, Register.R10D, M(Register.R8D)));
             A(Instruction.Create(Code.Lea_r32_m, Register.R8D, M(Register.R8D, Register.R9D, 1, 4)));
@@ -313,6 +322,34 @@ internal sealed partial class X64CodeGen
             A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R10D));
             Jmp(DispatchLabel);
         }
+        EmitImportExtendedReturn(importExt);
+    }
+
+    /// <summary>
+    /// Shared out-of-line tail of an import whose managed side staged an extended return (bit 63 of its result; see GuestCall.SetReturnEdx / SetReturnSt0).
+    /// Entered from an import body with R9D = pop bytes | 0x80000000, EAX = result, R8D = guest ESP at the call. The runtime stored the flags at CtxImportFlags
+    /// (1 = reload EDX from CtxEdx, 2 = push the 80-bit ST0 image at CtxSt0Raw onto the x87 stack), then this performs the normal import return.
+    /// </summary>
+    private void EmitImportExtendedReturn(ulong label)
+    {
+        E.Place(label);
+        var noEdx = E.NewLabel(); var noSt0 = E.NewLabel();
+        A(Instruction.Create(Code.And_rm32_imm32, Register.R9D, 0x7FFFFFFF));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R10D, Ctx(CtxImportFlags)));
+        A(Instruction.Create(Code.Test_rm32_imm32, Register.R10D, 2));
+        Jcc(ConditionCode.e, noSt0);
+        A(Instruction.Create(Code.Fld_m80fp, Ctx(CtxSt0Raw)));
+        E.Place(noSt0);
+        A(Instruction.Create(Code.Test_rm32_imm32, Register.R10D, 1));
+        Jcc(ConditionCode.e, noEdx);
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EDX, Ctx(CtxEdx)));
+        E.Place(noEdx);
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EAX, Register.EAX));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R10D, M(Register.R8D)));
+        A(Instruction.Create(Code.Lea_r32_m, Register.R8D, M(Register.R8D, Register.R9D, 1, 4)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.ESP, Register.R8D));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R10D));
+        Jmp(DispatchLabel);
     }
 
     /// <summary>

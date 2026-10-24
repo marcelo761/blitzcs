@@ -441,10 +441,21 @@ public sealed class TebTests
             peb = m.PebAddress;
             Assert.True(m.Memory.IsMapped(teb, 0x1000));
             Assert.True(m.Memory.IsMapped(peb, 16));
-            Assert.Contains(File.ReadAllLines("/proc/self/maps"), l => l.StartsWith(((ulong)teb).ToString("x") + "-"));
+            Assert.True(IsMappedInProcess(teb));
         }
-        Assert.DoesNotContain(File.ReadAllLines("/proc/self/maps"), l => l.StartsWith(((ulong)teb).ToString("x") + "-"));
-        Assert.DoesNotContain(File.ReadAllLines("/proc/self/maps"), l => l.StartsWith(((ulong)peb).ToString("x") + "-"));
+        // The kernel merges adjacent anonymous mappings with equal permissions, so test range coverage, not an exact start address.
+        Assert.False(IsMappedInProcess(teb));
+        Assert.False(IsMappedInProcess(peb));
+    }
+
+    private static bool IsMappedInProcess(ulong address)
+    {
+        foreach (var line in File.ReadAllLines("/proc/self/maps"))
+        {
+            var range = line.Split(' ', 2)[0].Split('-');
+            if (address >= Convert.ToUInt64(range[0], 16) && address < Convert.ToUInt64(range[1], 16)) return true;
+        }
+        return false;
     }
 
     [Fact]

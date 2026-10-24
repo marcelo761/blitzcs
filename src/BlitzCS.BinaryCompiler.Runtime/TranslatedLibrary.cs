@@ -21,6 +21,9 @@ public static class TranslatedLibrary
         catch (ArtifactFormatException error) { throw new TranslatedLibraryException($"Translation artifact '{artifactPath}' is corrupt: {error.Message}"); }
         if (!string.Equals(artifact.SourceSha256, BinaryBuild.Sha256(dll), StringComparison.OrdinalIgnoreCase))
             throw new TranslatedLibraryException($"Translation artifact '{artifactPath}' does not match '{full}'; rebuild the program.");
-        return GuestModule.Load(artifact, PeReader.Read(dll), imports, options);
+        var image = PeReader.Read(dll);
+        if (artifact.RebasedFromImageBase is { } from && from == image.ImageBase && artifact.GuestImageBase != image.ImageBase)
+            image = image.Rebase(artifact.GuestImageBase); // the artifact was translated for a rebased copy of this file
+        return GuestModule.Load(artifact, image, imports, options);
     }
 }

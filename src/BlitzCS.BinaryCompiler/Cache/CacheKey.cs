@@ -15,6 +15,11 @@ public static class CacheKey
             w.Write("blitzcs-binary-cache"); w.Write(ArtifactSerializer.CurrentVersion);
             w.Write(image.Sha256); w.Write(BinaryCompilerOptions.CompilerVersion);
             w.Write(options.TargetArchitecture); w.Write(options.TargetOs); w.Write((int)options.Profile);
+            // Rebasing changes every embedded absolute address, so the (original base, target base) pair is key material. It is written only
+            // when they differ, which keeps keys of images translated at their preferred base unchanged.
+            var originalBase = image.RebasedFrom?.OriginalImageBase ?? image.ImageBase;
+            var targetBase = options.LoadBase ?? image.ImageBase;
+            if (originalBase != targetBase) { w.Write("rebase"); w.Write(originalBase); w.Write(targetBase); }
             var deps = (dependencySha256 ?? []).Select(d => d.ToLowerInvariant()).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
             w.Write(deps.Count);
             foreach (var d in deps) w.Write(d);

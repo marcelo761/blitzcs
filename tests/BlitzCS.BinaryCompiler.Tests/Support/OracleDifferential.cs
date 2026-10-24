@@ -30,14 +30,30 @@ internal static class OracleDifferential
         foreach (var (name, off) in a.Exports) fx.Export(name, off);
         if (a.Name == "cb") foreach (var (dll, name) in CallbackImports) fx.Import(dll, name);
         foreach (var r in a.Relocs) fx.Relocate(r);
+        if (a.Name == "cb")
+        {
+            // The C source embeds the IAT slot addresses (iat.h) as literal constants, so gcc emits no relocation for them; a real linker would.
+            // Registering them makes the fixture movable (the delta is zero at the preferred base, so nothing changes there).
+            for (var i = 0; i + 4 <= code.Length; i++)
+            {
+                var v = BitConverter.ToUInt32(code, i);
+                if (v >= 0x10003400 && v < 0x10003440 && v % 4 == 0) fx.Relocate(PeFixtureBuilder.TextRva + (uint)i);
+            }
+        }
         return fx.Build();
     }
 
-    public static DifferentialOutcome Run(string lib, OptimizationProfile profile, FixtureMutation? mutation = null, OracleTranscript? oracleOverride = null)
+    /// <param name="loadBase">When set, the fixture is rebased to this guest base before translation. The oracle always runs at 0x10000000, so absolute
+    /// pointers stored in the data section are normalised back (minus the base delta, at every relocation site) before they are compared.</param>
+    public static DifferentialOutcome Run(string lib, OptimizationProfile profile, FixtureMutation? mutation = null, OracleTranscript? oracleOverride = null, uint? loadBase = null)
     {
         var art = OracleRunner.Build(lib);
         var oracle = oracleOverride ?? OracleRunner.Run(lib);
         var image = PeReader.Read(BuildFixture(art, mutation));
+        if (loadBase is { } lb) image = image.Rebase(lb);
+        var delta = unchecked(image.ImageBase - PeFixtureBuilder.ImageBase);
+        var dataVa = image.ImageBase + PeFixtureBuilder.DataRva;
+        var dataRelocs = art.Relocs.Where(r => r >= PeFixtureBuilder.DataRva && r + 4 <= PeFixtureBuilder.DataRva + (uint)oracle.DataLength).ToArray();
         var tr = X64Translator.Translate(image, new BinaryCompilerOptions(profile), "diff-" + lib);
         var errors = tr.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         if (errors.Count > 0)
@@ -52,7 +68,16 @@ internal static class OracleDifferential
         var fns = oracle.Functions.ToDictionary(f => f.Name, f => module.Bind(f.Name, f.Convention, f.ArgCount));
         var buf = new byte[oracle.DataLength];
 
-        uint Hash() { module.Memory.Read(DataVa, buf); return Fnv(buf); }
+        void Normalize()
+        {
+            module.Memory.Read(dataVa, buf);
+            foreach (var r in dataRelocs)
+            {
+                var o = (int)(r - PeFixtureBuilder.DataRva);
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(o), unchecked(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(buf.AsSpan(o)) - delta));
+            }
+        }
+        uint Hash() { Normalize(); return Fnv(buf); }
         var pfx = $"{FailureClass.Translation}: {lib}/{profile}";
         if (Hash() != oracle.InitialDataHash) return new(lib, profile, 0, null, $"{pfx}: initial data section differs from the oracle's before any call");
         foreach (var v in oracle.Vectors)
@@ -72,7 +97,7 @@ internal static class OracleDifferential
         Hash();
         for (var i = 0; i < buf.Length; i++)
             if (buf[i] != oracle.FinalData[i])
-                return new(lib, profile, oracle.Vectors.Count, null, $"{pfx}: final data differs at offset 0x{i:x} (VA 0x{DataVa + (uint)i:x}) oracle=0x{oracle.FinalData[i]:x2} guest=0x{buf[i]:x2}");
+                return new(lib, profile, oracle.Vectors.Count, null, $"{pfx}: final data differs at offset 0x{i:x} (VA 0x{dataVa + (uint)i:x}) oracle=0x{oracle.FinalData[i]:x2} guest=0x{buf[i]:x2}");
         return new(lib, profile, oracle.Vectors.Count, null, null);
     }
 

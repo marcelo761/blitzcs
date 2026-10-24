@@ -13,7 +13,8 @@ public sealed record PeSection(string Name, uint VirtualAddress, uint VirtualSiz
     public bool IsWritable => (Characteristics & 0x80000000) != 0;
 }
 
-public sealed record PeImport(string Dll, string? Name, ushort? Ordinal, uint IatRva);
+/// <summary>An imported function. <paramref name="IsDelay"/> marks delay-load imports (the IAT slot is bound at load time like an eager import).</summary>
+public sealed record PeImport(string Dll, string? Name, ushort? Ordinal, uint IatRva, bool IsDelay = false);
 
 /// <summary>ForwarderTarget is non-null for forwarded exports (RVA lies inside the export directory).</summary>
 public sealed record PeExport(string? Name, ushort Ordinal, uint Rva, string? ForwarderTarget);
@@ -22,6 +23,9 @@ public sealed record PeExport(string? Name, ushort Ordinal, uint Rva, string? Fo
 public sealed record PeRelocation(uint Rva, ushort Type);
 
 public sealed record PeTls(uint StartRaw, uint EndRaw, uint IndexAddress, uint CallbacksVa, uint SizeOfZeroFill = 0);
+
+/// <summary>Lineage of an image produced by <see cref="PeImage.Rebase"/>: the base the original file prefers.</summary>
+public sealed record PeRebaseInfo(uint OriginalImageBase);
 
 /// <summary>Parsed PE32 (x86). Produced by PeReader; never mutates input bytes.</summary>
 public sealed class PeImage
@@ -40,6 +44,16 @@ public sealed class PeImage
     public PeTls? Tls { get; init; }
     public required IReadOnlyList<BinaryDiagnostic> Diagnostics { get; init; }
 
+    /// <summary>Non-null for an image returned by <see cref="Rebase"/>. <see cref="Sha256"/> then still identifies the ORIGINAL file.</summary>
+    public PeRebaseInfo? RebasedFrom { get; init; }
+
+    /// <summary>
+    /// Returns a new image whose bytes were relocated (HIGHLOW fixups applied to the file image, ImageBase updated) to <paramref name="newBase"/>;
+    /// this image and its bytes are untouched. Translated code embeds absolute guest addresses, so the base is a translation input.
+    /// Throws <see cref="PeRebaseException"/> for images without relocations, an invalid base or a relocation that cannot be patched.
+    /// </summary>
+    public PeImage Rebase(uint newBase) => PeRebase.Rebase(this, newBase);
+
     /// <summary>Builds the mapped image (SizeOfImage bytes, sections at their RVAs, relocations NOT applied).</summary>
     public byte[] MapImage() => PeMapping.Map(this);
 }
@@ -53,7 +67,7 @@ public readonly record struct AddressMapEntry(uint GuestRva, uint HostOffset);
 /// Output of the translator. HostImage = [code][padding][RW data]. Code is position independent (RIP-relative) and
 /// Import protocol: stub i spills guest state, switches to the native stack saved in the context, calls the managed
 /// `ulong Import(uint guestEsp)` (SysV: edi=guestEsp, guestEsp points at the guest return address; args at +4...),
-/// where the low 32 bits are EAX and the high 32 bits are the bytes of arguments the callee pops (stdcall) or 0 (cdecl);
+/// where the low 32 bits are EAX and bits 32..62 are the bytes of arguments the callee pops (stdcall) or 0 (cdecl); bit 63 marks an extended return (EDX at CtxEdx and/or an 80-bit ST0 image at CtxSt0Raw, selected by the flags at CtxImportFlags) that the stub reloads before returning;
 /// then it switches back and performs the guest `ret` (popping the extra bytes). Unbound imports are a load-time error.
 /// Callee-saved SysV registers and the native stack pointer are preserved across EnterGuest.
 /// references the data area at CodeSize.. via RIP-relative addressing, so the loader needs no fixups: it maps
@@ -77,11 +91,13 @@ public sealed record TranslationArtifact(
     IReadOnlyList<AddressMapEntry> AddressMap,
     IReadOnlyList<TranslatedExport> Exports,
     IReadOnlyList<PeImport> Imports,
-    IReadOnlyList<BinaryDiagnostic> Diagnostics);
+    IReadOnlyList<BinaryDiagnostic> Diagnostics,
+    uint? RebasedFromImageBase = null);   // non-null when the translated image was rebased from this preferred base (SourceSha256 stays the original file hash)
 
 public enum OptimizationProfile { Debug, Release, ReleasePgo }
 
-public sealed record BinaryCompilerOptions(OptimizationProfile Profile = OptimizationProfile.Release, string TargetArchitecture = "x64", string TargetOs = "linux-sysv")
+/// <param name="LoadBase">Guest base address to translate for (64 KiB aligned, below 4 GiB). Null = the image's preferred base. Translated code embeds absolute addresses, so this is part of the cache key.</param>
+public sealed record BinaryCompilerOptions(OptimizationProfile Profile = OptimizationProfile.Release, string TargetArchitecture = "x64", string TargetOs = "linux-sysv", uint? LoadBase = null)
 {
-    public const string CompilerVersion = "0.4.0";
+    public const string CompilerVersion = "0.5.0";
 }

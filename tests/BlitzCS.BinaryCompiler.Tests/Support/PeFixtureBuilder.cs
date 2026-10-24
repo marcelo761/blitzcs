@@ -10,7 +10,7 @@ namespace BlitzCS.BinaryCompiler.Tests.Support;
 public sealed class PeFixtureBuilder
 {
     public const uint ImageBase = 0x10000000;
-    public const uint TextRva = 0x1000, DataRva = 0x2000, IdataRva = 0x3000, EdataRva = 0x4000, RelocRva = 0x5000;
+    public const uint TextRva = 0x1000, DataRva = 0x2000, IdataRva = 0x3000, EdataRva = 0x4000, RelocRva = 0x5000, DelayRva = 0x6000;
 
     private byte[] code = [0xC3];
     private byte[] data = new byte[0x100];
@@ -18,12 +18,28 @@ public sealed class PeFixtureBuilder
     private readonly List<(string Dll, string Name)> imports = [];
     private readonly List<uint> relocRvas = [];
     private uint entryRva;
+    private readonly List<(string Dll, string Name, uint InitialCodeOffset)> delayImports = [];
+    private uint delayAttributes = 1;
 
     public PeFixtureBuilder WithCode(byte[] bytes) { code = bytes; return this; }
     public PeFixtureBuilder WithData(byte[] bytes) { data = bytes; return this; }
     public PeFixtureBuilder Export(string name, uint codeOffset) { exports.Add((name, codeOffset)); return this; }
     /// <summary>Adds an import; returns the RVA of its IAT slot (valid after any number of imports: slots are 4 bytes in declaration order).</summary>
     public uint Import(string dll, string name) { imports.Add((dll, name)); return IdataRva + 0x400 + (uint)(imports.Count - 1) * 4; }
+    /// <summary>
+    /// Adds a delay-load import (MSVC ImgDelayDescr in a <c>.didat</c> section at <see cref="DelayRva"/>); returns the RVA of its delay IAT slot. As the linker leaves them,
+    /// the slot initially holds the address of the code at <paramref name="initialCodeOffset"/> (the per-function load stub), with a HIGHLOW relocation.
+    /// Declare delay imports grouped by DLL.
+    /// </summary>
+    public uint DelayImport(string dll, string name, uint initialCodeOffset = 0)
+    {
+        delayImports.Add((dll, name, initialCodeOffset));
+        var rva = DelayRva + 0x500 + (uint)(delayImports.Count - 1) * 4;
+        relocRvas.Add(rva);
+        return rva;
+    }
+    /// <summary>Overrides the Attributes field of every delay descriptor (default 1 = RVA form).</summary>
+    public PeFixtureBuilder DelayAttributes(uint attributes) { delayAttributes = attributes; return this; }
     /// <summary>Registers an absolute 32-bit field (HIGHLOW) at the given RVA.</summary>
     public PeFixtureBuilder Relocate(uint rva) { relocRvas.Add(rva); return this; }
     public PeFixtureBuilder EntryPoint(uint codeOffset) { entryRva = TextRva + codeOffset; return this; }
@@ -39,6 +55,8 @@ public sealed class PeFixtureBuilder
         if (hasImports) sections.Add((".idata", IdataRva, idata, 0xC0000040));
         if (hasExports) sections.Add((".edata", EdataRva, edata, 0x40000040));
         if (hasRelocs) sections.Add((".reloc", RelocRva, reloc, 0x42000040));
+        var didat = BuildDelayImports();
+        if (didat.Length > 0) sections.Add((".didat", DelayRva, didat, 0xC0000040));
 
         const int headerSize = 0x400; // DOS(0x40)+PE sig+COFF+optional(224)+sections, file-aligned
         var raw = new List<(int off, byte[] b)>(); int cursor = headerSize;
@@ -57,6 +75,7 @@ public sealed class PeFixtureBuilder
         if (hasExports) { W32(file, opt + 96, EdataRva); W32(file, opt + 100, (uint)edata.Length); }
         if (hasImports) { W32(file, opt + 104, IdataRva); W32(file, opt + 108, (uint)idata.Length); }
         if (hasRelocs) { W32(file, opt + 96 + 5 * 8, RelocRva); W32(file, opt + 96 + 5 * 8 + 4, (uint)reloc.Length); }
+        if (didat.Length > 0) { W32(file, opt + 96 + 13 * 8, DelayRva); W32(file, opt + 96 + 13 * 8 + 4, (uint)didat.Length); }
         var sh = opt + 224;
         for (var i = 0; i < sections.Count; i++, sh += 40)
         {
@@ -92,6 +111,30 @@ public sealed class PeFixtureBuilder
             d++;
         }
         _ = strings;
+        return buf;
+    }
+
+    private byte[] BuildDelayImports()
+    {
+        if (delayImports.Count == 0) return [];
+        var buf = new byte[0x800];
+        var order = delayImports.Select(x => x.Dll).ToList();
+        if (!order.SequenceEqual(order.OrderBy(d => order.IndexOf(d)))) throw new InvalidOperationException("declare delay imports grouped by dll");
+        var cursor = 0x100; var d = 0;
+        foreach (var g in delayImports.Select((x, i) => (x, i)).GroupBy(t => t.x.Dll))
+        {
+            var nameRva = DelayRva + (uint)cursor; Encoding.ASCII.GetBytes(g.Key + "\0").CopyTo(buf, cursor); cursor += g.Key.Length + 1;
+            var first = (uint)g.First().i;
+            W32(buf, d * 32, delayAttributes); W32(buf, d * 32 + 4, nameRva); W32(buf, d * 32 + 8, DelayRva + 0x400 + (uint)d * 4);
+            W32(buf, d * 32 + 12, DelayRva + 0x500 + first * 4); W32(buf, d * 32 + 16, DelayRva + 0x600 + first * 4);
+            foreach (var (x, i) in g)
+            {
+                var hint = DelayRva + (uint)cursor; cursor += 2; Encoding.ASCII.GetBytes(x.Name + "\0").CopyTo(buf, cursor); cursor += x.Name.Length + 1;
+                W32(buf, 0x600 + i * 4, hint);
+                W32(buf, 0x500 + i * 4, ImageBase + TextRva + x.InitialCodeOffset);
+            }
+            d++;
+        }
         return buf;
     }
 

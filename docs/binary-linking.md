@@ -17,19 +17,34 @@ a assinatura BASIC e o export; a CLI gera o binding.
 - `binary.export`: nome exato no export table. Se não existir, a CLI aceita uma
   única variante decorada (`_nome`, `_nome@N`, `nome@N`); várias candidatas é erro
   de ambiguidade, assim como export duplicado ou forwarder.
-- `binary.convention`: `cdecl` ou `stdcall`. Opcional somente quando a decoração do
-  export a revela; caso contrário o build falha. Se o catálogo contradiz a
-  decoração, ou um stdcall não desempilha `4 * parâmetros` bytes, o build falha.
-  `thiscall`/`fastcall` não são suportadas.
+- `binary.convention`: `cdecl`, `stdcall`, `thiscall` ou `fastcall`. Opcional somente
+  quando a decoração do export a revela (`_f`, `_f@N`, `@f@N`); caso contrário o build
+  falha. Se o catálogo contradiz a decoração, ou um stdcall/fastcall decorado não
+  declara `4 * parâmetros` bytes, o build falha. Em `binary.export` basta o nome sem
+  decoração (`f` encontra `_f@8` ou `@f@8` se for único).
+  - `thiscall`: o primeiro parâmetro declarado deve ser `Integer` e vai em ECX (`this`);
+    os demais ficam na pilha, em ordem, e o callee desempilha. Não há decoração para
+    inferir: o catálogo precisa dizer `thiscall`.
+  - `fastcall` (regra MSVC): os dois primeiros parâmetros que não são `Float`
+    (`Integer`, `String`), em ordem, vão em ECX e EDX; `Float` e o restante ficam na
+    pilha. O callee desempilha.
 - `defaults`, `parameters` e `returnType` seguem as regras normais de externos.
   Não se combina `binary` com `assembly`/`method`.
 
 Tipos: `Integer` vira palavra de 32 bits; `Float` vira IEEE single de 32 bits na
 pilha; `String` é copiada, terminada em NUL e em Windows-1252 (caracteres não
 mapeáveis viram `?`), para um buffer verificado da memória do guest, liberado após
-a chamada; o ponteiro é o argumento. Retorno: `Integer` (EAX) ou `Void`.
-`Float` e `String` como retorno são erros de build (st0 não é recuperável por
-EnterGuest; a posse do ponteiro de string é desconhecida).
+a chamada; o ponteiro é o argumento. Retorno: `Integer` (EAX), `Float` ou `Void`.
+
+`Float` como retorno lê ST0 (onde float/double/long double voltam em cdecl, stdcall,
+thiscall e fastcall, no MSVC e no GCC). O registrador de 80 bits é reduzido a
+precisão simples uma única vez, direto do valor estendido, com arredondamento ao mais
+próximo (empate para par); não passa por double, que arredondaria duas vezes. O
+runtime desempilha o ST0. Pilha x87 vazia (o callee na verdade devolve inteiro ou
+void) ou com sobra (o callee devolve float mas o catálogo diz `Integer`/`Void`) é
+erro em tempo de execução (`BinaryLibraryException`), nunca um valor zero. `String`
+como retorno é erro de build (a posse do ponteiro é desconhecida). Retorno de 64 bits
+não existe nos tipos BASIC e não é oferecido.
 
 ## Como funciona
 
@@ -54,5 +69,10 @@ artefato desatualizado (`.bcx` de outra DLL) e imports não resolvidos viram
 - Imports da DLL que nada resolve falham no carregamento; não há stubs e não há
   hook de catálogo para fornecê-los.
 - Somente Linux x86-64; as DLLs têm base fixa e a execução é serializada por módulo.
-- Retorno `Float`/`String`, ponteiros de saída, structs e callbacks não são suportados.
+- Retorno `String`, ponteiros de saída, structs e callbacks não são suportados pelo
+  catálogo (a API gerenciada `GuestFunction.InvokeWithBuffers` e
+  `CallStructViaHiddenPointer` cobre ponteiros de saída e structs; ver
+  `docs/binary-abi-coverage.md`).
+- Imports atrasados (delay-load, formato RVA) são resolvidos como imports comuns no
+  carregamento; imports não resolvidos continuam falhando no carregamento.
 - Exemplo: `samples/BinaryLinking` (`binlib.c` compilado por `tools/x86_oracle/build.sh`).

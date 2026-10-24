@@ -27,7 +27,9 @@ Failure classes in assertion messages: `TRANSLATION` (guest diverges from the or
 | fp | x87: fild/fistp, fmul/fdiv/fadd, fsqrt, fsin, frndint, fldpi, float32 stores, fnstcw; results via integer returns and data |
 | sse | SSE/SSE2 scalar float/double, packed int/float/double, shuffles, compares, movmskps |
 | exotic | memory-form `bt*` with bit-string offsets, pushal/popal, leave, xlat, cmpxchg8b, high-byte registers, 3-operand imul, cmov/shift immediates, MMX, fprem, fistp, cpuid, rdtsc, lodsl, repne scasl, pushf/popf with DF |
-| unsup | fastcall and thiscall: must be refused, never mistranslated |
+| unsup | undecorated fastcall and thiscall exports: `Bind` refuses `Unknown`, never guesses |
+| regconv | thiscall (ECX) and fastcall (ECX, EDX) with 0..5 args, nesting across all four conventions, register pressure, int/float/double/int64/long double returns |
+| abiout | hidden-pointer struct returns under thiscall/fastcall/stdcall (GCC placement), out-pointer parameters (int/float/double/int64/array/struct/in-out/two outputs) |
 | bcd | daa/das/aam: must be reported as UNSUPPORTED |
 
 ## Harness self-check
@@ -37,7 +39,7 @@ Failure classes in assertion messages: `TRANSLATION` (guest diverges from the or
 ## Known gaps
 
 * `GuestFunction.Call` returns EAX only, so values returned in st0/xmm0 or EDX:EAX are not observable; float math is covered through integer-returning functions and data-section comparison.
-* fastcall/thiscall exports are classified `Unknown` and `Bind` refuses them.
+* Undecorated thiscall/fastcall exports are classified `Unknown`: the caller supplies the convention. MSVC placement of the thiscall hidden pointer (pointer on the stack, `this` in ECX) is covered by hand-assembled callees only; the GCC oracle puts the pointer in ECX.
 * daa/das/aam (and other opcodes invalid in 64-bit mode) are reported as `BC_UNSUPPORTED_INSTRUCTION` errors.
 * A translator bug that crashes the guest with a native fault would take the test host down (the guest runs in-process).
 * A library's code+rodata must stay below 4 KiB (the oracle linker script places data at 0x10002000).

@@ -21,6 +21,16 @@ public sealed unsafe partial class GuestModule : IDisposable
 {
     private const uint CanaryWord = 0xCAFEBABE;
 
+    /// <summary>Internal capture mode of the cross-module bridge: like St0, but a callee that leaves the x87 stack empty is not an error (the result then reports Kind == Eax).</summary>
+    internal const GuestReturn St0IfPresent = (GuestReturn)3;
+
+    private int dependents;
+
+    /// <summary>Number of modules (in a <see cref="GuestModuleSet"/>) whose imports are bound to this module's exports.</summary>
+    internal int DependentCount => Volatile.Read(ref dependents);
+    internal void AddDependent() => Interlocked.Increment(ref dependents);
+    internal void RemoveDependent() => Interlocked.Decrement(ref dependents);
+
     [ThreadStatic] private static GuestModule? current;
 
     private sealed class ThreadState
@@ -30,6 +40,8 @@ public sealed unsafe partial class GuestModule : IDisposable
         public Exception? PendingFault;
         public unsafe byte* CallContext;
         public TebBlock? Teb;
+        public uint ExtFlags, ExtEdx;           // extended import return staged by the running handler (GuestCall.SetReturnEdx / SetReturnSt0)
+        public readonly byte[] ExtSt0 = new byte[10];
     }
 
     private sealed class GuestStack
@@ -62,6 +74,22 @@ public sealed unsafe partial class GuestModule : IDisposable
     public uint ImageBase => artifact.GuestImageBase;
     public nint HostImageBase => hostMap;
     public bool IsDisposed => Volatile.Read(ref disposed);
+
+    /// <summary>Bound imports in IAT order with the guest-callable address of each one's stub (the value stored in its IAT slot).</summary>
+    public IReadOnlyList<(string Dll, string Name, uint StubAddress)> BoundImports =>
+        [.. artifact.Imports.Select((imp, i) => (imp.Dll, imp.Name ?? "#" + imp.Ordinal, artifact.GuestImageBase + artifact.ImportStubBaseRva + 16u * (uint)i))];
+
+    /// <summary>Guest-callable stub address of a bound import (DLL compared case-insensitively; name or "#ordinal"), or null. For Win32Context.SetExportStubAddressProvider.</summary>
+    public uint? GetImportStubAddress(string dll, string name)
+    {
+        for (var i = 0; i < artifact.Imports.Count; i++)
+        {
+            var imp = artifact.Imports[i];
+            if (string.Equals(imp.Dll, dll, StringComparison.OrdinalIgnoreCase) && (imp.Name ?? "#" + imp.Ordinal) == name)
+                return artifact.GuestImageBase + artifact.ImportStubBaseRva + 16u * (uint)i;
+        }
+        return null;
+    }
 
     /// <summary>The most recent exception thrown by a managed import (kept after the owning call has thrown).</summary>
     public Exception? LastImportFault { get; private set; }
@@ -98,6 +126,10 @@ public sealed unsafe partial class GuestModule : IDisposable
             throw new GuestUnsupportedException("The image has a TLS directory but the artifact was not produced by a compiler that models it (no TLS_HANDLED diagnostic); re-translate the image.");
         if (!string.Equals(a.SourceSha256, image.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new GuestLoadException("The translation artifact was produced from a different image (SHA-256 mismatch).");
+        if (a.RebasedFromImageBase != image.RebasedFrom?.OriginalImageBase)
+            throw new GuestLoadException(a.RebasedFromImageBase is { } from
+                ? $"The artifact was translated for a copy rebased from 0x{from:X8}; pass the image returned by PeImage.Rebase(0x{a.GuestImageBase:X8})."
+                : "The image was rebased but the artifact was translated at the image's original base.");
         if (a.GuestImageBase != image.ImageBase || a.GuestImageSize != image.SizeOfImage)
             throw new GuestLoadException("The artifact's guest image base/size does not match the PE image.");
         if (a.Imports.Count != image.Imports.Count || !a.Imports.Zip(image.Imports).All(p => p.First.IatRva == p.Second.IatRva && p.First.Dll == p.Second.Dll))
@@ -156,7 +188,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         if (addr == Libc.MapFailed)
         {
             guestMapLength = 0;
-            throw new GuestAddressSpaceException($"Cannot map the guest image at its fixed base 0x{artifact.GuestImageBase:X8} (0x{size:X} bytes, errno {errno}); the range is occupied. Translated code is bound to this base and cannot be relocated.");
+            throw new GuestAddressSpaceException($"Cannot map the guest image at its fixed base 0x{artifact.GuestImageBase:X8} (0x{size:X} bytes, errno {errno}); the range is occupied by {AddressSpace.DescribeConflicts(artifact.GuestImageBase, size)}. Translated code is bound to this base: re-translate for another base (BinaryCompilerOptions.LoadBase / ModuleBaseAllocator).");
         }
         guestMap = addr;
 
@@ -265,10 +297,11 @@ public sealed unsafe partial class GuestModule : IDisposable
             var effective = convention != GuestCallingConvention.Unknown ? convention : export.Convention;
             if (effective == GuestCallingConvention.Unknown)
                 throw new ArgumentException($"The calling convention of export '{label}' is unknown; supply Cdecl or Stdcall explicitly.", nameof(convention));
-            if (effective is GuestCallingConvention.Thiscall or GuestCallingConvention.Fastcall)
-                throw new NotSupportedException($"{effective} exports pass arguments in registers, which EnterGuest cannot supply; only Cdecl and Stdcall are supported.");
-            if (effective == GuestCallingConvention.Stdcall && export.ArgBytes is { } bytes && bytes != 4 * argCount)
-                throw new ArgumentException($"Export '{label}' pops {bytes} byte(s) of arguments but {argCount} argument(s) ({4 * argCount} bytes) were declared.", nameof(argCount));
+            if (effective == GuestCallingConvention.Thiscall && argCount < 1)
+                throw new ArgumentOutOfRangeException(nameof(argCount), argCount, $"Thiscall export '{label}' needs at least the 'this' argument (ECX); argCount counts it.");
+            // Stdcall decoration _f@N and MSVC fastcall decoration @f@N both give the total size of the parameters (register-passed ones included).
+            if (effective is GuestCallingConvention.Stdcall or GuestCallingConvention.Fastcall && export.ArgBytes is { } bytes && bytes != 4 * argCount)
+                throw new ArgumentException($"Export '{label}' takes {bytes} byte(s) of arguments but {argCount} argument(s) ({4 * argCount} bytes) were declared.", nameof(argCount));
             return new GuestFunction(this, label, hostMap + (nint)export.HostOffset, effective, argCount);
         }
         finally { ExitCall(); }
@@ -276,27 +309,27 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     // ---- call machinery ----
 
-    internal uint Invoke(nint hostTarget, ReadOnlySpan<uint> args)
+    internal uint Invoke(nint hostTarget, ReadOnlySpan<uint> args, uint ecx = 0, uint edx = 0)
     {
         EnterCall();
-        try { return InvokeCore(hostTarget, args); }
+        try { return InvokeCore(hostTarget, args, GuestReturn.Eax, null, ecx, edx); }
         finally { ExitCall(); }
     }
 
     /// <summary>Calls the guest and captures the return registers selected by <paramref name="kind"/> (EAX and EDX are always reported).</summary>
-    internal GuestCallResult Invoke(nint hostTarget, ReadOnlySpan<uint> args, GuestReturn kind)
+    internal GuestCallResult Invoke(nint hostTarget, ReadOnlySpan<uint> args, GuestReturn kind, uint ecx = 0, uint edx = 0)
     {
         EnterCall();
         try
         {
             GuestCallResult result = default;
-            InvokeCore(hostTarget, args, kind, &result);
+            InvokeCore(hostTarget, args, kind, &result, ecx, edx);
             return result;
         }
         finally { ExitCall(); }
     }
 
-    private uint InvokeCore(nint hostTarget, ReadOnlySpan<uint> args, GuestReturn kind = GuestReturn.Eax, GuestCallResult* result = null)
+    private uint InvokeCore(nint hostTarget, ReadOnlySpan<uint> args, GuestReturn kind = GuestReturn.Eax, GuestCallResult* result = null, uint ecx = 0, uint edx = 0)
     {
         {
             var state = threadState.Value!;
@@ -340,7 +373,9 @@ public sealed unsafe partial class GuestModule : IDisposable
                 byte* callContext = stackalloc byte[128];
                 new Span<byte>(callContext, 128).Clear();
                 *(ulong*)(callContext + 40) = teb.Address;
-                *(uint*)(callContext + 56) = kind switch { GuestReturn.St0 => 2u, GuestReturn.Xmm0 => 4u, _ => 0u };
+                *(uint*)(callContext + 8) = ecx; // CtxEcxIn / CtxEdxIn: register arguments of thiscall and fastcall
+                *(uint*)(callContext + 12) = edx;
+                *(uint*)(callContext + 56) = kind switch { GuestReturn.St0 => 2u, GuestReturn.Xmm0 => 4u, St0IfPresent => 2u, _ => 0u };
                 current = this;
                 state.Depth++;
                 var savedContext = state.CallContext;
@@ -372,14 +407,14 @@ public sealed unsafe partial class GuestModule : IDisposable
                     for (var a = canaryStart; a < canaryTop; a += 4)
                         if (*(uint*)(nuint)a != CanaryWord)
                             throw new GuestStackException($"Guest stack corruption: the call frame canary at 0x{a:X8} was overwritten (the callee wrote above its declared {args.Length} argument(s)).");
-                if ((abi & 4) != 0)
+                if ((abi & 4) != 0 && kind != St0IfPresent)
                     throw new GuestAbiException("A floating-point return in ST0 was requested but the guest returned with an empty x87 stack.");
                 if ((abi & 2) != 0)
                     throw new GuestAbiException(kind == GuestReturn.St0
                         ? "The guest returned with extra values on the x87 stack (the stack was reset)."
                         : "The guest returned with values left on the x87 stack (for example a float/double result in ST0 that this call did not request; the stack was reset). Use the typed call (GuestFunction.CallDouble / CallSingle / Invoke(GuestReturn.St0)).");
                 if (result is not null)
-                    *result = new GuestCallResult(eax, *(uint*)(callContext + 48), kind,
+                    *result = new GuestCallResult(eax, *(uint*)(callContext + 48), kind == St0IfPresent ? ((abi & 4) != 0 ? GuestReturn.Eax : GuestReturn.St0) : kind,
                         *(ulong*)(callContext + 64), *(ushort*)(callContext + 72), *(double*)(callContext + 80), *(float*)(callContext + 88),
                         *(ulong*)(callContext + 96), *(ulong*)(callContext + 104));
                 return eax;
@@ -389,6 +424,20 @@ public sealed unsafe partial class GuestModule : IDisposable
                 if (outermost) ReturnStack(stack);
             }
         }
+    }
+
+    internal static void StageImportEdx(uint value)
+    {
+        var state = (current ?? throw new InvalidOperationException("SetReturnEdx may only be called from inside a guest import handler.")).threadState.Value!;
+        state.ExtEdx = value; state.ExtFlags |= 1;
+    }
+
+    internal static void StageImportSt0(ReadOnlySpan<byte> extended80)
+    {
+        if (extended80.Length != 10) throw new ArgumentException("An x87 extended-precision image is exactly 10 bytes.", nameof(extended80));
+        var state = (current ?? throw new InvalidOperationException("SetReturnSt0 may only be called from inside a guest import handler.")).threadState.Value!;
+        extended80.CopyTo(state.ExtSt0);
+        state.ExtFlags |= 2;
     }
 
     /// <summary>Entry point of every managed import thunk. Never throws: faults are recorded and surface from the owning Call.</summary>
@@ -402,7 +451,17 @@ public sealed unsafe partial class GuestModule : IDisposable
             var state = module.threadState.Value!;
             if (state.PendingFault is not null) return pop; // after a fault the rest of the call is a no-op
             state.ImportEsp = esp;
-            return handler(new GuestCall(module.Memory, esp)) | pop;
+            state.ExtFlags = 0;
+            var eax = handler(new GuestCall(module.Memory, esp)) | pop;
+            if (state.ExtFlags != 0 && state.CallContext != null)
+            {
+                var ctx = state.CallContext; // CtxEdx / CtxImportFlags / CtxSt0Raw of the calling guest call (scratch until the call exits)
+                *(uint*)(ctx + 48) = state.ExtEdx;
+                *(uint*)(ctx + 60) = state.ExtFlags;
+                if ((state.ExtFlags & 2) != 0) state.ExtSt0.AsSpan().CopyTo(new Span<byte>(ctx + 64, 10));
+                eax |= 1UL << 63;
+            }
+            return eax;
         }
         catch (Exception error)
         {
@@ -500,6 +559,8 @@ public sealed unsafe partial class GuestModule : IDisposable
         if (disposed) return;
         if (threadState.IsValueCreated && threadState.Value!.Holds != 0)
             throw new InvalidOperationException("A guest module cannot be disposed from inside one of its active calls or imports.");
+        if (DependentCount != 0)
+            throw new InvalidOperationException($"The guest module at 0x{ImageBase:X8} still has {DependentCount} live dependent module(s) bound to its exports; dispose them first (or dispose the GuestModuleSet).");
         lifetime.EnterWriteLock();
         try
         {

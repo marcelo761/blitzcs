@@ -16,6 +16,12 @@ public readonly struct GuestCall
     public uint Esp { get; }
     public uint Arg(int index) => Memory.ReadUInt32(Esp + 4 + 4u * (uint)index);
     public float ArgSingle(int index) => BitConverter.UInt32BitsToSingle(Arg(index));
+
+    /// <summary>Also returns <paramref name="value"/> in EDX (the high half of a 64-bit result; EAX is the handler's return value). Only valid inside the handler.</summary>
+    public void SetReturnEdx(uint value) => GuestModule.StageImportEdx(value);
+
+    /// <summary>Also returns an x87 value in ST0, as its 10-byte extended-precision image (what FSTP m80 stores). Pushed onto the guest's x87 stack on return, so the caller sees exactly what the real callee would leave. Only valid inside the handler.</summary>
+    public void SetReturnSt0(ReadOnlySpan<byte> extended80) => GuestModule.StageImportSt0(extended80);
 }
 
 public delegate uint GuestImportHandler(GuestCall call);
@@ -28,7 +34,7 @@ public static class GuestValue
 }
 
 /// <summary>
-/// A managed callee exposed to the guest as <c>ulong Import(uint guestEsp)</c> (low 32 = EAX, high 32 = bytes popped by the callee).
+/// A managed callee exposed to the guest as <c>ulong Import(uint guestEsp)</c> (low 32 = EAX, bits 32..62 = bytes popped by the callee, bit 63 = extended return staged: EDX and/or ST0 follow in the call context; set by the runtime, never by hand).
 /// Instances keep their delegate alive; hold them (the module does) for as long as the guest may call them.
 /// </summary>
 public sealed unsafe class GuestImport

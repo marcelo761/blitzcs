@@ -12,11 +12,15 @@ public readonly struct BinaryArgument
 {
     private readonly uint bits;
     private readonly string? text;
-    private BinaryArgument(uint bits, string? text) { this.bits = bits; this.text = text; }
+    private readonly bool isFloat;
+    private BinaryArgument(uint bits, string? text, bool isFloat = false) { this.bits = bits; this.text = text; this.isFloat = isFloat; }
 
     public static BinaryArgument FromInt32(int value) => new((uint)value, null);
-    public static BinaryArgument FromSingle(float value) => new(GuestValue.FromSingle(value), null);
+    public static BinaryArgument FromSingle(float value) => new(GuestValue.FromSingle(value), null, true);
     public static BinaryArgument FromString(string? value) => new(0, value ?? "");
+
+    /// <summary>True for BASIC Float arguments: they always travel on the stack, never in ECX/EDX (MSVC fastcall).</summary>
+    internal bool IsFloat => isFloat;
 
     internal bool IsText => text is not null;
     internal uint Bits => bits;
@@ -105,7 +109,16 @@ public sealed class BinaryExport
     }
 
     /// <summary>Calls the export and returns EAX. Text arguments are NUL-terminated Windows-1252 copies freed after the call.</summary>
-    public uint Call(params ReadOnlySpan<BinaryArgument> arguments)
+    public uint Call(params ReadOnlySpan<BinaryArgument> arguments) => Run(GuestReturn.Eax, arguments).Eax;
+
+    /// <summary>
+    /// Calls an export that returns a float: the callee leaves it in ST0 (cdecl, stdcall, thiscall and fastcall alike). The 80-bit register is narrowed once,
+    /// to nearest even, to single precision, which is what a caller of a float-returning function observes. A callee that leaves ST0 empty
+    /// (it actually returns an integer or void) is an error, not a zero.
+    /// </summary>
+    public float CallSingle(params ReadOnlySpan<BinaryArgument> arguments) => Run(GuestReturn.St0, arguments).St0Single;
+
+    private GuestCallResult Run(GuestReturn kind, ReadOnlySpan<BinaryArgument> arguments)
     {
         List<GuestBuffer>? buffers = null;
         try
@@ -122,7 +135,26 @@ public sealed class BinaryExport
                 buffer.Write(0, bytes);
                 words[i] = buffer.Address;
             }
-            return bound.Call(words);
+            switch (bound.Convention)
+            {
+                case GuestCallingConvention.Thiscall:
+                    // Catalog rule: the first declared parameter is 'this' (ECX); the others are stack words in declaration order.
+                    return bound.InvokeRegisters(kind, Math.Min(1, words.Length), words.Length > 0 ? words[0] : 0u, 0u, words.AsSpan(Math.Min(1, words.Length)));
+                case GuestCallingConvention.Fastcall:
+                {
+                    // MSVC rule: the first two integer-class (Integer, String pointer) arguments take ECX, EDX in order; Floats and the rest stay on the stack.
+                    Span<int> reg = stackalloc int[2];
+                    var n = 0;
+                    for (var i = 0; i < arguments.Length && n < 2; i++)
+                        if (!arguments[i].IsFloat) reg[n++] = i;
+                    var stack = new uint[words.Length - n];
+                    for (int i = 0, k = 0; i < words.Length; i++)
+                        if (!(n > 0 && i == reg[0]) && !(n > 1 && i == reg[1])) stack[k++] = words[i];
+                    return bound.InvokeRegisters(kind, n, n > 0 ? words[reg[0]] : 0u, n > 1 ? words[reg[1]] : 0u, stack);
+                }
+                default:
+                    return bound.Invoke(kind, words);
+            }
         }
         catch (Exception error) when (error is GuestException or TranslatedLibraryException or ArgumentException
             or NotSupportedException or PlatformNotSupportedException or ObjectDisposedException or IOException)

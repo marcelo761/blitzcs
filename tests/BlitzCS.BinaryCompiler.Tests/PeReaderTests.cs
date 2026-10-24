@@ -121,13 +121,12 @@ public class PeReaderTests
     }
 
     [Fact]
-    public void ClrAndDelayImportsAreErrors()
+    public void ClrImagesAreErrors()
     {
+        // Delay-load directories are supported (see DelayImportTests); only the CLR header stays an error.
         var b = Fixture(out _);
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(0x58 + 96 + 14 * 8), 0x1000);
         Assert.True(Has(Read(b), "PE051"));
-        b = Fixture(out _); BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(0x58 + 96 + 13 * 8), 0x1000);
-        Assert.True(Has(Read(b), "PE050"));
     }
 
     [Fact]
