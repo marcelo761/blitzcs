@@ -163,3 +163,5 @@ Copyright 2026 Marcelo Buratti de Freitas Filho. Project created and led by Marc
 Original BlitzCS and Blitz3DCS contributions in this repository are licensed under the **Apache License 2.0**, subject to the explicit scope and exclusions in [LICENSING.md](LICENSING.md). See [LICENSE](LICENSE), [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Third-party code, dependencies, excerpts and separately licensed fixtures retain their own terms.
 
 Blitz Research Ltd and the original Blitz3D authors provided the legacy compiler/runtime reference. Microsoft and .NET contributors provide .NET and Roslyn; SDL, libsndfile and xUnit contributors provide important runtime and test dependencies. SCP: Containment Breach and its contributors provide a separately licensed compatibility target. These acknowledgments do not imply endorsement or transfer of ownership.
+
+Historical `.decls` discovery, catalog composition and optional binding traces are documented in [legacy dependency resolution](docs/legacy-dependency-resolution.md); [SCP:CB results](docs/scp-legacy-dependency-results.md) distinguish semantic acceptance from executable generation.
