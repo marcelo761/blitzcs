@@ -11,6 +11,13 @@ public static class NativeMedia
     private static readonly ConcurrentDictionary<string, nint> Modules = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<(string, string, Type), Delegate> Functions = new();
 
+    [ThreadStatic] private static ResolvedRoot? resolved;
+    private sealed class ResolvedRoot(string root)
+    {
+        internal readonly string Root = root;
+        internal readonly Dictionary<(string Library, string Export, Type Type), Delegate> Functions = new();
+    }
+
     private static T Function<T>(string library, string export) where T : Delegate
     {
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 4)
@@ -18,8 +25,20 @@ public static class NativeMedia
         var root = Environment.GetEnvironmentVariable("BLITZCS_ORIGINAL_NATIVE_ROOT");
         if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root))
             throw new InvalidOperationException("Set BLITZCS_ORIGINAL_NATIVE_ROOT to an absolute directory containing the original media DLLs.");
+        // Keep root changes observable, while avoiding path construction and closure allocation
+        // on every sound-channel query. Native handles and delegates remain alive process-wide.
+        if (resolved is not { } current || current.Root != root) resolved = current = new ResolvedRoot(root);
+        var key = (library, export, typeof(T));
+        if (current.Functions.TryGetValue(key, out var cached)) return (T)cached;
+        var function = ResolveFunction<T>(root, library, export);
+        current.Functions.Add(key, function);
+        return function;
+    }
+
+    private static T ResolveFunction<T>(string root, string library, string export) where T : Delegate
+    {
         var path = Path.GetFullPath(Path.Combine(root, library));
-        return (T)Functions.GetOrAdd((path, export, typeof(T)), key =>
+        return (T)Functions.GetOrAdd((path, export, typeof(T)), _ =>
         {
             var module = Modules.GetOrAdd(path, LoadModule);
             return Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(module, export));

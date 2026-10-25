@@ -1,3 +1,3 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><PlatformTarget>x86</PlatformTarget><AssemblyName>BlitzCS.OriginalRuntime.Bridge</AssemblyName></PropertyGroup>
+  <PropertyGroup><AllowUnsafeBlocks>true</AllowUnsafeBlocks><PlatformTarget>x86</PlatformTarget><AssemblyName>BlitzCS.OriginalRuntime.Bridge</AssemblyName></PropertyGroup>
 </Project>
