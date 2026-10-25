@@ -101,3 +101,19 @@ Remaining costs include necessary native execution/GC transitions, owned result
 strings, media environment queries, engine rendering and the managed BASIC program
 itself. This experiment does not profile the entire SCP game, remove frame
 limiting/focus behavior, bypass validation or optimize native engine internals.
+
+## Compiler emission and JIT optimization
+
+The explicit `.dll` emission path previously hardcoded Roslyn's Debug optimization
+level, even when the compiler/host was built with `-c Release`. Inspection of the
+compiled SCP assembly confirmed DebuggableAttribute flags `0x107`, including
+DisableOptimizations. The native bindings assembly already had optimized flags
+`0x2`, so optimizing only bindings could not remove that caller-side restriction.
+
+The emitter now uses Release optimization while retaining portable PDBs and BASIC
+source mappings. The rebuilt, unchanged SCP source has flags `0x2` and reached the
+rendered 3D room. Regression tests execute emitted code to check JIT optimization
+is enabled and verify a thrown error still reports the mapped BASIC source line.
+The original SDK cube and native string/bank/GC rendering test also pass after
+recompilation through this emitter. The binding microbenchmarks above use an
+MSBuild Release fixture in both versions and do not mix in this compiler change.

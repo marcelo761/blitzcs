@@ -109,7 +109,7 @@ public static class DotNetEmitter
         var compilation = CSharpCompilation.Create(
             Path.GetFileNameWithoutExtension(outputPath), [syntax], references,
             new CSharpCompilationOptions(OutputKind.ConsoleApplication,
-                optimizationLevel: OptimizationLevel.Debug, checkOverflow: false,
+                optimizationLevel: OptimizationLevel.Release, checkOverflow: false,
                 deterministic: true, mainTypeName: entryPointTypeName));
         using var assembly = new MemoryStream();
         using var symbols = new MemoryStream();
