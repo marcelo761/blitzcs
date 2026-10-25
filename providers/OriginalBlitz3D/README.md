@@ -28,6 +28,31 @@ python3 tools/probe_original_runtime.py --sdk /path/to/Blitz3D-V1.118 --host art
 
 The test compiles the original `CreateCube.bb` using the x86 BlitzCS host, runs it with the original DLL, sends Escape to its native window, captures the front buffer, verifies nonblack pixels against the background, and checks source/runtime hashes. A nonzero exit, missing frame, or black frame fails the test. `xdotool` is required; start Xvfb separately when using a virtual display. The runner terminates only processes in its own test process groups on failure.
 
+## Publish a directly launchable Windows executable
+
+The same host can be published with an application name, without changing the compiler's default Windows x64 target:
+
+```sh
+dotnet publish providers/OriginalBlitz3D/Host/Host.csproj -c Release -r win-x86 \
+  --self-contained true --artifacts-path artifacts/original-app-build \
+  -p:OriginalApplicationName=MyGame.Launcher -o dist/MyGame
+```
+
+Place the compiled BASIC assembly at `dist/MyGame/program/Main.dll`, its managed dependencies alongside it, the unchanged native runtime and native DLLs in `native/`, and a writable copy of the application's assets in `game/`. Add `MyGame.Launcher.app.json` next to `MyGame.Launcher.exe`:
+
+```json
+{
+  "program": "program/Main.dll",
+  "runtime": "native/runtime.dll",
+  "workingDirectory": "game",
+  "log": "logs/managed.log"
+}
+```
+
+Starting the EXE without arguments executes the compiled BASIC assembly inside the original runtime in that process. Paths resolve against the configuration file, so the caller's working directory does not matter. Keep the published folder together: the executable still requires its managed assemblies, native engine DLLs and assets. The launcher assembly name must differ from the compiled program's assembly name. Existing explicit host commands continue to work.
+
+Omit `log` or set it to `null` to disable application file logging. Disable `BLITZCS_ORIGINAL_TRACE` separately when comparing performance; it serializes and flushes selected native calls and results.
+
 ## Scope and native ABI
 
 The generated catalog composes the existing historical profile and provides 532 bindings, including strings. Blitz3D strings are owned C++ objects, not C strings: the adapter uses the original engine's construction, copying, concatenation, conversion and release helpers, including for embedded NULs. Missing registrations and signature disagreements fail explicitly before the native call. Generation establishes bindings, not execution coverage for every command.
@@ -51,3 +76,5 @@ With Blitz3D V1.118 runtime SHA-256 `ba120a4a0f15f2ac48e1e86f6465137bd480d0b4a28
 These are real original-engine x86 executions of BlitzCS-generated BASIC. They do not demonstrate a BCSBRE-recompiled x64 engine, original IDE execution, or full SCP:CB compatibility.
 
 `--inspect-runtime <runtime.dll> <new-snapshot.json>` reads the actual registration table without executing a BASIC program. The output must be new, and native dependencies must be available. Use `tools/generate_runtime_profile.py` to compare this snapshot with an existing historical profile; descriptors are declarations, not inferred executable bindings.
+
+See [binding performance](PERFORMANCE.md) for typed dispatch, measured before/after results and the real-native regression benchmark.

@@ -21,7 +21,7 @@ dotnet run --project src/BlitzCS.CLI -c Release --no-build -- build samples/Hybr
 dotnet artifacts/answer.dll
 ```
 
-The program prints `42`. The compiler also writes generated C#, portable debugging symbols and runtime configuration alongside the assembly. Generated programs need .NET 10; compilation needs the SDK and Roslyn. External runtime libraries must accompany programs that use them.
+The program prints `42`. Emitted assemblies enable JIT optimizations; see [compiler performance](docs/compiler-performance.md) for array indexing measurements. The compiler also writes generated C#, portable debugging symbols and runtime configuration alongside the assembly. Generated programs need .NET 10; compilation needs the SDK and Roslyn. External runtime libraries must accompany programs that use them.
 
 This is a source distribution: no published NuGet package, global tool installation, or downloadable release is claimed here. Linux x64 is the verified development platform. Other platforms and native-library combinations need validation.
 

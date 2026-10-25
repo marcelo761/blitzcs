@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><PlatformTarget>x86</PlatformTarget></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../../providers/OriginalBlitz3D/Bridge/Bridge.csproj" /></ItemGroup>
+</Project>

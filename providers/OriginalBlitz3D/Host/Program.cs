@@ -13,6 +13,27 @@ internal static class Program
     {
         try
         {
+            // A published game apphost can reuse this host without a command line or another process.
+            if (args.Length == 0 && Environment.ProcessPath is { } executable)
+            {
+                var configuration = Path.ChangeExtension(executable, ".app.json");
+#if ORIGINAL_RUNTIME_APPLICATION
+                if (!File.Exists(configuration))
+                    throw new FileNotFoundException("Original-runtime application configuration is missing: " + configuration, configuration);
+#endif
+                if (File.Exists(configuration))
+                {
+                    var application = ApplicationLaunch.Load(configuration);
+                    Directory.SetCurrentDirectory(application.WorkingDirectory);
+                    Environment.SetEnvironmentVariable("BLITZCS_ORIGINAL_NATIVE_ROOT", application.NativeRoot);
+                    args = ["--run", application.Program, application.Runtime];
+                    if (application.Log is { } applicationLog)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(applicationLog)!);
+                        args = ["--log", applicationLog, .. args];
+                    }
+                }
+            }
             if (args.Length >= 2 && args[0] == "--log")
             {
                 var log = new StreamWriter(Path.GetFullPath(args[1])) { AutoFlush = true };

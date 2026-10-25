@@ -5,6 +5,7 @@ namespace BlitzCS.OriginalRuntime;
 public static partial class Commands
 {
     [ThreadStatic] private static Session? active;
+    private static Session Current => active ?? throw new InvalidOperationException("Run the program through the original-runtime x86 host.");
     private static object? Call(string name, string returnType, string[] types, object[] arguments) =>
         (active ?? throw new InvalidOperationException("Run the program through the original-runtime x86 host.")).Call(name, returnType, types, arguments);
 
@@ -29,6 +30,8 @@ public static partial class Commands
     }
     private sealed class Session : IDisposable
     {
+        internal readonly nint[] Pointers = new nint[CommandNames.Length];
+        internal readonly bool[] Traced = new bool[CommandNames.Length];
         private readonly nint library;
         private readonly nint runtime;
         private readonly nint table;
@@ -43,6 +46,7 @@ public static partial class Commands
         private T Slot<T>(int index) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(Marshal.ReadIntPtr(table, index * 4));
         public Session(string path)
         {
+            for (int i = 0; i < CommandNames.Length; i++) Traced[i] = tracedCalls.Contains(CommandNames[i]);
             library = NativeLibrary.Load(Path.GetFullPath(path));
             var factory = Marshal.GetDelegateForFunctionPointer<Factory>(NativeLibrary.GetExport(library, "runtimeGetRuntime"));
             runtime = factory();
@@ -77,6 +81,12 @@ public static partial class Commands
             if (!entered) throw new InvalidOperationException("The original runtime failed to initialize; BASIC entry point was not reached.");
             if (!completed) throw new InvalidOperationException("The original runtime terminated before the managed BASIC entry point returned.");
         }
+        internal nint Resolve(int index, string name, string result, string[] types)
+        {
+            if (!symbols.TryGetValue(name, out var symbol)) throw new MissingMethodException("Original runtime has no registration for " + name);
+            Validate(symbol.Descriptor, types, result);
+            return Pointers[index] = symbol.Pointer;
+        }
         public object? Call(string name, string result, string[] types, object[] arguments)
         {
             var trace = tracedCalls.Contains(name);
@@ -105,44 +115,61 @@ public static partial class Commands
             }
             finally { if (!transferred) foreach (var value in strings) Internal<ReleaseString>("_bbStrRelease")(value); }
         }
-        private T Internal<T>(string name) where T : Delegate => symbols.TryGetValue(name, out var symbol)
-            ? Marshal.GetDelegateForFunctionPointer<T>(symbol.Pointer) : throw new MissingMethodException("Original runtime has no registration for " + name);
+        internal void Release(nint value) => Internal<ReleaseString>("_bbStrRelease")(value);
+        private readonly Dictionary<string, Delegate> helpers = new(StringComparer.Ordinal);
+        private T Internal<T>(string name) where T : Delegate
+        {
+            if (helpers.TryGetValue(name, out var cached)) return (T)cached;
+            if (!symbols.TryGetValue(name, out var symbol)) throw new MissingMethodException("Original runtime has no registration for " + name);
+            var helper = Marshal.GetDelegateForFunctionPointer<T>(symbol.Pointer);
+            helpers.Add(name, helper);
+            return helper;
+        }
         private static readonly System.Text.Encoding LegacyEncoding = CreateEncoding();
         private static System.Text.Encoding CreateEncoding()
         {
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
             return System.Text.Encoding.GetEncoding(1252, System.Text.EncoderFallback.ExceptionFallback, System.Text.DecoderFallback.ExceptionFallback);
         }
-        private nint ToNativeString(string value)
+        internal unsafe nint ToNativeString(string value)
         {
-            var bytes = LegacyEncoding.GetBytes(value);
-            var buffer = Marshal.AllocHGlobal(bytes.Length + 1);
+            ArgumentNullException.ThrowIfNull(value);
+            var length = LegacyEncoding.GetByteCount(value);
+            byte[]? rented = null;
+            Span<byte> bytes = length < 512 ? stackalloc byte[length + 1]
+                : (rented = System.Buffers.ArrayPool<byte>.Shared.Rent(checked(length + 1))).AsSpan(0, length + 1);
             nint result = 0;
             try
             {
-                Marshal.Copy(bytes, 0, buffer, bytes.Length); Marshal.WriteByte(buffer, bytes.Length, 0);
-                result = Internal<ConvertString>("_bbCStrToStr")(buffer);
-                // C strings stop at NUL. Let the original engine construct embedded NULs and concatenate the remaining chunks.
-                for (var i = 0; i < bytes.Length; i++)
-                    if (bytes[i] == 0)
-                    {
-                        result = Internal<ConcatString>("_bbStrConcat")(result, Internal<CharacterString>("Chr")(0));
-                        result = Internal<ConcatString>("_bbStrConcat")(result, Internal<ConvertString>("_bbCStrToStr")(buffer + i + 1));
-                    }
+                LegacyEncoding.GetBytes(value, bytes);
+                bytes[length] = 0;
+                fixed (byte* buffer = bytes)
+                {
+                    result = Internal<ConvertString>("_bbCStrToStr")((nint)buffer);
+                    // Preserve embedded NULs through the original engine's string helpers.
+                    for (var i = 0; i < length; i++)
+                        if (bytes[i] == 0)
+                        {
+                            result = Internal<ConcatString>("_bbStrConcat")(result, Internal<CharacterString>("Chr")(0));
+                            result = Internal<ConcatString>("_bbStrConcat")(result, Internal<ConvertString>("_bbCStrToStr")((nint)(buffer + i + 1)));
+                        }
+                }
                 var owned = result; result = 0; return owned;
             }
-            finally { if (result != 0) Internal<ReleaseString>("_bbStrRelease")(result); Marshal.FreeHGlobal(buffer); }
+            finally
+            {
+                if (result != 0) Release(result);
+                if (rented is not null) System.Buffers.ArrayPool<byte>.Shared.Return(rented);
+            }
         }
-        private string FromNativeString(nint value)
+        internal unsafe string FromNativeString(nint value)
         {
             if (value == 0) throw new InvalidOperationException("Original runtime returned a null BBStr.");
             // Len consumes its argument; clone through the original helper, without inspecting C++ object layout.
             var clone = Internal<LoadString>("_bbStrLoad")(ref value);
             var length = Internal<StringLength>("Len")(clone);
-            var bytes = new byte[length];
             var text = Internal<ConvertString>("_bbStrToCStr")(value); // consumes the original BBStr
-            Marshal.Copy(text, bytes, 0, bytes.Length);
-            return LegacyEncoding.GetString(bytes);
+            return LegacyEncoding.GetString((byte*)text, length);
         }
         public void Dispose() { Slot<Shutdown>(4)(runtime); NativeLibrary.Free(library); }
     }

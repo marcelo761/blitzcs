@@ -23,6 +23,53 @@ public class ArrayCompilerTests
     public void TypedInclusiveArraysExecute(string source, int expected) => WithAssembly(source, assembly => Assert.Equal(expected, assembly.GetType("BB")!.GetField("result")!.GetValue(null)));
 
     [Theory]
+    [InlineData("3", "i And 3", "0")]
+    [InlineData("3,3", "i And 3,i And 3", "0,0")]
+    [InlineData("3,3,3,3,3", "i And 3,i And 3,i And 3,i And 3,i And 3", "0,0,0,0,0")]
+    public void RepeatedArrayAccessDoesNotAllocateIndexBuffers(string bounds, string indices, string zero)
+    {
+        var source = $$"""
+            <?cs module internal static class AllocationProbe { internal static long Start; } ?>
+            Global result=0, allocated=0
+            Dim values({{bounds}})
+            values({{zero}})=1
+            result=values({{zero}})
+            <?cs AllocationProbe.Start = System.GC.GetAllocatedBytesForCurrentThread(); ?>
+            For i=0 To 99999
+                values({{indices}})=i
+                result=values({{indices}})
+            Next
+            <?cs BB.allocated = checked((int)(System.GC.GetAllocatedBytesForCurrentThread() - AllocationProbe.Start)); ?>
+            """;
+        WithAssembly(source, assembly =>
+        {
+            var globals = assembly.GetType("BB")!;
+            Assert.Equal(99999, globals.GetField("result")!.GetValue(null));
+            Assert.Equal(0, globals.GetField("allocated")!.GetValue(null));
+        });
+    }
+
+    [Fact]
+    public void ArrayIndicesEvaluateOnceFromLeftToRightBeforeTheAssignedValue()
+    {
+        const string source = """
+            Global sequence=0, result=0
+            Dim values(1,2)
+            values(Index(),Index())=Value()
+            result=sequence*100+values(1,2)
+            Function Index()
+                sequence=sequence+1
+                Return sequence
+            End Function
+            Function Value()
+                sequence=sequence+1
+                Return 42
+            End Function
+            """;
+        WithAssembly(source, assembly => Assert.Equal(342, assembly.GetType("BB")!.GetField("result")!.GetValue(null)));
+    }
+
+    [Theory]
     [InlineData("Dim a()")]
     [InlineData("Dim a$(0)\nFor a(0)=1 To 2\nNext")]
     [InlineData("Dim a(1)\nDim a(1,2)")]
