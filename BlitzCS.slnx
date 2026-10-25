@@ -14,6 +14,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BlitzCS.CLI.Tests/BlitzCS.CLI.Tests.csproj" />
+    <Project Path="tests/BlitzCS.OriginalRuntime.Host.Tests/BlitzCS.OriginalRuntime.Host.Tests.csproj" />
     <Project Path="tests/Blitz3DCS.Audio.Tests/Blitz3DCS.Audio.Tests.csproj" />
     <Project Path="tests/BlitzCS.Compiler.Tests/BlitzCS.Compiler.Tests.csproj" />
     <Project Path="tests/BlitzCS.NativeInterop.Tests/BlitzCS.NativeInterop.Tests.csproj" />
