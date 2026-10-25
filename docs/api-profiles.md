@@ -87,3 +87,7 @@ dotnet run --project src/BlitzCS.CLI -c Release -- \
 This composes historical declarations with existing, explicitly registered string implementations. The normal output remains `dist/Chr/Chr.exe`, self-contained Windows x64 even when built from Linux. `--target linux-x64` and explicit managed DLL output retain their previous meanings. Other engine calls remain unbound, and graphical examples do not become runnable merely by selecting this catalog.
 
 For measured source and execution coverage, see [legacy source compatibility](legacy-source-compatibility.md).
+
+## Historical declaration discovery
+
+Catalogs can now import `.decls` files/directories with `declarations`, select ordered secondary providers with `fallbackProfiles`, and expose complete call-resolution reports. Multiple `--externals` arguments compose through the same loader. See [legacy dependency resolution](legacy-dependency-resolution.md) for pointer ownership, conflicts, tracing and batch-audit semantics.

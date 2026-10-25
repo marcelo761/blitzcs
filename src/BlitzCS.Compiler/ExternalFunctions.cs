@@ -7,7 +7,9 @@ public enum ExternalValueType { Integer, Float, String, Void }
 public sealed record UnboundExternalCall(string Name, string SourcePath, int Line, int Column)
 {
     public ExternalApiContract? Contract { get; init; }
+    public string? BindingFailure { get; init; }
     public string MissingImplementationMessage => $"External function '{Name}' has a declared signature but no implementation." +
+        (BindingFailure is { } failure ? " " + failure : "") +
         (Contract is { } contract
             ? $" Required runtime provider '{contract.Provider}' (profile '{contract.Profile ?? "unspecified"}', resolution '{contract.Resolution}', symbol '{contract.Symbol}'). Supply a matching managed or binary binding through --externals; declaration validation does not establish runtime support."
             : "");
@@ -23,6 +25,10 @@ public sealed class ExternalFunctionSignature
 {
     public string Name { get; }
     public ExternalApiContract? Contract { get; init; }
+    public string? BindingFailure { get; init; }
+    public bool AllowsApplicationImplementation { get; init; }
+    /// <summary>Historical data-pointer slots accept bank handles or BASIC objects during contract validation; no native conversion is implied.</summary>
+    public IReadOnlyList<int> DataPointerParameters { get; init; } = Array.Empty<int>();
     public ExternalValueType ReturnType { get; }
     public IReadOnlyList<ExternalValueType> ParameterTypes { get; }
 
@@ -74,7 +80,10 @@ public sealed class ExternalFunction
     internal IReadOnlyList<(ValueType Type, IrExpression? Default)> Parameters { get; }
     public ExternalFunctionSignature Signature { get; }
 
-    public ExternalFunction(string name, MethodInfo method)
+    public ExternalFunction(string name, MethodInfo method) : this(name, method, false) { }
+
+    /// <summary>Optionally discard an actual Int32 result for a historical Void command. No result is fabricated.</summary>
+    public ExternalFunction(string name, MethodInfo method, bool discardIntegerReturn)
     {
         ArgumentNullException.ThrowIfNull(method);
         ValidateName(name);
@@ -82,7 +91,8 @@ public sealed class ExternalFunction
             method.DeclaringType is not { IsVisible: true } owner || owner.IsGenericType || owner.FullName is null ||
             string.IsNullOrEmpty(owner.Assembly.Location))
             throw new ArgumentException("External methods must be public static methods on a visible non-generic type in a file-backed assembly.", nameof(method));
-        Result = method.ReturnType == typeof(void) ? ValueType.Void : Map(method.ReturnType);
+        if (discardIntegerReturn && method.ReturnType != typeof(int)) throw new ArgumentException("Only an actual Int32 result can be discarded.",nameof(method));
+        Result = discardIntegerReturn || method.ReturnType == typeof(void) ? ValueType.Void : Map(method.ReturnType);
         var parameters = new List<(ValueType, IrExpression?)>();
         foreach (var parameter in method.GetParameters())
         {
@@ -193,6 +203,8 @@ public sealed class ExternalFunctionRegistry
     }
     private static bool SameSignature(ExternalFunctionSignature left, ExternalFunctionSignature right) =>
         left.ReturnType == right.ReturnType && left.ParameterTypes.SequenceEqual(right.ParameterTypes);
+    internal bool ConflictsWithApplicationFunction(string name) => symbols.TryGetValue(Primitive.Name(name), out var signature)
+        && !(signature.AllowsApplicationImplementation && !bindings.ContainsKey(Primitive.Name(name)));
     internal bool Contains(string name) => symbols.ContainsKey(Primitive.Name(name));
     internal bool TryGetSignature(string name, out ExternalFunctionSignature signature) => symbols.TryGetValue(Primitive.Name(name), out signature!);
     internal bool TryGetBinding(string name, out ExternalFunction function) => bindings.TryGetValue(Primitive.Name(name), out function!);

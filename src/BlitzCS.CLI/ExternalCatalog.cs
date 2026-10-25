@@ -7,13 +7,17 @@ namespace BlitzCS.CLI;
 
 internal static class ExternalCatalog
 {
-    internal static ExternalCatalogResult Load(string catalogPath, string? target = null)
+    internal static ExternalCatalogResult Load(string catalogPath, string? target = null) => LoadMany([catalogPath], target);
+
+    internal static ExternalCatalogResult LoadMany(IEnumerable<string> paths, string? target = null)
     {
-        catalogPath = Path.GetFullPath(catalogPath);
-        var document = ExternalCatalogDocument.Read(catalogPath);
+        var catalogPaths = paths.Select(Path.GetFullPath).ToArray();
+        var catalogPath = catalogPaths[0];
+        var document = ExternalCatalogDocument.ReadMany(catalogPaths);
         var root = document.Root;
         var functions = new List<ExternalFunction>();
         var signatures = new List<ExternalFunctionSignature>();
+        var resolutions = new List<ExternalResolution>();
         var items = root.GetProperty("functions").EnumerateArray().ToArray();
         var nativeLibraries = root.TryGetProperty("nativeLibraries", out var libraries)
             && libraries.ValueKind != JsonValueKind.Null
@@ -70,7 +74,9 @@ internal static class ExternalCatalog
                 var methodName = binaryIndex >= 0 ? BinaryBindingGenerator.MethodName(binaryBindings[binaryIndex].BasicName) : Read(item, "method");
                 var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static, parameters.Select(ToSystemType).ToArray())
                     ?? throw new ArgumentException($"External method '{type.FullName}.{methodName}' with the declared signature does not exist.");
-                function = new ExternalFunction(Read(item, "name"), method);
+                var discard = method.ReturnType == typeof(int) && item.TryGetProperty("returnType",out var requestedResult) && requestedResult.GetString() == "Void"
+                    && (item.TryGetProperty("legacyDeclaration",out _) || item.TryGetProperty("selectionRole",out var role) && role.GetString() == "fallback");
+                function = new ExternalFunction(Read(item, "name"), method, discard);
             }
             var returnType = item.TryGetProperty("returnType", out var returnTypeElement)
                 ? returnTypeElement.GetString() switch
@@ -91,14 +97,52 @@ internal static class ExternalCatalog
                 defaults = values.Select((value, index) => ReadDefault(value,
                     parameters[parameters.Length - values.Length + index])).ToArray();
             }
+            var failureMessage = item.TryGetProperty("bindingFailure", out var failure) ? failure.GetString() : null;
+            var hasLegacy = item.TryGetProperty("legacyDeclaration", out var legacy);
+            var mismatch = function is not null && (function.Signature.ReturnType != returnType || !function.Signature.ParameterTypes.SequenceEqual(parameters));
+            if (mismatch && !hasLegacy && item.TryGetProperty("selectionRole",out var selectedRole) && selectedRole.GetString() == "fallback"
+                && item.TryGetProperty("fallbackCandidates",out var alternatives))
+            {
+                foreach (var candidate in alternatives.EnumerateArray())
+                {
+                    if (!candidate.TryGetProperty("method",out _) || !candidate.GetProperty("parameters").EnumerateArray().Select(p=>p.GetString())
+                        .SequenceEqual(parameters.Select(p=>p.ToString()))) continue;
+                    if (candidate.TryGetProperty("returnType",out var alternativeReturn) && alternativeReturn.GetString() != returnType.ToString()
+                        && !(returnType == ExternalValueType.Void && alternativeReturn.GetString() == "Integer")) continue;
+                    using var alternativeContext = new ExternalAssemblyLoadContext();
+                    try
+                    {
+                        var alternativePath = Read(candidate,"assembly"); alternativeContext.Discover([alternativePath]);
+                        var owner = alternativeContext.LoadAssembly(alternativePath).GetType(Read(candidate,"type"),throwOnError:true)!;
+                        var method = owner.GetMethod(Read(candidate,"method"),BindingFlags.Public | BindingFlags.Static,parameters.Select(ToSystemType).ToArray());
+                        if (method is null) continue;
+                        var alternative = new ExternalFunction(Read(item,"name"),method,returnType == ExternalValueType.Void && method.ReturnType == typeof(int));
+                        if (alternative.Signature.ReturnType != returnType || !alternative.Signature.ParameterTypes.SequenceEqual(parameters)) continue;
+                        function = alternative; mismatch = false; failureMessage = null; break;
+                    }
+                    catch (Exception exception) when (exception is IOException or ArgumentException or TypeLoadException or BadImageFormatException) { /* Keep this rejected candidate in the trace; try the next configured fallback. */ }
+                }
+            }
+            if (mismatch)
+            {
+                if (!hasLegacy && !(item.TryGetProperty("selectionRole",out var role) && role.GetString() == "fallback")) throw new ArgumentException($"External method '{function!.Name}' does not match its declared signature.");
+                failureMessage = hasLegacy
+                    ? $"Historical declaration '{Read(item,"name")}' at {legacy.GetProperty("source").GetString()}({legacy.GetProperty("line")}) does not match the configured CLR method signature; an explicit ABI adapter with the historical signature is required."
+                    : $"Fallback CLR method does not match the resolved signature of '{Read(item,"name")}'; an explicit matching adapter is required.";
+                failureMessage += $" Expected {returnType}({string.Join(",",parameters)}), actual CLR {function!.Signature.ReturnType}({string.Join(",",function.Signature.ParameterTypes)}) at {function.Method.DeclaringType!.FullName}.{function.Method.Name}.";
+                function = null;
+            }
             var signature = new ExternalFunctionSignature(Read(item, "name"), returnType, parameters, defaults)
-            { Contract = ReadContract(item) };
-            if (function is not null && (function.Signature.ReturnType != signature.ReturnType || !function.Signature.ParameterTypes.SequenceEqual(signature.ParameterTypes)))
-                throw new ArgumentException($"External method '{function.Name}' does not match its declared signature.");
+            {
+                Contract = ReadContract(item), BindingFailure = failureMessage,
+                AllowsApplicationImplementation = hasLegacy && string.IsNullOrWhiteSpace(legacy.GetProperty("library").GetString()),
+                DataPointerParameters = hasLegacy ? Array.AsReadOnly(legacy.GetProperty("parameters").EnumerateArray().Select((p,i) => (p,i)).Where(x => x.p.GetProperty("isPointer").GetBoolean()).Select(x => x.i).ToArray()) : Array.Empty<int>()
+            };
+            resolutions.Add(ExternalResolution.Create(item, signature, function, mismatch ? "abi_incompatible" : null));
             signatures.Add(signature);
             if (function is not null) functions.Add(function);
         }
-        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs, binaryTarget, document.InputPaths);
+        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs, binaryTarget, document.InputPaths, resolutions.AsReadOnly());
         }
         catch { staging?.Dispose(); throw; }
         finally { context.Dispose(); }
@@ -268,7 +312,8 @@ internal sealed record ExternalCatalogResult(
     IDisposable? Staging = null,
     IReadOnlyList<BinaryLibrarySpec>? LibrarySpecs = null,
     string? BinaryTarget = null,
-    IReadOnlyList<string>? InputPaths = null) : IDisposable
+    IReadOnlyList<string>? InputPaths = null,
+    IReadOnlyList<ExternalResolution>? Resolutions = null) : IDisposable
 {
     public void Dispose() => Staging?.Dispose();
 }

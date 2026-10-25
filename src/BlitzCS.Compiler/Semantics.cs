@@ -145,7 +145,7 @@ internal sealed partial class SemanticAnalysis(string sourcePath, ExternalFuncti
             }
         }
         foreach (var function in statements.OfType<Function>())
-            if (constants.ContainsKey(Primitive.Name(function.Name)) || externals?.Contains(function.Name) == true || !functions.TryAdd(Primitive.Name(function.Name), function)) throw Error(function.Position, $"Duplicate function '{function.Name}'.");
+            if (constants.ContainsKey(Primitive.Name(function.Name)) || externals?.ConflictsWithApplicationFunction(function.Name) == true || !functions.TryAdd(Primitive.Name(function.Name), function)) throw Error(function.Position, $"Duplicate function '{function.Name}'.");
         foreach (var function in functions.Values)
         {
             var defaults = new IrExpression?[function.Parameters.Count];
