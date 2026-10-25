@@ -32,7 +32,7 @@ remain enabled. This does not bypass language semantics or modify original sourc
 and reads per measured round. It warms the generated BASIC function first, checks
 the result, and records elapsed time and current-thread managed allocations. Both
 baseline and optimized assemblies use the same Release emitter and fixture.
-Baseline compiler: `3118845`, before the array access change.
+Baseline compiler: `2da2759`, before the array access change.
 
 .NET 10.0.13 Linux x64, three alternating before/after process pairs, five rounds
 per process (15 samples per version), without concurrent builds:
