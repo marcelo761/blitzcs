@@ -36,6 +36,13 @@ else if (args[0] == "sdk")
 {
     Sdk.Run(args[1], sb, Opt("--json"));
 }
+else if (args[0] == "startup")
+{
+    // BcSurvey startup <pe> [export-name|#ordinal ...] --out f.tsv : static start-up closure of the image (nothing is executed)
+    var names = new List<string>();
+    for (var i = 2; i < args.Length; i++) { if (args[i] == "--out") { i++; continue; } names.Add(args[i]); }
+    Startup.Run(args[1], names, sb);
+}
 else if (args[0] == "dump")
 {
     // BcSurvey dump <pe> <rva-hex> [count]  : disassembles the recovered instruction stream from an RVA (read-only)

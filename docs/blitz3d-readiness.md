@@ -335,3 +335,57 @@ Creating executable "C:\tmp\src1.exe"...
 (`docs/binary-seh.md`, "Implementation") BcRun prints exactly the native diagnostic and ends with `ExitProcess(0xFFFFFFFF)` (process status 255, as native under Wine): pinned by
 `BlitzccDifferentialTests.ACompileErrorInTheParserPrintsTheNativeDiagnosticAndExitCode` and `AnUnknownFunctionPrintsTheNativeDiagnosticAndExitCode` (linux-x64, and windows-x64 under Wine). A translator defect that hid
 this for JoyUDir (code before a throw helper call dropped by the data-after-call probe) is fixed. The corpus differential (`docs/blitz3d-reference.md`) now compares these two error runs too.
+
+## Produced executable start-up
+
+Static evidence only, measured at HEAD `bd30724`. The counts in sections 3 to 5 predate the current Win32 component (it now registers 156 of the 693 distinct imports, not 106) and are superseded here where they differ.
+
+Method and limits:
+* The SDK was extracted into a new empty directory under `/tmp/claude-1000`. Nothing from it was executed or copied into the repository.
+* No produced exe exists on this machine (no `/tmp/blitzcc-corpus.*`). Producing one runs `blitzcc.exe` through BcRun, and its `-o` path loads `runtime.dll` (`GetProcAddress(runtime!_bbWinMain@0)`, `FreeLibrary`), which executes that DLL's `DllMain`. That is excluded, so `bin/runtime.dll` is the proxy. The produced exe is runtime-sized (1,126,912 bytes against 1,126,400), but its import table was not read and the proxy is unverified.
+* Import tables: `tools/survey/pe_imports.py` (`python3 -I`, read-only).
+* Implemented or absent: `BcSurvey sdk` (`Win32ImportResolver.Analyze`, the registry verdict per `dll!name`).
+* Start-up set: `BcSurvey startup <pe> [export ...]` (`tools/survey/BcSurvey/Startup.cs`), the functions reached by direct calls and tail jumps from the entry or `DllMain` and from each export. Indirect calls are not followed. The `_bbWinMain@0` closure contains 253 indirect call sites, so the direct set is a lower bound.
+* Join: `tools/survey/startup_table.py`. Full per-name table: `tools/survey/startup-runtime-table.tsv` (210 rows, columns `implemented`, `group`, `direct_sites`, `upper_sites`, `roots`).
+
+| image | distinct imports | implemented | absent | absent in the direct start-up set |
+|---|---|---|---|---|
+| bin/runtime.dll (proxy for the produced exe) | 210 | 118 | 92 | 3 (from `_bbWinMain@0`); 0 from `DllMain` |
+| bin/blitzcc.exe | 82 | 82 | 0 | 0 |
+| Blitz3D.exe (IDE launcher, not on the path) | 74 | 70 | 4 | 4 (`CreateProcessA`, `GetDC`, `WaitForInputIdle`, `GetDeviceCaps`) |
+
+runtime.dll, by subsystem (`implemented / absent`; "direct" = absent with a call site in the `_bbWinMain@0` start-up set):
+
+| subsystem | imports | impl | absent | direct |
+|---|---|---|---|---|
+| user32 window/message | 37 | 2 | 35 | 0 |
+| ws2_32 (ordinals only) | 23 | 0 | 23 | 0 |
+| gdi32 / gdiplus | 14 | 0 | 14 | 0 |
+| kernel32 memory/resources | 11 | 7 | 4 | 3 |
+| kernel32 other / file / console / locale | 63 | 56 | 7 | 0 |
+| kernel32 sync/threads/TLS | 15 | 14 | 1 | 0 |
+| kernel32 CRT/startup, SEH, module loading | 26 | 26 | 0 | 0 |
+| DirectX/COM creation (ddraw, dinput8, d3dxof) | 4 | 0 | 4 | 0 |
+| winmm | 12 | 9 | 3 | 0 |
+| ole32 | 4 | 4 | 0 | 0 |
+| shell32 / shell-theme | 1 | 0 | 1 | 0 |
+| **total** | **210** | **118** | **92** | **3** |
+
+Top 10 blockers for the first frame, in start-up order:
+
+| rank | import(s) | implemented | subsystem | needed at start (static evidence) or later | headless with truthful semantics? |
+|---|---|---|---|---|---|
+| 1 | kernel32 `FindResourceA`, `LoadResource`, `LockResource` | no | kernel32 resources | **start**: one direct call each from `_bbWinMain@0` | yes: read the loaded image's resource directory |
+| 2 | user32 `RegisterClassA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `DefWindowProcA`, `DestroyWindow`, `Get/SetWindowLongA`, `UnregisterClassA` | no | user32 window | later by direct closure; needed by any Graphics3D path (indirect calls only) | yes for handles and state (window sink), not for pixels |
+| 3 | user32 `PeekMessageA`, `GetMessageA`, `DispatchMessageA`, `PostMessageA`, `SetForegroundWindow` | no | user32 message | the frame loop (indirect) | yes: queue semantics |
+| 4 | DDRAW `DirectDrawCreateEx`, `DirectDrawEnumerateExA`; DINPUT8 `DirectInput8Create`; d3dxof `DirectXFileCreate` | no | COM creation | the Graphics3D path (indirect) | a failure HRESULT is truthful but ends Graphics3D; a frame needs a display host |
+| 5 | gdi32 `CreateCompatibleDC`, `DeleteDC`, `CreateFontA`, `SelectObject`, `DeleteObject`, `GetStockObject`, `GetTextMetricsA`, `GetTextExtentPoint32A`, `GetCharABCWidthsA`, `ExtTextOutA`, `SetTextColor`, `SetBkColor`, `Add/RemoveFontResourceA` | no | gdi32 | the Print path (indirect) | DC and object bookkeeping yes; metrics and pixels need a font engine and a host |
+| 6 | user32 `GetCursorPos`, `SetCursorPos`, `ShowCursor`, `SetCursor`, `LoadCursorA`, `SetCapture`, `ReleaseCapture`, `ClientToScreen`, `ScreenToClient`, `GetClientRect`, `GetWindowRect`, `MoveWindow`, `SetWindowPos`, `MapVirtualKeyA`, `ToAscii` | no | user32 input/geometry | the Graphics3D and input path (indirect) | from the sink's state yes; real pointer or keyboard state needs a host |
+| 7 | user32 `BeginPaint`, `EndPaint`, `InvalidateRect` | no | user32 paint | the paint path (indirect) | only as no-op paint, which is truthful only if no pixels are expected |
+| 8 | winmm `timeBeginPeriod`, `timeEndPeriod`, `timeGetDevCaps` | no | winmm | the timing path (indirect) | yes: documented fixed caps |
+| 9 | kernel32 `AcquireSRWLockExclusive`, `ReleaseSRWLockExclusive`, `WakeAllConditionVariable`, `SleepConditionVariableSRW` | no | kernel32 sync | indirect only | yes for a single guest thread |
+| 10 | kernel32 `GetTimeZoneInformation`, `SystemTimeToTzSpecificLocalTime`, `FileTimeToSystemTime`, `GetDateFormatW`, `GetTimeFormatW` | no | kernel32 time/locale | indirect only | yes: a documented fixed zone |
+
+Not on the static start-up path: ws2_32 (23 ordinals, not reached even by address-taken functions), `GetSystemMetrics` and `SystemParametersInfoA` (no call site in any closure), `ShellExecuteA` (address-taken only). Rank 1 is the only blocker proven on the direct path. Ranks 2 to 10 are the names a Graphics3D or Print path needs by semantics; the static closure cannot prove that they run, because `runtime.dll`'s address-taken functions cover 5,258 of its 5,261 functions, so no upper bound follows without modelling vtables and object layouts.
+
+Headless versus a real host: ranks 1, 3, 8, 9 and 10 (and the state side of 2 and 6) can be satisfied headlessly with truthful semantics. Pixel output (5, 7, the frame part of 4) and live pointer or keyboard state (6) need a real display host. The Windows target could host them with the platform's own user32, ddraw and GDI, but the Win32 component emulates these APIs in managed code and does not forward them, so this would be a new host service behind the registry. For the Linux target, the untracked `src/Blitz3DCS.Windowing` was not evaluated. Neither has been started, and nothing here shows that a produced exe runs once they exist.

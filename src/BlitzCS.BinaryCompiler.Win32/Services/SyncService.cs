@@ -68,6 +68,7 @@ internal sealed class SyncState
     public readonly object AtomicGate = new();
     public readonly System.Collections.Concurrent.ConcurrentDictionary<uint, CriticalSection> CriticalSections = new();
     public readonly Dictionary<string, object> Named = [];
+    public readonly SrwState Srw = new();
 }
 
 /// <summary>

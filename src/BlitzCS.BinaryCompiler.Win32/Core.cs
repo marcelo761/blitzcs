@@ -15,7 +15,8 @@ public static class Win32Error
         NotEnoughMemory = 8, InvalidData = 13, OutOfMemory = 14, NoMoreFiles = 18, NotSupported = 50, FileExists = 80, InvalidParameter = 87,
         InsufficientBuffer = 122, ModNotFound = 126, ProcNotFound = 127, NegativeSeek = 131, BadPathname = 161, AlreadyExists = 183,
         EnvVarNotFound = 203, InvalidAddress = 487, NoMoreItems = 259, InvalidFlags = 1004, NoUnicodeTranslation = 1113, HandleEof = 38,
-        NotOwner = 288, TooManyPosts = 298, InvalidUserBuffer = 1784, NotEnoughQuota = 1816, BadLength = 24, NoAccess = 998, BadExeFormat = 193, DllInitFailed = 1114;
+        NotOwner = 288, TooManyPosts = 298, InvalidUserBuffer = 1784, NotEnoughQuota = 1816, BadLength = 24, NoAccess = 998, BadExeFormat = 193, DllInitFailed = 1114,
+        Timeout = 1460, ResourceDataNotFound = 1812, ResourceTypeNotFound = 1813, ResourceNameNotFound = 1814, ResourceLangNotFound = 1815;
 }
 
 /// <summary>Raised when the guest calls the emulated Win32 surface in a way real Windows would answer with a crash or undefined behaviour (for example leaving an unowned critical section). The guest call is abandoned; nothing is silently ignored.</summary>
@@ -314,6 +315,8 @@ public sealed class Win32Options
     public string MainModulePath { get; init; } = "C:\\program.exe";
     public uint MainModuleBase { get; init; } = 0x00400000;
     public IReadOnlyDictionary<string, string> Environment { get; init; } = new Dictionary<string, string>();
+    /// <summary>Time zone the guest sees (GetTimeZoneInformation, GetLocalTime). Default: the host's local zone.</summary>
+    public TimeZoneInfo? TimeZone { get; init; }
     public int AnsiCodePage { get; init; } = 1252;
     public int OemCodePage { get; init; } = 437;
     public Win32Version Version { get; init; } = new();
