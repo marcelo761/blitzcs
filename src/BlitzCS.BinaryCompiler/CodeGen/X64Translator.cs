@@ -13,6 +13,9 @@ namespace BlitzCS.BinaryCompiler.CodeGen;
 /// loader should inspect these fields. Host offset 0 is the trap routine, so zero dispatch entries trap.
 /// Translated code embeds guest addresses as constants: the guest image must be mapped at GuestImageBase.
 /// </summary>
+/// <summary>Result of <see cref="X64Translator.TranslateDynamic"/>: the artifact, the SHA-256 of the snapshot it was made from, which snapshot bytes belong to a translated instruction, and how many instructions were translated.</summary>
+public sealed record DynamicTranslation(TranslationArtifact Artifact, string SnapshotSha256, bool[] InstructionBytes, int InstructionCount);
+
 public sealed class X64Translator
 {
     /// <summary>Returns null when the TLS directory has a form the runtime models, else the reason it cannot.</summary>
@@ -41,7 +44,42 @@ public sealed class X64Translator
         return null;
     }
 
-    public static TranslationArtifact Translate(PeImage image, BinaryCompilerOptions options, string cacheKey)
+    /// <summary>
+    /// Translates guest code that exists only at run time (docs/binary-dynamic-code.md): <paramref name="code"/> is a snapshot of the guest bytes at
+    /// <paramref name="guestBase"/> (page aligned, the executable run of pages the guest allocated), and <paramref name="entries"/> are the guest addresses control
+    /// reached there. The snapshot becomes a synthetic one-section image (no headers, imports or relocations; the snapshot's SHA-256 is its identity) and goes through
+    /// the unchanged translator: CFG from the entries plus the speculative pointer/immediate roots of an image without relocations, bounded by the snapshot.
+    /// Targets outside it become dispatch misses, which reach other modules through the registry. The caller loads the artifact itself
+    /// (it has no PE image to validate against); the fixed-base and target-base diagnostics of a mapped image do not apply and are left out.
+    /// </summary>
+    public static DynamicTranslation TranslateDynamic(byte[] code, uint guestBase, IReadOnlyCollection<uint> entries, BinaryCompilerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+        ArgumentNullException.ThrowIfNull(entries);
+        if (code.Length == 0 || code.Length % 4096 != 0) throw new ArgumentException("The snapshot must be a non-empty whole number of 4 KiB pages.", nameof(code));
+        if (guestBase % 4096 != 0 || (ulong)guestBase + (ulong)code.Length > uint.MaxValue) throw new ArgumentOutOfRangeException(nameof(guestBase), $"0x{guestBase:X8} is not a page-aligned base whose run fits below 4 GiB.");
+        if (entries.Count == 0) throw new ArgumentException("At least one entry address is needed.", nameof(entries));
+        foreach (var e in entries)
+            if (e < guestBase || (ulong)e >= (ulong)guestBase + (ulong)code.Length) throw new ArgumentOutOfRangeException(nameof(entries), $"Entry 0x{e:X8} lies outside the snapshot 0x{guestBase:X8}+0x{code.Length:X}.");
+        var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(code)).ToLowerInvariant();
+        var image = new PeImage
+        {
+            Bytes = code, Sha256 = sha, Machine = 0x14C, IsDll = true, ImageBase = guestBase, SizeOfImage = (uint)code.Length, EntryPointRva = 0,
+            Sections = [new PeSection(".dyncode", 0, (uint)code.Length, 0, (uint)code.Length, 0x60000020)],
+            Imports = [], Relocations = [], Diagnostics = [],
+            Exports = [.. entries.Order().Select((e, i) => new PeExport($"dyn_{e:X8}", (ushort)(i + 1), e - guestBase, null))],
+        };
+        var artifact = TranslateCore(image, options with { LoadBase = null, DynamicStubs = 0 }, $"dynamic:{sha}", out var cfg);
+        var codeBytes = new bool[code.Length];
+        foreach (var (rva, g) in cfg.Instructions)
+            for (var k = 0; k < g.Instr.Length && rva + k < code.Length; k++) codeBytes[rva + k] = true;
+        return new DynamicTranslation(artifact with { Diagnostics = [.. artifact.Diagnostics.Where(d => d.Code is not ("BC_BASE_UNUSABLE_ON_TARGET" or "BC_FIXED_BASE"))] },
+            sha, codeBytes, cfg.Instructions.Count);
+    }
+
+    public static TranslationArtifact Translate(PeImage image, BinaryCompilerOptions options, string cacheKey) => TranslateCore(image, options, cacheKey, out _);
+
+    private static TranslationArtifact TranslateCore(PeImage image, BinaryCompilerOptions options, string cacheKey, out ControlFlowGraph cfg)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(options);
@@ -51,7 +89,8 @@ public sealed class X64Translator
             throw new ArgumentOutOfRangeException(nameof(options), options.DynamicStubs, $"DynamicStubs must be between 0 and {BinaryCompilerOptions.MaxDynamicStubs}.");
         if (options.LoadBase is { } loadBase && loadBase != image.ImageBase) image = image.Rebase(loadBase);
         var mapped = image.MapImage();
-        var cfg = ControlFlowGraph.Build(image, mapped);
+        var graph = ControlFlowGraph.Build(image, mapped);
+        cfg = graph;
         var release = options.Profile != OptimizationProfile.Debug;
 
         var exitRva = (image.SizeOfImage + 15u) & ~15u;
@@ -82,7 +121,7 @@ public sealed class X64Translator
 
         (X64CodeGen, CodeEmitter.Result) Generate(ulong dataBase, Func<ulong, uint>? previousOffsets, CodeEmitter? seed)
         {
-            var g = new X64CodeGen(image, cfg, release, dataBase, thunkRel, boundRel, tableRel, tableEntries, exitRva, stubBase, abi, options.DynamicStubs) { PreviousOffsets = previousOffsets };
+            var g = new X64CodeGen(image, graph, release, dataBase, thunkRel, boundRel, tableRel, tableEntries, exitRva, stubBase, abi, options.DynamicStubs) { PreviousOffsets = previousOffsets };
             g.EmitRuntime();
             g.EmitGuestCode();
             return (g, g.E.Encode(seed));
@@ -109,11 +148,11 @@ public sealed class X64Translator
             BinaryPrimitives.WriteUInt32LittleEndian(host.AsSpan(codeSize + (int)boundRel + 4 * lane), tableEntries - 1);
 
         var diagnostics = new List<BinaryDiagnostic>(image.Diagnostics);
-        diagnostics.AddRange(cfg.Diagnostics);
+        diagnostics.AddRange(graph.Diagnostics);
         diagnostics.AddRange(gen.Diagnostics);
         if (image.Tls is { } tls)
         {
-            var problem = ValidateTls(image, tls, mapped, cfg);
+            var problem = ValidateTls(image, tls, mapped, graph);
             diagnostics.Add(problem is null
                 ? new BinaryDiagnostic(DiagnosticSeverity.Info, "TLS_HANDLED", "Implicit TLS is modelled: per-thread TLS data, the TLS index and TLS callbacks are provided by the runtime.")
                 : new BinaryDiagnostic(DiagnosticSeverity.Error, "BC_TLS_UNSUPPORTED", problem));
@@ -131,7 +170,7 @@ public sealed class X64Translator
                 diagnostics.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "BC_FORWARDED_EXPORT", $"Forwarded export '{e.Name ?? "#" + e.Ordinal}' -> {e.ForwarderTarget} is not callable.", e.Rva));
                 continue;
             }
-            if (!gen.GuestLabels.TryGetValue(e.Rva, out var label) || !cfg.Instructions.ContainsKey(e.Rva))
+            if (!gen.GuestLabels.TryGetValue(e.Rva, out var label) || !graph.Instructions.ContainsKey(e.Rva))
             {
                 diagnostics.Add(new BinaryDiagnostic(DiagnosticSeverity.Warning, "BC_EXPORT_NOT_CODE", $"Export '{e.Name ?? "#" + e.Ordinal}' does not point at translated code.", e.Rva));
                 continue;

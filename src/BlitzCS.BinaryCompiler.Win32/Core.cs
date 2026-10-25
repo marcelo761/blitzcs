@@ -27,7 +27,7 @@ public class Win32UsageException(string message) : Exception(message);
 /// Ahead-of-time translation cannot follow self-modifying code: succeeding would let the guest write bytes that the translated code never reads. The request is therefore refused by name.
 /// </summary>
 public sealed class Win32SelfModifyingCodeException(string module, uint start, uint end, uint requestedProtection)
-    : Win32UsageException($"The guest asked to make translated code writable (self-modifying code), which ahead-of-time translation cannot honour: VirtualProtect on {module}, range 0x{start:X8}-0x{end:X8}, requested protection 0x{requestedProtection:X}.")
+    : Win32UsageException($"The guest asked to make translated code writable (self-modifying code), which translation cannot honour: VirtualProtect on {module}, range 0x{start:X8}-0x{end:X8}, requested protection 0x{requestedProtection:X}.")
 {
     public string Module { get; } = module;
     public uint Start { get; } = start;
@@ -68,6 +68,10 @@ public interface IWin32Memory
     ulong NextMappedAddress(uint address) => 0x1_0000_0000UL;
     /// <summary>Changes the host protection of whole pages and records <paramref name="tag"/> (see <see cref="GuestMemory.TryProtect"/>). The default refuses.</summary>
     bool TryProtect(uint address, uint length, MemoryProtection protection, uint tag, out string? refusal) { refusal = "this memory does not support protection changes"; return false; }
+    /// <summary>Records that the guest asked for these pages to be executable (or no longer executable): where code generated at run time may be translated. The default ignores it.</summary>
+    void SetGuestExecutable(uint address, uint length, bool executable) { }
+    /// <summary>Drops translations of code generated at run time in the range (decommit). The default has none.</summary>
+    int InvalidateDynamicCode(uint address, uint length) => 0;
 }
 
 /// <summary>Adapts the runtime's <see cref="GuestMemory"/>.</summary>
@@ -94,6 +98,8 @@ public sealed class GuestMemoryAdapter(GuestMemory memory, GuestMemory? allocato
     public bool TryQueryPage(uint a, out GuestPageInfo info) => Memory.TryQueryPage(a, out info);
     public ulong NextMappedAddress(uint a) => Memory.NextMappedAddress(a);
     public bool TryProtect(uint a, uint l, MemoryProtection p, uint tag, out string? refusal) => Memory.TryProtect(a, l, p, tag, out refusal);
+    public void SetGuestExecutable(uint a, uint l, bool executable) => Memory.SetGuestExecutable(a, l, executable);
+    public int InvalidateDynamicCode(uint a, uint l) => Memory.InvalidateDynamicCode(a, l);
 }
 
 public static class Win32MemoryExtensions

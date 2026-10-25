@@ -46,6 +46,7 @@ internal sealed class GuestHeap : IDisposable
     private Chunk AddChunk(int size, bool dedicated, bool first = false)
     {
         var allocation = memory.Allocate(size);
+        if ((Flags & HeapService.CreateEnableExecute) != 0) memory.SetGuestExecutable(allocation.Address, (uint)allocation.Length, true);   // HEAP_CREATE_ENABLE_EXECUTE
         var chunk = new Chunk(allocation, dedicated);
         if (!dedicated) chunk.Free.Add((first ? allocation.Address + Header : allocation.Address, (uint)allocation.Length - (first ? Header : 0u)));
         chunks.Add(chunk);

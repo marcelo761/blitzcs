@@ -125,6 +125,9 @@ public static class ModuleRegistryLayout
 {
     public const uint CellOffset = 0;
     public const int HeaderSize = 16, RecordSize = 32, GuestBase = 0, Bound = 4, HostBase = 8, Table = 16;
+    /// <summary>Header offset of the u64 miss handler (0 = none): native <c>uint handler(registry, guestVa, callContext)</c> that the miss routine calls when no record translates
+    /// the target, before it traps (dynamic code, docs/binary-dynamic-code.md). Non-zero = a record that translates the address has been published; the walk is repeated.</summary>
+    public const int MissHandler = 8;
 }
 
 public enum OptimizationProfile { Debug, Release, ReleasePgo }
@@ -141,7 +144,7 @@ public sealed record BinaryCompilerOptions(OptimizationProfile Profile = Optimiz
     /// <summary>Upper bound of <see cref="DynamicStubs"/> (each stub costs 16 bytes of guest address space and about 70 bytes of host code; 4096 stubs = 64 KiB stay inside the 64 KiB gap the module base allocator keeps between modules).</summary>
     public const int MaxDynamicStubs = 4096;
 
-    public const string CompilerVersion = "0.13.0";
+    public const string CompilerVersion = "0.14.0";
 }
 
 /// <summary>Target OS/ABI identifiers. Artifacts are target specific: the runtime routines (EnterGuest, import stubs) follow the host calling convention, and the loader refuses a mismatching artifact.</summary>

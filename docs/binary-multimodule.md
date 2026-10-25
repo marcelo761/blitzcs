@@ -108,7 +108,8 @@ to be the kind 1 trap. It is now a routine at host offset 0:
 1. `pushfq` (on the guest stack, below ESP: free memory), load the registry address from the cell at `ContextOffset + 0` of the module's own data area (the formerly unused 64-byte context area; 0 means the module is not in a set, so the trap stays);
 2. walk the **module registry**: a native array published by the runtime, one per `GuestModuleSet`: header `u32 count` (release store, only ever grows), `u32 capacity` (1024), then 32-byte records
    `{u32 guestBase, u32 bound, u64 hostCodeBase, u64 dispatchTable}`. A record matches when `VA - guestBase < bound` (unsigned, so also `VA < guestBase`; a retired record has bound 0);
-3. on a match whose table is live and whose entry is non-zero: `r12 = hostCodeBase`, `r13 = dispatchTable`, `popfq`, `jmp r12 + entry`. Otherwise the kind 1 trap runs unchanged (message: "untranslated code at ... and not inside any other module of this process", or, for an address in
+3. on a match whose table is live and whose entry is non-zero: `r12 = hostCodeBase`, `r13 = dispatchTable`, `popfq`, `jmp r12 + entry`. Otherwise, when the registry header holds a miss handler
+   (offset 8, compiler 0.14.0), the runtime is asked to translate code the guest generated at run time and the walk is repeated (docs/binary-dynamic-code.md); failing that the kind 1 trap runs (message: "untranslated code at ... and not inside any other module of this process", or, for an address in
    a module that was unloaded, "lies inside module 'x.dll' that has been unloaded").
 
 Returns work symmetrically: a `ret` in B to an address of A misses B's table, takes the same path and switches back. **Switched:** R12 (code base) and R13 (dispatch table). **Not switched:** R14 (call context: trap report, native RSP, import fault flag,

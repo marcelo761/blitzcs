@@ -43,7 +43,10 @@ filter set with `SetUnhandledExceptionFilter` is not called, Windows would end t
 `STATUS_NONCONTINUABLE_EXCEPTION`); an invalid disposition; a collided unwind; `RtlUnwind` with a NULL target frame (exit unwind), a target below the next record, or a
 target not on the chain; a handler that returns with `FS:[0]` not pointing at the dispatcher's record or with a stack that is neither the cdecl nor the stdcall shape;
 the guest stack reserve exhausted (`GuestStackException`). SafeSEH handler tables and SEHOP chain validation are not checked. Hardware exceptions (access violation, divide
-error, `int 3`, stack overflow) are not turned into guest exceptions (class 2 below, unchanged).
+error, `int 3`, stack overflow) are not turned into guest exceptions (class 2 below, unchanged). Self-modifying code: `VirtualProtect` making translated code writable,
+including code translated at run time, is refused by name (`Win32SelfModifyingCodeException`); a store into an instruction byte of code translated at run time is the named
+trap `GuestSelfModifyingCodeException` (kind 6), not a guest exception; stores to data on those pages are performed (docs/binary-dynamic-code.md). The write guard is a vectored
+exception handler on windows-x64 that only claims access violations on those pages and its own single-step traps; every other hardware exception passes through unchanged.
 
 **Tests.** `SehDifferentialTests` (`tools/x86_oracle/lib/seh.c`): raises through a hand-built chain with MSVC-style catch (search, `RtlUnwind` with EH_UNWINDING calls of
 inner cleanup frames, `_UnwindNestedFrames` relink, `_JumpToContinuation`), a raise inside a handler (nested), cdecl and stdcall handlers, ContinueExecution with live

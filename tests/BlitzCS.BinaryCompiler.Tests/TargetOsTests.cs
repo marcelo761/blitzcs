@@ -72,22 +72,24 @@ public sealed class TargetOsTests
         // Re-pinned once, deliberately, for cross-module dispatch (format 5): the only difference to the previous pin is the miss routine at host offset 0 (it now tries the module registry before the kind 1 trap) and the artifact has no other change.
         // Re-pinned again, deliberately, for guest SEH (format 6): every import stub records EBX/EBP/ESI/EDI in the call context, the extended-return tail gained the register-image
         // redirect, and two runtime stubs follow the imports (ImportStubLayout); the guest code is unchanged.
+        // Re-pinned again, deliberately, for code generated at run time (compiler 0.14.0, docs/binary-dynamic-code.md): the miss routine gained the slow path that calls the
+        // registry's miss handler before the kind 1 trap; nothing else changed.
         var art = For("linux-sysv", profile).Artifact;
         var hash = Convert.ToHexString(SHA256.HashData(art.HostImage));
         Assert.Equal(profile == OptimizationProfile.Debug ? PinnedDebug : PinnedRelease, hash);
     }
 
-    private const string PinnedDebug = "28E754D2CA2DA9B2216988A13F62B7BBDD6DC1CF69D35B3F64DDAE53581F703B", PinnedRelease = "092AE70CE0389C9E00A0AE01BFB203BBEE8B74F326282D1D32B5D890D030D227";
+    private const string PinnedDebug = "CE9995DF85D05CE6CEBFD325A79FFD5110950627B8C7586F1CCCE5FCB1679A71", PinnedRelease = "DABE1FC35DBBEEBC78B867B7B7477FC04734BDF8FA7256245FBF985640F4091D";
 
 
-    private const string PinnedWinDebug = "EE0C51CECB5C1416AA83C4D4B2599F7F757AAC0B8DDC60D687E3F7A1FB7CDE34", PinnedWinRelease = "4617AF058F70192459037F75AB6DFBD7879936E56FEBED3A2AB387BF1279B54D";
+    private const string PinnedWinDebug = "E7ECF146044D4A4AD5C7BECD88D519AF63A3B8B3802507D9D924647F99FA619D", PinnedWinRelease = "0277213114D526F703EF5FE53B47AF5FAFEE59323BB0CEC35065BA789B90B6A6";
 
     [Theory]
     [InlineData(OptimizationProfile.Debug), InlineData(OptimizationProfile.Release)]
     public void Windows_x64_output_without_a_stub_pool_is_pinned_byte_for_byte(OptimizationProfile profile)
     {
         // Pinned from the translator at commit 49eaa1b, before the dynamic stub pool existed (DynamicStubs = 0 must change nothing: same code, same layout); the linux-sysv pins above are the same check.
-        // Re-pinned deliberately for guest SEH (format 6), the same change as the linux-sysv pins.
+        // Re-pinned deliberately for guest SEH (format 6) and for the miss-handler slow path (compiler 0.14.0), the same changes as the linux-sysv pins.
         var hash = Convert.ToHexString(SHA256.HashData(For("windows-x64", profile).Artifact.HostImage));
         Assert.Equal(profile == OptimizationProfile.Debug ? PinnedWinDebug : PinnedWinRelease, hash);
     }

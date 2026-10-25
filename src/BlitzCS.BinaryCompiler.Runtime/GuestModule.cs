@@ -101,6 +101,14 @@ public sealed unsafe partial class GuestModule : IDisposable
     }
 
     public GuestMemory Memory { get; }
+    internal GuestProcessEnvironment Environment => env;
+    internal GuestModuleOptions Options => options;
+
+    /// <summary>Translations of code the guest generated at run time in this module's process (docs/binary-dynamic-code.md), oldest first.</summary>
+    public IReadOnlyList<DynamicCodeTranslation> DynamicTranslations => env.DynamicTranslations;
+
+    /// <summary>Process-wide counters of the dynamic-code write guard: guest stores to data on write-protected code pages that were performed, and stores refused as self-modifying code.</summary>
+    public static (long DataWrites, long Refused) DynamicCodeGuardCounters => DynamicCodeGuard.Counters;
     public uint ImageBase => artifact.GuestImageBase;
     public nint HostImageBase => hostMap;
     public bool IsDisposed => Volatile.Read(ref disposed);
@@ -269,6 +277,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         registryBound = tableEntries - 1;
         registrySlot = env.Publish(artifact.GuestImageBase, registryBound, hostMap, hostMap + (nint)artifact.DispatchTableOffset);
         PlatformMemory.Current.Protect(hostMap, (nuint)artifact.CodeSize, MemoryProtection.ReadExecute);
+        DynamicCodeGuard.AddHostCode(hostMap, (nuint)artifact.CodeSize);
 
         imageEntryRva = image.EntryPointRva; imageIsDll = image.IsDll;
         // 4. TLS callbacks (DLL_PROCESS_ATTACH), then DllMain(hinst, DLL_PROCESS_ATTACH, 0)
@@ -474,9 +483,12 @@ public sealed unsafe partial class GuestModule : IDisposable
                 {
                     var trapAddress = *(ulong*)(callContext + 24);
                     if (trapKind == 4) throw new GuestFastFailException(*(uint*)(callContext + 8), (uint)trapAddress);
+                    if (trapKind == DynamicCodeGuard.TrapSelfModifyingCode) throw env.SelfModifyingCodeFault((uint)trapAddress);
                     if (trapKind == 5) throw new GuestTrapException($"Guest executed {DescribeGuestInstruction((uint)trapAddress)} at 0x{trapAddress:X8}, a segment-register or far-pointer load whose new value is not the current flat selector (the guest runs in a flat model; this is a named deferred fault, not a translation error).");
                     throw new GuestTrapException(trapKind == 1
-                        ? env.FindRetired((uint)trapAddress) is { } gone
+                        ? env.TakeDynamicCodeFailure((uint)trapAddress) is { } dynamicFailure
+                            ? $"Guest control flow reached 0x{trapAddress:X8}: {dynamicFailure}"
+                        : env.FindRetired((uint)trapAddress) is { } gone
                             ? $"Guest control flow reached 0x{trapAddress:X8}, which lies inside module '{gone}' that has been unloaded (FreeLibrary/Unload): a function pointer or return address into it outlived the module."
                             : $"Guest control flow reached untranslated code at 0x{trapAddress:X8} (indirect target not discovered at build time, and not inside any other module of this process)."
                         : trapKind == 3
@@ -609,6 +621,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         lock (resourceLock)
         {
             if (!buffers.Remove(buffer)) return; // the module already freed it
+            env.InvalidateDynamicCode((uint)map, (uint)length);   // translations of code in freed memory die with it
             Memory.Remove((ulong)map);
             PlatformMemory.Current.Free(map, length);
         }
@@ -691,6 +704,7 @@ public sealed unsafe partial class GuestModule : IDisposable
             allStacks.Clear();
             idleStacks.Clear();
         }
+        if (hostMap != 0) DynamicCodeGuard.RemoveHostCode(hostMap);
         PlatformMemory.Current.Free(hostMap, hostMapLength);
         PlatformMemory.Current.Free(guestMap, guestMapLength);
         hostMap = 0;

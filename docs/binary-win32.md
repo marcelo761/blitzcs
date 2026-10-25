@@ -63,7 +63,8 @@ ERROR_ALREADY_EXISTS).
     (the memory is private, so no copy ever happens; VirtualQuery reports what was requested); `PAGE_NOCACHE`/`PAGE_WRITECOMBINE` are accepted and have no effect.
     The managed accessors (`GuestMemory.Read/Write`) apply the same rules, so a host write into a read-only page throws `GuestMemoryException`; a guest write is a hardware fault.
   * `PAGE_EXECUTE*` on guest data is recorded (VirtualQuery reports it) but the host never maps it executable (W^X): the page stays readable, and writable when requested.
-    Jumping into it ends in the ordinary "untranslated target" trap (`GuestTrapException`, kind 1, with the address), never in native execution.
+    Jumping into it never executes it natively: on windows-x64 the code there is translated at run time and its pages are write guarded (docs/binary-dynamic-code.md);
+    on linux-x64 it is a named trap (`GuestTrapException`, kind 1, with the address). Pages so translated (`GuestPageKind.DynamicCode`) follow the code rules below.
   * Pages of translated code (every page of an executable section of a translated image): a request that makes them writable (`READWRITE`, `WRITECOPY`, `EXECUTE_READWRITE`,
     `EXECUTE_WRITECOPY`) throws `Win32SelfModifyingCodeException` (a `Win32UsageException`; the guest call fails with `GuestImportException` whose inner exception it is) naming the
     module, the page range and the requested protection. `READONLY`, `EXECUTE` and `EXECUTE_READ` are no-ops that report `PAGE_EXECUTE_READ` as the old protection; `PAGE_NOACCESS`

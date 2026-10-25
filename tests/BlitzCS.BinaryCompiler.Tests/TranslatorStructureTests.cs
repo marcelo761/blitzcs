@@ -78,7 +78,8 @@ public sealed class TranslatorStructureTests
             var art = Translate(SimpleCode, profile).Artifact;
             var insts = DecodeHost(art);
             Assert.Equal(Code.Pushfq, insts[0].Ins.Code);                              // miss routine at host offset 0: the foreign (cross-module) dispatch comes first ...
-            Assert.Contains(insts.Take(40), i => i.Ins.Code == Code.Mov_rm32_imm32);    // ... and ends in the kind 1 trap
+            Assert.Contains(insts.Take(100), i => i.Ins.Code == Code.Fxsave64_m512byte);  // ... then the miss-handler slow path for code generated at run time ...
+            Assert.Contains(insts.Take(100), i => i.Ins.Code == Code.Mov_rm32_imm32);    // ... and ends in the kind 1 trap
             Assert.Equal(0, insts[0].Offset);
             Assert.True(insts[^1].Offset + insts[^1].Length <= art.CodeSize);
             Assert.Contains(insts, i => i.Offset == art.EnterGuestOffset);

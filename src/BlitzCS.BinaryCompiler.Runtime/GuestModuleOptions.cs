@@ -20,6 +20,13 @@ public sealed class GuestModuleOptions
     /// </summary>
     public bool AllowUnboundImports { get; init; }
 
+    /// <summary>
+    /// Translate code the guest generates at run time when control reaches it (docs/binary-dynamic-code.md): a dispatch miss into memory the guest made executable
+    /// is translated from the bytes there, which are then write protected. Default true; false keeps the named "untranslated code" trap. Decided by the module
+    /// the thread entered. Only the windows-x64 runtime can do it (the write guard is a vectored exception handler); elsewhere the trap names that.
+    /// </summary>
+    public bool DynamicCode { get; init; } = true;
+
     /// <summary>Run DllMain(DLL_PROCESS_ATTACH/DETACH) for DLLs with a non-zero entry point.</summary>
     public bool RunEntryPoint { get; init; } = true;
 

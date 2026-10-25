@@ -33,6 +33,8 @@ public sealed class BcRunOptions
     public bool GuestDlls { get; init; } = true;
     /// <summary>Logs every Win32 call the guest makes (dll!name).</summary>
     public bool TraceCalls { get; init; }
+    /// <summary>Translate code the guest generates at run time (GuestModuleOptions.DynamicCode, docs/binary-dynamic-code.md). Default true.</summary>
+    public bool DynamicCode { get; init; } = true;
 }
 
 /// <summary>Outcome of a run. <see cref="Failure"/> is null when the guest ended by itself (ExitProcess or return from the entry point).</summary>
@@ -122,14 +124,21 @@ public static class BcRunner
             GuestModule module;
             try
             {
-                set.Add(name, artifact, loadImage, null, new GuestModuleOptions { AllowTranslationErrors = o.AllowTranslationErrors, AllowUnboundImports = true, Process = processInfo });
+                set.Add(name, artifact, loadImage, null, new GuestModuleOptions { AllowTranslationErrors = o.AllowTranslationErrors, AllowUnboundImports = true, Process = processInfo, DynamicCode = o.DynamicCode });
                 set.LoadAll();
                 module = set[name];
             }
             catch (GuestException e) { return Failed($"load failed: {e.GetType().Name}: {e.Message}", errors.Count, unbound); }
+            void LogDynamic()
+            {
+                if (module.DynamicTranslations.Count > 0) log($"dynamic code write guard: {GuestModule.DynamicCodeGuardCounters.DataWrites} data store(s) on protected code pages performed, {GuestModule.DynamicCodeGuardCounters.Refused} refused");
+                foreach (var d in module.DynamicTranslations)
+                    log($"dynamic code #{d.Generation}: entry 0x{d.EntryAddress:X8}, region 0x{d.RegionStart:X8}-0x{d.RegionEnd:X8}, {d.Entries} entr(ies), {d.Instructions} instruction(s), host code {d.HostCodeBytes} bytes, snapshot SHA-256 {d.SnapshotSha256}, {d.Elapsed.TotalMilliseconds:F1} ms");
+            }
             try
             {
                 var r = module.RunExecutable();
+                LogDynamic();
                 log(r.CalledExit ? $"guest called ExitProcess({r.ExitCode})" : $"guest entry point returned {r.ExitCode}");
                 Flush(win32);
                 return new BcRunResult(r.ExitCode, r.CalledExit, null, guestBase, errors.Count, unbound) { Diagnostics = loader?.Diagnostics ?? [] };
@@ -137,6 +146,7 @@ public static class BcRunner
             catch (GuestException e)
             {
                 Flush(win32);
+                LogDynamic();
                 log($"guest run failed (the process state is disposed next): {e.GetType().Name}: {e.Message}");
                 return Failed($"{e.GetType().Name}: {e.Message}" + (e.InnerException is { } inner ? $" [{inner.GetType().Name}: {inner.Message}]" : ""), errors.Count, unbound);
             }

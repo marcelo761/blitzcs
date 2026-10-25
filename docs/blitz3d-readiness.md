@@ -404,11 +404,16 @@ Start-up as traced (`--trace`, 4,824 Win32/COM calls):
 5. Window placement (`SetWindowLongA`, `SetWindowPos`, `GetWindowRect`, `GetClientRect`, `GetSystemMetrics`, `ClientToScreen`, `MoveWindow`, with nested window-procedure calls), `DirectInput8Create`, `EnumDevices`.
 6. The message loop and the first frame: `PeekMessageA`/`DispatchMessageA`, `TestCooperativeLevel`, `IsLost`, `WM_PAINT` handled by `BeginPaint`, `GetClientRect`, `ClientToScreen`, `Blt` of the back buffer to the primary surface, `EndPaint`.
 
-**Next fault** (exit 125): `GuestTrapException: Guest control flow reached untranslated code at 0x781A0000`, right after the first frame, before anything is printed. That address is
-in the runtime arena (a `VirtualAlloc` region): the produced exe is the runtime with the compiled program stored as RCDATA resource #1111 (307 bytes here: `push ebx; push esi;
-push edi; push ebp; mov ebp,esp; ... call rel32` plus fix-ups). The runtime copies it into executable memory, fixes it up and calls it, and that code did not exist when the
-image was translated. `Print "hello"` runs inside it. Running it needs a separate design (translating code that appears at run time, keyed by the region the guest made
-executable) and is not a gap of the Win32 or DirectX bridge.
+**Formerly the next fault** (exit 125): `GuestTrapException: Guest control flow reached untranslated code at 0x781A0000`, right after the first frame. That address is the
+runtime's `VirtualAlloc(PAGE_EXECUTE_READWRITE)` copy of the compiled program (RCDATA resource #1111, `push ebx; push esi; push edi; push ebp; mov ebp,esp; ... call rel32`
+plus fix-ups the runtime applies before calling it). It did not exist when the image was translated.
+
+**Now (windows-x64):** code generated at run time is translated when control reaches it (`docs/binary-dynamic-code.md`). One translation (entry `0x781A0000`, one page,
+28 instructions, about 130 ms), no store into the guarded page after it. The program then draws "hello" (`Lock`/`Unlock`, five glyph `Blt`s into the back buffer, `Blt` to
+the front buffer, `InvalidateRect`, a second `WM_PAINT` that presents it), `End` posts the close message, the runtime destroys the window, tears DirectDraw/winmm/WinSock
+down and calls `ExitProcess(0)`: BcRun exits 0 with no fault. Visual check: the same program with `Delay 6000` after `Print`, captured from the Xvfb display, shows the
+window with "hello" at its top left. The runtime's second executable allocation (128 bytes, `VirtualAlloc(PAGE_EXECUTE_READWRITE)` in a routine that frees the previous one
+first) was made but not executed in this run. linux-x64 still stops at the same address, now with a message naming the missing write guard.
 
 Teardown note: with `BLITZCS_AUDIO=virtual` the same run reaches the same trap but BcRun then hangs while disposing the process (the virtual sink's worker thread had delivered
 waveOut callbacks into the guest); with `BLITZCS_AUDIO=none` it exits at once.

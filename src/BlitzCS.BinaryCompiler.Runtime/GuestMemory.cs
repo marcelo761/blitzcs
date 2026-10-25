@@ -15,6 +15,8 @@ public enum GuestPageKind
     Buffer,
     /// <summary>Stacks, TEB/PEB and other runtime-owned ranges.</summary>
     Other,
+    /// <summary>A page of a scratch buffer whose bytes were translated as code at run time (docs/binary-dynamic-code.md); write protected while the translation lives.</summary>
+    DynamicCode,
 }
 
 /// <summary>One page as the guest sees it. <see cref="Tag"/> is the caller-defined protection last stored by <see cref="GuestMemory.TryProtect"/> (0 = never set).</summary>
@@ -27,6 +29,13 @@ internal sealed record GuestRegion(ulong Start, ulong End, bool[]? PageWritable)
     internal bool[]? PageReadable { get; set; }
     internal uint[]? PageTag { get; set; }
     internal bool[]? PageExecutable { get; init; }
+    /// <summary>Buffer pages the guest asked to be executable (VirtualAlloc/VirtualProtect PAGE_EXECUTE*, an executable heap): where dynamic code may be translated.</summary>
+    internal bool[]? PageGuestExecutable { get; set; }
+    /// <summary>Buffer pages that hold code translated at run time; their host protection is read-only while that translation lives.</summary>
+    internal bool[]? PageDynamicCode { get; set; }
+    /// <summary>Guest-visible writability of the pages saved when they were write protected for dynamic code (restored when the translation is dropped).</summary>
+    internal bool[]? PageWritableBeforeLock { get; set; }
+    internal bool PageGuestWritable(int page) => PageWritableBeforeLock?[page] ?? true;
     internal GuestPageKind Kind { get; init; } = GuestPageKind.Other;
     internal string? Owner { get; init; }
 
@@ -128,11 +137,13 @@ public sealed unsafe class GuestMemory
         var i = (int)((page - r.Start) / ps);
         var writable = r.PageWritable is null || r.PageWritable[i];
         var readable = r.PageReadable is null || r.PageReadable[i];
-        var kind = r.Kind == GuestPageKind.ImageData && r.PageExecutable is { } x && x[i] ? GuestPageKind.ImageCode : r.Kind;
+        var kind = r.Kind == GuestPageKind.ImageData && r.PageExecutable is { } x && x[i] ? GuestPageKind.ImageCode
+            : r.PageDynamicCode is { } d && d[i] ? GuestPageKind.DynamicCode : r.Kind;
+        if (kind == GuestPageKind.DynamicCode) writable = r.PageGuestWritable(i);
         return new GuestPageInfo(kind, (uint)r.Start, (uint)r.End, readable, writable, r.PageTag?[i] ?? 0, r.Owner);
     }
 
-    private GuestRegion? FindRegion(uint address, out GuestMemory owner)
+    internal GuestRegion? FindRegion(uint address, out GuestMemory owner)
     {
         foreach (var r in regions)
             if (address >= r.Start && address < r.End) { owner = this; return r; }
@@ -197,7 +208,10 @@ public sealed unsafe class GuestMemory
                 var first = (int)((address - region.Start) / ps);
                 var count = (int)(length / ps);
                 for (var i = 0; i < count; i++)
+                {
                     if (region.PageExecutable is { } x && x[first + i]) { refusal = "translated code"; return false; }
+                    if (region.PageDynamicCode is { } d && d[first + i]) { refusal = "code translated at run time"; return false; }
+                }
                 var pages = (int)((region.End - region.Start + ps - 1) / ps);
                 var write = protection == MemoryProtection.ReadWrite;
                 var read = protection != MemoryProtection.None;
@@ -220,13 +234,61 @@ public sealed unsafe class GuestMemory
         return (byte*)(nuint)address;
     }
 
+    /// <summary>
+    /// A managed write: like <see cref="Check"/>, except that a range on pages write protected for code translated at run time is checked against the translated
+    /// instruction bytes (refused with <see cref="GuestSelfModifyingCodeException"/>) and otherwise performed with the pages briefly writable (data next to the code).
+    /// </summary>
+    private void GuardedWrite(uint address, long length, delegate*<byte*, void*, void> store, void* state)
+    {
+        if (length >= 0 && Find(address, length, true) is not null) { store((byte*)(nuint)address, state); return; }
+        if (length > 0 && module.Environment.TryDynamicCodeDataWrite(this, address, (uint)length, store, state)) return;
+        throw new GuestMemoryException(address, length, true);
+    }
+
+    /// <summary>Records which pages the guest asked to be executable (PAGE_EXECUTE*): only there can control flow reach code that is translated at run time.</summary>
+    public void SetGuestExecutable(uint address, uint length, bool executable)
+    {
+        module.EnterCall();
+        try
+        {
+            var ps = (uint)PlatformMemory.Current.PageSize;
+            if (length == 0) return;
+            var region = FindRegion(address, out var owner);
+            if (region is null || region.Kind != GuestPageKind.Buffer) return;
+            if (owner != this) { owner.SetGuestExecutable(address, length, executable); return; }
+            lock (gate)
+            {
+                var pages = (int)((region.End - region.Start + ps - 1) / ps);
+                var x = region.PageGuestExecutable ?? new bool[pages];
+                var first = (int)((address - region.Start) / ps);
+                var last = (int)Math.Min((ulong)(pages - 1), ((ulong)address + length - 1 - region.Start) / ps);
+                for (var p = first; p <= last; p++) x[p] = executable;
+                region.PageGuestExecutable = x;
+            }
+        }
+        finally { module.ExitCall(); }
+    }
+
+    /// <summary>
+    /// Invalidates every translation of code made at run time that overlaps the range (the guest frees or decommits the memory): its records leave the module registry, the
+    /// pages lose their write protection. Returns the number of translations dropped. Executing the old address afterwards is a dispatch miss again.
+    /// </summary>
+    public int InvalidateDynamicCode(uint address, uint length)
+    {
+        module.EnterCall();
+        try { return module.Environment.InvalidateDynamicCode(address, length); }
+        finally { module.ExitCall(); }
+    }
+
     public byte ReadByte(uint address) { module.EnterCall(); try { return *Check(address, 1, false); } finally { module.ExitCall(); } }
     public ushort ReadUInt16(uint address) { module.EnterCall(); try { return Unaligned16(Check(address, 2, false)); } finally { module.ExitCall(); } }
     public uint ReadUInt32(uint address) { module.EnterCall(); try { return Unaligned32(Check(address, 4, false)); } finally { module.ExitCall(); } }
     public float ReadSingle(uint address) => BitConverter.UInt32BitsToSingle(ReadUInt32(address));
 
-    public void WriteByte(uint address, byte value) { module.EnterCall(); try { *Check(address, 1, true) = value; } finally { module.ExitCall(); } }
-    public void WriteUInt32(uint address, uint value) { module.EnterCall(); try { Store32(Check(address, 4, true), value); } finally { module.ExitCall(); } }
+    public void WriteByte(uint address, byte value) { module.EnterCall(); try { GuardedWrite(address, 1, &StoreByte, &value); } finally { module.ExitCall(); } }
+    public void WriteUInt32(uint address, uint value) { module.EnterCall(); try { GuardedWrite(address, 4, &StoreWord, &value); } finally { module.ExitCall(); } }
+    private static void StoreByte(byte* p, void* v) => *p = *(byte*)v;
+    private static void StoreWord(byte* p, void* v) => Store32(p, *(uint*)v);
     public void WriteSingle(uint address, float value) => WriteUInt32(address, BitConverter.SingleToUInt32Bits(value));
 
     public void Read(uint address, Span<byte> destination)
@@ -239,8 +301,21 @@ public sealed unsafe class GuestMemory
     public void Write(uint address, ReadOnlySpan<byte> source)
     {
         module.EnterCall();
-        try { source.CopyTo(new Span<byte>(Check(address, source.Length, true), source.Length)); }
+        try
+        {
+            fixed (byte* src = source)
+            {
+                var span = (Source: (nint)src, Length: source.Length);
+                GuardedWrite(address, source.Length, &StoreSpan, &span);
+            }
+        }
         finally { module.ExitCall(); }
+    }
+
+    private static void StoreSpan(byte* p, void* v)
+    {
+        var s = *((nint Source, int Length)*)v;
+        Buffer.MemoryCopy((void*)s.Source, p, s.Length, s.Length);
     }
 
     /// <summary>Reads a NUL-terminated single-byte (Latin-1) string; throws if no terminator is found within <paramref name="maxLength"/> bytes or the mapping ends first.</summary>

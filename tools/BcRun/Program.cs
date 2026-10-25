@@ -1,10 +1,10 @@
 using BlitzCS.BcRun;
 
-// BcRun <exe> [--target windows-x64|linux-x64] [--base 0x...] [--allow-errors] [--env NAME=VALUE]... [--sandbox DIR] [--cache-dir DIR] [--no-guest-dlls] [--verbose] [--trace] -- <args...>
+// BcRun <exe> [--target windows-x64|linux-x64] [--base 0x...] [--allow-errors] [--env NAME=VALUE]... [--sandbox DIR] [--cache-dir DIR] [--no-guest-dlls] [--no-dynamic-code] [--verbose] [--trace] -- <args...>
 // stdout/stderr/stdin of the guest are BcRun's own; the exit code is the guest's (125 when the run itself failed).
 string? exe = null, target = null, sandbox = null, cache = Environment.GetEnvironmentVariable("BCRUN_CACHE");
 uint? baseAddress = null;
-bool allowErrors = false, verbose = false, trace = false, guestDlls = true;
+bool allowErrors = false, verbose = false, trace = false, guestDlls = true, dynamicCode = true;
 var env = new Dictionary<string, string>();
 var guestArgs = new List<string>();
 for (var i = 0; i < args.Length; i++)
@@ -21,6 +21,7 @@ for (var i = 0; i < args.Length; i++)
         case "--sandbox": sandbox = Value(); break;
         case "--cache": case "--cache-dir": cache = Value(); break;
         case "--no-guest-dlls": guestDlls = false; break;
+        case "--no-dynamic-code": dynamicCode = false; break;
         case "--verbose": verbose = true; break;
         case "--trace": trace = true; break;
         default:
@@ -31,13 +32,13 @@ for (var i = 0; i < args.Length; i++)
 }
 if (exe is null)
 {
-    Console.Error.WriteLine("usage: BcRun <exe> [--target windows-x64|linux-x64] [--base 0x..] [--allow-errors] [--env N=V] [--sandbox DIR] [--cache-dir DIR] [--no-guest-dlls] [--verbose] [--trace] -- <args...>");
+    Console.Error.WriteLine("usage: BcRun <exe> [--target windows-x64|linux-x64] [--base 0x..] [--allow-errors] [--env N=V] [--sandbox DIR] [--cache-dir DIR] [--no-guest-dlls] [--no-dynamic-code] [--verbose] [--trace] -- <args...>");
     return BcRunner.RunnerFailure;
 }
 var result = BcRunner.Run(new BcRunOptions
 {
     ExePath = exe, Args = guestArgs, TargetOs = target, Base = baseAddress, AllowTranslationErrors = allowErrors, Environment = env,
-    SandboxRoot = sandbox, CacheDirectory = cache, TraceCalls = trace, GuestDlls = guestDlls,
+    SandboxRoot = sandbox, CacheDirectory = cache, TraceCalls = trace, GuestDlls = guestDlls, DynamicCode = dynamicCode,
     Log = verbose || trace ? m => Console.Error.WriteLine("BcRun: " + m) : null,
 });
 if (verbose) foreach (var d in result.Diagnostics) Console.Error.WriteLine("BcRun: loader: " + d);

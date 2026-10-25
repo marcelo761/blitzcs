@@ -66,11 +66,16 @@ public sealed class MemoryService : Win32Service
         _ => MemoryProtection.ReadWrite,
     };
 
+    private static bool IsExecute(uint baseProtect) => baseProtect is Execute or ExecuteRead or ExecuteReadWrite or ExecuteWriteCopy;
+
     private static void ApplyAllocationProtect(Win32Call c, uint start, uint span, uint protect)
     {
         // Memory without protection support (the host-side test fake) keeps its previous behaviour; the real adapter always supports scratch buffers.
         c.Mem.TryProtect(start, span, HostProtection(protect), protect, out _);
+        c.Mem.SetGuestExecutable(start, span, IsExecute(protect & 0xFF));
     }
+
+    private static bool IsCode(GuestPageInfo i) => i.Kind is GuestPageKind.ImageCode or GuestPageKind.DynamicCode;
 
     private static uint VirtualProtect(Win32Call c)
     {
@@ -97,8 +102,9 @@ public sealed class MemoryService : Win32Service
             infos.Add(info);
         }
 
-        var codeModule = infos.FirstOrDefault(i => i.Kind == GuestPageKind.ImageCode).Owner;
-        var hasCode = infos.Any(i => i.Kind == GuestPageKind.ImageCode);
+        var codeModule = infos.FirstOrDefault(i => i.Kind == GuestPageKind.ImageCode).Owner
+            ?? (infos.Any(i => i.Kind == GuestPageKind.DynamicCode) ? $"code generated at run time and translated from 0x{infos[0].RegionStart:X8}" : null);
+        var hasCode = infos.Any(IsCode);
         if (hasCode && WritableRequest(baseProtect))
             throw new Win32SelfModifyingCodeException(codeModule ?? "a translated module", first, (uint)(pageEnd - 1), requested);
         if (hasCode && baseProtect == NoAccess)
@@ -110,11 +116,12 @@ public sealed class MemoryService : Win32Service
         // Translated-code pages (READONLY/EXECUTE/EXECUTE_READ requested) keep their protection: such a change cannot alter behaviour. Everything else is applied run by run.
         for (var i = 0; i < infos.Count;)
         {
-            if (infos[i].Kind == GuestPageKind.ImageCode) { i++; continue; }
+            if (IsCode(infos[i])) { i++; continue; }
             var j = i;
-            while (j + 1 < infos.Count && infos[j + 1].Kind != GuestPageKind.ImageCode) j++;
+            while (j + 1 < infos.Count && !IsCode(infos[j + 1])) j++;
             if (!c.Mem.TryProtect(first + (uint)i * Page, (uint)(j - i + 1) * Page, HostProtection(baseProtect), requested, out _))
                 return c.Ctx.Fail(Win32Error.InvalidAddress);
+            c.Mem.SetGuestExecutable(first + (uint)i * Page, (uint)(j - i + 1) * Page, IsExecute(baseProtect));
             i = j + 1;
         }
         c.Mem.WriteUInt32(oldPtr, old);
@@ -199,10 +206,11 @@ public sealed class MemoryService : Win32Service
             }
             if (type == MemDecommit)
             {
-                if (size == 0 && c.Ctx.Virtual.Containing(address, 1) is { } whole && whole.Address == address) { ApplyAllocationProtect(c, whole.Address, (uint)whole.Length, ReadWrite); c.Mem.Fill(whole.Address, 0, (uint)whole.Length); return 1; }
+                if (size == 0 && c.Ctx.Virtual.Containing(address, 1) is { } whole && whole.Address == address) { c.Mem.InvalidateDynamicCode(whole.Address, (uint)whole.Length); ApplyAllocationProtect(c, whole.Address, (uint)whole.Length, ReadWrite); c.Mem.Fill(whole.Address, 0, (uint)whole.Length); return 1; }
                 var start = address & ~(Page - 1);
                 var span = (uint)(((ulong)address + size + Page - 1) / Page * Page - start);
                 if (size == 0 || c.Ctx.Virtual.Containing(start, span) is null) return c.Ctx.Fail(Win32Error.InvalidAddress);
+                c.Mem.InvalidateDynamicCode(start, span);
                 ApplyAllocationProtect(c, start, span, ReadWrite);
                 c.Mem.Fill(start, 0, span);
                 return 1;

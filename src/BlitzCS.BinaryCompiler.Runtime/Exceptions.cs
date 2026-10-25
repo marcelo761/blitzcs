@@ -61,9 +61,26 @@ public sealed class GuestExportException : GuestException
 }
 
 /// <summary>Translated code hit an explicit trap (untranslated indirect target or an instruction rejected at build time). Never a silent zero result.</summary>
-public sealed class GuestTrapException : GuestException
+public class GuestTrapException : GuestException
 {
     public GuestTrapException(string message) : base(message) { }
+}
+
+/// <summary>
+/// The guest wrote into bytes of code that was translated at run time (docs/binary-dynamic-code.md): the translation was made from the bytes as they were, so running on
+/// would execute stale code. Raised for a guest store (trap) and for a managed write through <see cref="GuestMemory"/>. Writes to data that shares the pages are allowed.
+/// </summary>
+public sealed class GuestSelfModifyingCodeException : GuestTrapException
+{
+    public GuestSelfModifyingCodeException(uint address, uint regionStart, uint regionEnd, string snapshotSha256)
+        : base($"Self-modifying code: the guest wrote to 0x{address:X8}, an instruction byte of code translated at run time from the executable region 0x{regionStart:X8}-0x{regionEnd:X8} (snapshot SHA-256 {snapshotSha256[..Math.Min(16, snapshotSha256.Length)]}). The translation is bound to the bytes it was made from, so the write is refused instead of running stale code.")
+    {
+        Address = address; RegionStart = regionStart; RegionEnd = regionEnd;
+    }
+
+    public uint Address { get; }
+    public uint RegionStart { get; }
+    public uint RegionEnd { get; }
 }
 
 /// <summary>The guest executed <c>int 29h</c> (the MSVC <c>__fastfail</c> intrinsic: stack cookie failure, invalid argument, CRT abort ...). Distinct from <see cref="GuestTrapException"/>: the guest ran correctly and asked the process to die.</summary>

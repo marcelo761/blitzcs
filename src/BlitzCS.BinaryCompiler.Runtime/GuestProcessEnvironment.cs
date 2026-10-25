@@ -7,7 +7,7 @@ namespace BlitzCS.BinaryCompiler.Runtime;
 /// pointer array with a data block per module that has a TLS directory). A <see cref="GuestModuleSet"/> owns one environment for all its modules; a module that
 /// is loaded on its own creates a private one and disposes it with itself. All members are thread safe.
 /// </summary>
-internal sealed unsafe class GuestProcessEnvironment : IDisposable
+internal sealed unsafe partial class GuestProcessEnvironment : IDisposable
 {
     /// <summary>Records in the module registry. A record is never reused (a stale reader can then never see a different module in its slot).</summary>
     internal const int RegistryCapacity = 1024;
@@ -40,6 +40,7 @@ internal sealed unsafe class GuestProcessEnvironment : IDisposable
         this.ownedBySet = ownedBySet;
         registry = (nint)System.Runtime.InteropServices.NativeMemory.AllocZeroed((nuint)(ModuleRegistryLayout.HeaderSize + RegistryCapacity * ModuleRegistryLayout.RecordSize));
         *(uint*)(registry + 4) = RegistryCapacity;
+        InitializeDynamicCode();
     }
 
     internal nint RegistryAddress => registry;
@@ -137,6 +138,19 @@ internal sealed unsafe class GuestProcessEnvironment : IDisposable
             retired.Add((name, guestBase, guestBase + bound));
         }
     }
+
+    /// <summary>Like <see cref="Retire"/> for a record that a newer one replaces (no "unloaded" entry is remembered for its range).</summary>
+    private void RetireReplaced(int slot)
+    {
+        lock (gate)
+        {
+            var rec = registry + ModuleRegistryLayout.HeaderSize + slot * ModuleRegistryLayout.RecordSize;
+            Volatile.Write(ref *(uint*)(rec + ModuleRegistryLayout.Bound), 0);
+            Volatile.Write(ref *(nint*)(rec + ModuleRegistryLayout.Table), 0);
+        }
+    }
+
+    private GuestModule? AnyModule() { lock (gate) return modules.Count > 0 ? modules[0] : null; }
 
     /// <summary>The name of an unloaded module whose address range contains <paramref name="address"/>, or null.</summary>
     internal string? FindRetired(uint address)
@@ -382,6 +396,7 @@ internal sealed unsafe class GuestProcessEnvironment : IDisposable
             pebMap = 0; processBlockMap = 0;
             sharedRegions.Clear();
         }
+        DisposeDynamicCode();
         System.Runtime.InteropServices.NativeMemory.Free((void*)registry);
         threadTeb.Dispose();
     }
