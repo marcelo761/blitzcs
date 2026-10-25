@@ -30,7 +30,7 @@ internal sealed class __BlitzArray<T>
         catch (System.OutOfMemoryException) { throw Error(location, "insufficient memory for these dimensions."); }
         lengths = sizes;
     }
-    internal ref T Element(int[] indices, string location)
+    internal ref T Element(scoped System.ReadOnlySpan<int> indices, string location)
     {
         if (data is null) throw Error(location, "array has not been dimensioned.");
         var offset = 0;

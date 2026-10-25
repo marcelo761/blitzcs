@@ -214,7 +214,7 @@ internal static class CSharpEmitter
         $"{EmitExpression(access.Owner)}.Element({EmitExpression(access.Index)}, {Quote(access.Location)})";
 
     private static string EmitArrayAccess(IrArrayAccess access) =>
-        $"{access.Storage}.Element(new int[] {{ {string.Join(", ", access.Indices.Select(EmitExpression))} }}, {Quote(access.Location)})";
+        $"{access.Storage}.Element([{string.Join(", ", access.Indices.Select(EmitExpression))}], {Quote(access.Location)})";
 
     private static string EmitCall(IrCall call)
     {
