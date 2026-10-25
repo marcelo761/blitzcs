@@ -75,6 +75,7 @@ public sealed class ExternalFunction
 {
     public string Name { get; }
     public MethodInfo Method { get; }
+    public IReadOnlyList<int> ObjectAdapterParameters { get; }
     internal string Target { get; }
     internal ValueType Result { get; }
     internal IReadOnlyList<(ValueType Type, IrExpression? Default)> Parameters { get; }
@@ -83,7 +84,10 @@ public sealed class ExternalFunction
     public ExternalFunction(string name, MethodInfo method) : this(name, method, false) { }
 
     /// <summary>Optionally discard an actual Int32 result for a historical Void command. No result is fabricated.</summary>
-    public ExternalFunction(string name, MethodInfo method, bool discardIntegerReturn)
+    public ExternalFunction(string name, MethodInfo method, bool discardIntegerReturn) : this(name, method, discardIntegerReturn, null) { }
+
+    /// <summary>Explicitly expose selected System.Object adapter slots as historical Integer data pointers.</summary>
+    public ExternalFunction(string name, MethodInfo method, bool discardIntegerReturn, IEnumerable<int>? objectAdapterParameters)
     {
         ArgumentNullException.ThrowIfNull(method);
         ValidateName(name);
@@ -93,12 +97,17 @@ public sealed class ExternalFunction
             throw new ArgumentException("External methods must be public static methods on a visible non-generic type in a file-backed assembly.", nameof(method));
         if (discardIntegerReturn && method.ReturnType != typeof(int)) throw new ArgumentException("Only an actual Int32 result can be discarded.",nameof(method));
         Result = discardIntegerReturn || method.ReturnType == typeof(void) ? ValueType.Void : Map(method.ReturnType);
+        var declaredParameters = method.GetParameters();
+        var objectSlots = objectAdapterParameters?.ToArray() ?? [];
+        if (objectSlots.Distinct().Count() != objectSlots.Length || objectSlots.Any(index => index < 0 || index >= declaredParameters.Length || declaredParameters[index].ParameterType != typeof(object)))
+            throw new ArgumentException("Object adapter indices must uniquely identify actual System.Object parameters.", nameof(objectAdapterParameters));
+        ObjectAdapterParameters = Array.AsReadOnly(objectSlots);
         var parameters = new List<(ValueType, IrExpression?)>();
-        foreach (var parameter in method.GetParameters())
+        foreach (var parameter in declaredParameters)
         {
             if (parameter.IsOut || parameter.ParameterType.IsByRef || parameter.GetCustomAttribute<ParamArrayAttribute>() is not null)
                 throw new ArgumentException("External parameters cannot use ref, out or params.", nameof(method));
-            var type = Map(parameter.ParameterType);
+            var type = objectSlots.Contains(parameter.Position) ? ValueType.Integer : Map(parameter.ParameterType);
             IrExpression? value = null;
             if (parameter.IsOptional)
                 value = parameter.DefaultValue switch

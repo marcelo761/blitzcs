@@ -19,6 +19,28 @@ internal static class LegacyCatalogComposition
         {
             if (selected["legacyDeclaration"] is { } prior)
                 throw new ArgumentException($"Conflicting legacy declaration '{name}' at {source}; already declared at {prior["source"]}({prior["line"]}).");
+            if (selected["legacySignatureOverride"] is JsonObject correction)
+            {
+                if (selected["method"] is null || selected["legacyAdapter"]?.GetValue<bool>() != true
+                    || correction["reason"] is not JsonValue explanation || !explanation.TryGetValue<string>(out var reason) || string.IsNullOrWhiteSpace(reason))
+                    throw new ArgumentException($"Legacy signature override for '{name}' requires an explicit managed legacyAdapter and an ABI reason.");
+                declaration = (JsonObject)declaration.DeepClone();
+                if (correction["parameters"] is { } correctedParameters)
+                {
+                    if (correctedParameters is not JsonArray corrected || corrected.Count != declaration["parameters"]!.AsArray().Count
+                        || corrected.Any(p => p is not JsonValue value || !value.TryGetValue<string>(out var type) || type is not ("Integer" or "Float" or "String")))
+                        throw new ArgumentException($"Legacy signature override for '{name}' must preserve arity and use primitive parameter types.");
+                    declaration["parameters"] = corrected.DeepClone();
+                }
+                if (correction["returnType"] is { } correctedResult)
+                {
+                    if (correctedResult is not JsonValue value || !value.TryGetValue<string>(out var type) || type is not ("Integer" or "Float" or "String" or "Void"))
+                        throw new ArgumentException($"Invalid legacy return type override for '{name}'.");
+                    declaration["returnType"] = correctedResult.DeepClone();
+                }
+                // Keep legacyDeclaration byte-for-byte: this is an explicit adapter contract, not a change to the original file.
+                selected["bindingAdaptation"] = "legacy-signature-override: " + reason;
+            }
             var sameSignature = JsonNode.DeepEquals(selected["parameters"], declaration["parameters"])
                 && (selected["returnType"] is null || JsonNode.DeepEquals(selected["returnType"], declaration["returnType"]));
             selected["legacyDeclaration"] = legacy.DeepClone();

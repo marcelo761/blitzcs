@@ -64,6 +64,8 @@ internal static class ExternalCatalog
                 "Integer" => ExternalValueType.Integer, "Float" => ExternalValueType.Float, "String" => ExternalValueType.String,
                 _ => throw new ArgumentException("External parameter types must be Integer, Float or String.")
             }).ToArray();
+            var objectAdapterParameters = ReadObjectAdapterParameters(item, parameters);
+            var methodParameterTypes = parameters.Select((parameter, index) => objectAdapterParameters.Contains(index) ? typeof(object) : ToSystemType(parameter)).ToArray();
             ExternalFunction? function = null;
             if (byItem.TryGetValue(item, out var assemblyPath))
             {
@@ -72,11 +74,11 @@ internal static class ExternalCatalog
                 var typeName = binaryIndex >= 0 ? BinaryBindingGenerator.TypeName(IndexOf(libraryIndexes, binaryBindings[binaryIndex].LibraryPath)) : Read(item, "type");
                 var type = assembly.GetType(typeName, throwOnError: true)!;
                 var methodName = binaryIndex >= 0 ? BinaryBindingGenerator.MethodName(binaryBindings[binaryIndex].BasicName) : Read(item, "method");
-                var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static, parameters.Select(ToSystemType).ToArray())
+                var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static, methodParameterTypes)
                     ?? throw new ArgumentException($"External method '{type.FullName}.{methodName}' with the declared signature does not exist.");
                 var discard = method.ReturnType == typeof(int) && item.TryGetProperty("returnType",out var requestedResult) && requestedResult.GetString() == "Void"
                     && (item.TryGetProperty("legacyDeclaration",out _) || item.TryGetProperty("selectionRole",out var role) && role.GetString() == "fallback");
-                function = new ExternalFunction(Read(item, "name"), method, discard);
+                function = new ExternalFunction(Read(item, "name"), method, discard, objectAdapterParameters);
             }
             var returnType = item.TryGetProperty("returnType", out var returnTypeElement)
                 ? returnTypeElement.GetString() switch
@@ -148,6 +150,33 @@ internal static class ExternalCatalog
         finally { context.Dispose(); }
     }
 
+
+    private static int[] ReadObjectAdapterParameters(JsonElement item, IReadOnlyList<ExternalValueType> parameters)
+    {
+        if (!item.TryGetProperty("objectAdapterParameters", out var metadata)) return [];
+        if (metadata.ValueKind != JsonValueKind.Array)
+            throw new ArgumentException("External objectAdapterParameters must be an array of unique parameter indices.");
+        var indices = new List<int>();
+        foreach (var value in metadata.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var index) || index < 0 || index >= parameters.Count || indices.Contains(index))
+                throw new ArgumentException("External objectAdapterParameters must contain unique, in-range integer indices.");
+            indices.Add(index);
+        }
+        if (indices.Count == 0) return [];
+        if (!item.TryGetProperty("legacyAdapter", out var adapter) || adapter.ValueKind != JsonValueKind.True
+            || !item.TryGetProperty("method", out var method) || method.ValueKind != JsonValueKind.String
+            || !item.TryGetProperty("legacyDeclaration", out var declaration)
+            || !declaration.TryGetProperty("parameters", out var declaredParameters)
+            || item.TryGetProperty("binary", out var binary) && binary.ValueKind != JsonValueKind.Null)
+            throw new ArgumentException("External objectAdapterParameters requires a managed legacyAdapter and historical pointer declaration.");
+        var legacyParameters = declaredParameters.EnumerateArray().ToArray();
+        foreach (var index in indices)
+            if (parameters[index] != ExternalValueType.Integer || index >= legacyParameters.Length
+                || !legacyParameters[index].TryGetProperty("isPointer", out var pointer) || pointer.ValueKind != JsonValueKind.True)
+                throw new ArgumentException($"External objectAdapterParameters index {index} must identify a historical Integer data pointer.");
+        return indices.ToArray();
+    }
 
     private static ExternalApiContract? ReadContract(JsonElement item)
     {

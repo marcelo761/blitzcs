@@ -31,7 +31,7 @@ internal sealed partial class SemanticAnalysis
                 var argument = arguments[i];
                 if (argument.Type.IsObject)
                 {
-                    if (externals.TryGetBinding(call.Name, out _))
+                    if (externals.TryGetBinding(call.Name, out var objectImplementation) && !objectImplementation.ObjectAdapterParameters.Contains(i))
                         throw Error(call.Position, $"External function '{call.Name}' argument {i + 1} requires an explicit object-data marshalling adapter; an Integer bank adapter cannot accept a BASIC object.");
                     // Keep the real object expression for declaration analysis. Compile refuses every unbound call before emission.
                     converted[i] = argument;
