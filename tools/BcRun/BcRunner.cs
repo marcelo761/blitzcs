@@ -137,6 +137,7 @@ public static class BcRunner
             catch (GuestException e)
             {
                 Flush(win32);
+                log($"guest run failed (the process state is disposed next): {e.GetType().Name}: {e.Message}");
                 return Failed($"{e.GetType().Name}: {e.Message}" + (e.InnerException is { } inner ? $" [{inner.GetType().Name}: {inner.Message}]" : ""), errors.Count, unbound);
             }
         }

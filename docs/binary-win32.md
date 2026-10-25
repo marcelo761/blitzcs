@@ -40,8 +40,9 @@ An API that no service registers is absent: `Resolve` returns null, so `GuestMod
 | Kernel32.Resources | FindResourceA/W, FindResourceExA/W, LoadResource, LockResource, SizeofResource, FreeResource: the module's `.rsrc` directory is parsed in its mapped image (module NULL = main exe; MAKEINTRESOURCE ids, `#n` strings, case-insensitive names; language fallback; ERROR_RESOURCE_TYPE/NAME/LANG/DATA_NOT_FOUND). HRSRC is the data-entry address, LoadResource the data address in the image. No EnumResource*/UpdateResource |
 | Kernel32.Srw | InitializeSRWLock, Acquire/Release/TryAcquire SRWLock Exclusive/Shared, InitializeConditionVariable, SleepConditionVariableCS/SRW, WakeConditionVariable, WakeAllConditionVariable (host state keyed by the guest word; releasing an unheld lock, exclusive self re-acquire and a CS held more than once in SleepConditionVariableCS raise `Win32UsageException`; timeout = ERROR_TIMEOUT) |
 | Kernel32.Time | GetSystemTime, GetLocalTime, SystemTimeToFileTime, FileTimeToSystemTime (1601..30827), GetTimeZoneInformation, SystemTimeToTzSpecificLocalTime (`Win32Options.TimeZone`, default host zone), GetDateFormatW / GetTimeFormatW (invariant and en-US only; other locales fail with ERROR_INVALID_PARAMETER) |
+| Winmm (timer resolution) | timeGetDevCaps, timeBeginPeriod, timeEndPeriod: the host's winmm on a Windows host (the period changes the host timer resolution); elsewhere caps 1..1000000 ms and TIMERR_NOCANDO (97) for a period out of range or an unmatched timeEndPeriod |
 | Winmm | waveOutGetNumDevs / waveInGetNumDevs / mixerGetNumDevs = 0; every device-id call fails with MMSYSERR_BADDEVICEID (numbered device) or MMSYSERR_NODRIVER (WAVE_MAPPER); every handle call fails with MMSYSERR_INVALHANDLE (no open can succeed); timeGetTime; timeSetEvent (TIME_CALLBACK_FUNCTION, one-shot/periodic, real host timer thread) and timeKillEvent. No mci* |
-| Winsock.Core | htonl, htons, ntohl, ntohs, WSAStartup, WSACleanup, WSAGetLastError, WSASetLastError, `__WSAFDIsSet` (WSOCK32 by ordinal 8, 9, 14, 15, 111, 112, 115, 116, 151, checked against a Windows-compatible export table; WS2_32 by name). No socket/connect/send/recv/select |
+| Winsock.Core | htonl, htons, ntohl, ntohs, WSAStartup, WSACleanup, WSAGetLastError, WSASetLastError, `__WSAFDIsSet` (WSOCK32 and WS2_32 by name and by ordinal 8, 9, 14, 15, 111, 112, 115, 116, 151, checked against Windows-compatible export tables). No socket/connect/send/recv/select |
 | Winsock | inet_addr, inet_ntoa for WSOCK32 (by name and ordinals 10/11, checked against a Windows export table) and WS2_32 (by name) |
 
 ## Documented behaviour relied on, and approximations
@@ -106,6 +107,8 @@ ERROR_ALREADY_EXISTS).
   `CoCreateInstance` never returns S_OK: no COM server is loaded by this component. It returns CO_E_NOTINITIALIZED before `CoInitialize`,
   REGDB_E_CLASSNOTREG for an unregistered class, CLASS_E_CLASSNOTAVAILABLE when the virtual registry names a server that cannot be hosted here, and
   always NULLs `*ppv`. Hosting an in-proc server through an explicit host registration API is out of scope.
+- **user32** on a Windows host: bridged to the host's user32/gdi32/ddraw/dinput8 by default (docs/binary-user32-bridge.md). The sandbox subset below is what a non-Windows host and
+  `Win32Options.HostWindowing = None` get.
 - **user32** (`User32BasicService`): `GetDesktopWindow` returns the opaque sandbox handle `0x00010010`; `IsWindow`/`IsWindowVisible`/`MessageBoxA` validate
   HWNDs (ERROR_INVALID_WINDOW_HANDLE). `MessageBoxA` calls `Win32Options.MessageBoxHandler`; without one it faults naming `user32!MessageBoxA`. Every other
   window API is unresolved and faults by name.

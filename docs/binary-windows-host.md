@@ -44,3 +44,9 @@ Fixed `VirtualAlloc` at addresses below `0x20000000` fails under Wine, and the l
 ## Platform layer
 
 `IPlatformMemory` (`PlatformMemory.Current`) is the only way the runtime touches the address space: `MapFixed` (no-replace), `MapLow` (below 4 GiB), `Map`, `Protect` (`None/Read/ReadWrite/ReadExecute`, never RWX), `Free`, `QueryRanges` (diagnostics: `/proc/self/maps` on Linux, `VirtualQuery` on Windows). `LinuxPlatformMemory` wraps libc `mmap`/`mprotect`/`munmap`; `WindowsPlatformMemory` wraps kernel32. Any other OS gets `PlatformNotSupportedException`.
+
+## Host bridge for windows, GDI and DirectX
+
+Only on this target, user32, gdi32, ddraw and dinput8 calls of the translated program reach the HOST's own DLLs through ABI adapters (32-bit structures converted both ways,
+USER/GDI handles sign-extended, window procedures re-entered from host messages through `GuestModule.CallAddress`, one guest COM identity per host object). The Linux target
+does not register these APIs. Selection (`Win32Options.HostWindowing`), the adapter model and its limits: `docs/binary-user32-bridge.md`.

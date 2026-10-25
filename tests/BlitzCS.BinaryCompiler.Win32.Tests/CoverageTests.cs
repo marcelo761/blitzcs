@@ -16,7 +16,7 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         Assert.Equal(apis.Count, apis.Select(a => a.Dll.ToLowerInvariant() + "!" + a.Name).Distinct().Count());
         foreach (var a in apis)
         {
-            Assert.InRange(a.ArgCount, 0, 9);
+            Assert.InRange(a.ArgCount, 0, BlitzCS.BinaryCompiler.Win32.HostBridge.HostInvoke.MaxArguments);   // CreateFontA (14) through the host bridge on a Windows host
             Assert.False(string.IsNullOrEmpty(a.Service));
             if (a.Dll.Equals("MSVCRT.dll", StringComparison.OrdinalIgnoreCase)) Assert.Equal(Win32Convention.Cdecl, a.Convention);
             else Assert.Equal(Win32Convention.Stdcall, a.Convention);
@@ -32,7 +32,9 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         var cov = Win32ImportResolver.Coverage;
         Assert.Contains(cov.Priority, p => p is { Dll: "kernel32.dll", Name: "HeapAlloc", Implemented: true });
         var missing = cov.Missing.Select(m => m.Dll + "!" + m.Name).ToHashSet();
-        Assert.Contains("user32.dll!ShowWindow", missing);
+        // window APIs: bridged to the host's user32 on a Windows host (the default composition there), absent elsewhere
+        if (OperatingSystem.IsWindows()) Assert.DoesNotContain("user32.dll!ShowWindow", missing);
+        else Assert.Contains("user32.dll!ShowWindow", missing);
         Assert.Contains(cov.Priority, p => p is { Dll: "kernel32.dll", Name: "RtlUnwind", Implemented: true, Service: "Kernel32.Process" });       // guest SEH (docs/binary-seh.md)
         Assert.Contains(cov.Priority, p => p is { Dll: "kernel32.dll", Name: "RaiseException", Implemented: true, Service: "Kernel32.Process" });
         Assert.DoesNotContain("ole32.dll!CoCreateInstance", missing);

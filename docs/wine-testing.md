@@ -48,6 +48,9 @@ case-insensitive), `--threads` (default 1; with more, xunit runs different `[Col
 * `scripts/wine/env.sh` (sourceable) sets `WINEPREFIX` (default `$HOME/.cache/blitzcs/wineprefix`, created on first use, `BLITZCS_WINE_PREFIX`),
   `WINEDEBUG=-all`, `WINEDLLOVERRIDES=mshtml=d` (do not disable `mscoree`: Wine needs it to load IL-only assemblies), `PATH`/`LD_LIBRARY_PATH` of the Wine,
   `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`, `DISPLAY`.
+* `BLITZCS_WINE_GRAPHICS=1` (opt-in) copies the Wine build's `lib/vkd3d/*/libvkd3d*.dll` into the prefix's `system32`/`syswow64` when missing. Wine's ddraw loads wined3d, which
+  imports `libvkd3d-1.dll`; without it ddraw.dll does not load. Needed by the host DirectDraw tests (`HostDirectDrawBridgeTests`, skipped with the reason otherwise) and by produced
+  Blitz3D executables; use a dedicated prefix (`BLITZCS_WINE_PREFIX`), for example `$HOME/.cache/blitzcs/wineprefix-graphics`.
 
 ## Choosing the Wine build
 

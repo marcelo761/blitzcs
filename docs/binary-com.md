@@ -23,6 +23,9 @@ time (`GetProcAddress`, a COM vtable) therefore needs a stub that did not exist 
 * IUnknown: one atomic count per object; QueryInterface answers IUnknown (primary face), the IID tables, else `*ppv = NULL` and E_NOINTERFACE; the last Release destroys exactly once, runs the
   destroy callback and switches the block to a dead vtable, so a double Release or use after free faults by name (`IDirectSoundBuffer #3 ... after the object was destroyed`). Blocks are not
   reused. Disposing the context destroys the objects the guest never released (newest first) so host resources are freed even after the module is gone.
+* `Absent(name, argc, reason)`: a slot that exists but is not bridged faults naming `Interface::Method` and the reason (the DirectX tables use it instead of E_NOTIMPL).
+  `GuestComHost.Create(..., queryFallback)` and `FaceFor(obj, iface)` add faces lazily: `HostComRegistry` (`Com/HostComProxy.cs`) wraps native objects with one guest identity
+  per host object (docs/binary-user32-bridge.md, "COM objects").
 * Host proxy: `HostComInterface` calls a native 64-bit interface through its vtable with pointer-sized arguments in the host's native convention (Win64 on Windows), returning the host HRESULT
   unchanged. `HostComMethod` rows (name, native slot, one `ComArg` per guest argument: `Value`, `Signed`, `Guid`, `AnsiString`, `InStruct`, `OutU32/OutBytes`, `InOutStruct`, `OutInterface`,
   `Handle`) are the explicit adapter table; a bad argument answers E_INVALIDARG without reaching the native API. There is no generic forwarding.
@@ -35,7 +38,8 @@ time (`GetProcAddress`, a COM vtable) therefore needs a stub that did not exist 
 capture are not exported (GetProcAddress NULL).
 
 * **Descriptors:** `DSBUFFERDESC` (guest dwSize 20/36) is rebuilt in the host layout (dwSize 24/40, 64-bit `lpwfxFormat` pointing at a native copy of the WAVEFORMATEX, 3D GUID moved to offset 24).
-* **HWND:** the guest's windows are opaque sandbox handles. The desktop handle maps to the host's real desktop window, which Wine's dsound accepts as the focus window of `SetCooperativeLevel`
+* **HWND:** with the host window bridge (the default on a Windows host, docs/binary-user32-bridge.md) the guest's HWNDs are host windows (sign-extended, checked with the host's
+  IsWindow). With `HostWindowing = None` the guest's windows are opaque sandbox handles. The desktop handle maps to the host's real desktop window, which Wine's dsound accepts as the focus window of `SetCooperativeLevel`
   (verified); NULL stays NULL; any other value is E_INVALIDARG. `GetForegroundWindow` returns NULL (no window system). FMOD calls it, gets NULL, and still initialises.
 * **Lock/Unlock:** each secondary buffer has a shadow in guest low memory (silence-initialised). Lock returns shadow pointers with the documented two-region wrap, `DSBLOCK_FROMWRITECURSOR`
   (host write cursor) and `DSBLOCK_ENTIREBUFFER`; Unlock copies exactly the unlocked regions into the host buffer (host Lock, copy, host Unlock). No host lock is held between guest Lock and

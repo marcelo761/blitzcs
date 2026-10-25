@@ -389,3 +389,26 @@ Top 10 blockers for the first frame, in start-up order:
 Not on the static start-up path: ws2_32 (23 ordinals, not reached even by address-taken functions), `GetSystemMetrics` and `SystemParametersInfoA` (no call site in any closure), `ShellExecuteA` (address-taken only). Rank 1 is the only blocker proven on the direct path. Ranks 2 to 10 are the names a Graphics3D or Print path needs by semantics; the static closure cannot prove that they run, because `runtime.dll`'s address-taken functions cover 5,258 of its 5,261 functions, so no upper bound follows without modelling vtables and object layouts.
 
 Headless versus a real host: ranks 1, 3, 8, 9 and 10 (and the state side of 2 and 6) can be satisfied headlessly with truthful semantics. Pixel output (5, 7, the frame part of 4) and live pointer or keyboard state (6) need a real display host. The Windows target could host them with the platform's own user32, ddraw and GDI, but the Win32 component emulates these APIs in managed code and does not forward them, so this would be a new host service behind the registry. For the Linux target, the untracked `src/Blitz3DCS.Windowing` was not evaluated. Neither has been started, and nothing here shows that a produced exe runs once they exist.
+
+### Measured: the produced `Print "hello"` exe under BcRun (windows-x64, Wine 11 / Proton 11.0, Xvfb)
+
+Built by the original blitzcc through BcRun (`docs/blitz3d-reference.md`, `out_hello.exe` SHA-256 `d7d54f53...`, 210 imports), run with
+`BcRun hello.exe --target windows-x64` in a prefix with the vkd3d DLLs (`BLITZCS_WINE_GRAPHICS=1`), `BLITZCS_AUDIO=none`, Wine audio drivers disabled. The window, GDI and DirectX
+calls go to the host's DLLs through the bridge (`docs/binary-user32-bridge.md`); ranks 2 to 9 above are therefore no longer blockers on this target (the Linux target is unchanged).
+Start-up as traced (`--trace`, 4,824 Win32/COM calls):
+
+1. `LoadCursorA(NULL, IDC_ARROW)`, `GetStockObject`, `RegisterClassA`, `CreateWindowExA` (four host messages re-enter the guest window procedure, each passed on with `DefWindowProcA`), `UpdateWindow`.
+2. `DirectDrawEnumerateExA` (host callback into the guest), `DirectDrawCreateEx`, `GetDisplayMode`, `QueryInterface(IDirect3D7)`, `IDirect3D7::EnumDevices` and `EnumDisplayModes` (callbacks), `timeGetDevCaps`, `timeBeginPeriod`, `WSAStartup` (WS2_32 #115).
+3. Graphics: `DirectDrawCreateEx`, `SetCooperativeLevel(hwnd)`, primary surface, clipper with `SetHWnd`, back buffer, `timeSetEvent`, `QueryInterface(IDirectDraw)` (version 1), `Blt` clears.
+4. The default font: `SystemParametersInfoA(SPI_GET/SETFONTSMOOTHING)`, `CreateFontA`, `CreateCompatibleDC`, 224 x `GetTextExtentPoint32A` + `GetCharABCWidthsA` (one per character), a surface `GetDC`, 224 x `ExtTextOutA` into it, `ReleaseDC`.
+5. Window placement (`SetWindowLongA`, `SetWindowPos`, `GetWindowRect`, `GetClientRect`, `GetSystemMetrics`, `ClientToScreen`, `MoveWindow`, with nested window-procedure calls), `DirectInput8Create`, `EnumDevices`.
+6. The message loop and the first frame: `PeekMessageA`/`DispatchMessageA`, `TestCooperativeLevel`, `IsLost`, `WM_PAINT` handled by `BeginPaint`, `GetClientRect`, `ClientToScreen`, `Blt` of the back buffer to the primary surface, `EndPaint`.
+
+**Next fault** (exit 125): `GuestTrapException: Guest control flow reached untranslated code at 0x781A0000`, right after the first frame, before anything is printed. That address is
+in the runtime arena (a `VirtualAlloc` region): the produced exe is the runtime with the compiled program stored as RCDATA resource #1111 (307 bytes here: `push ebx; push esi;
+push edi; push ebp; mov ebp,esp; ... call rel32` plus fix-ups). The runtime copies it into executable memory, fixes it up and calls it, and that code did not exist when the
+image was translated. `Print "hello"` runs inside it. Running it needs a separate design (translating code that appears at run time, keyed by the region the guest made
+executable) and is not a gap of the Win32 or DirectX bridge.
+
+Teardown note: with `BLITZCS_AUDIO=virtual` the same run reaches the same trap but BcRun then hangs while disposing the process (the virtual sink's worker thread had delivered
+waveOut callbacks into the guest); with `BLITZCS_AUDIO=none` it exits at once.
