@@ -316,14 +316,6 @@ public sealed class FileService : Win32Service
             f.Stream.SetLength(f.Stream.Position);
             return 1;
         });
-        Std(K, "GetFileAttributesA", 1, c =>
-        {
-            var (host, error) = c.Ctx.Files.Translate(c.Mem.ReadAnsiString(c[0], 1024));
-            if (host is null) return c.Ctx.Fail(error, InvalidHandle);
-            if (Directory.Exists(host)) return 0x10;
-            if (File.Exists(host)) return 0x80;
-            return c.Ctx.Fail(Directory.Exists(Path.GetDirectoryName(host) ?? "") ? Win32Error.FileNotFound : Win32Error.PathNotFound, InvalidHandle);
-        });
         Std(K, "FindFirstFileA", 2, FindFirst);
         Std(K, "FindNextFileA", 2, c =>
         {

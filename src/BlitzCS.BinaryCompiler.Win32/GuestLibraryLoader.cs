@@ -12,7 +12,7 @@ public sealed class GuestLibraryOptions
     /// <summary>Translation cache: a DLL is translated on its first LoadLibrary only; later runs hit the cache. Null: translate every time.</summary>
     public string? CacheDirectory { get; init; }
     public bool AllowTranslationErrors { get; init; }
-    /// <summary>Size of the dynamic stub pool given to a DLL that itself imports LoadLibrary*/GetProcAddress (GetProcAddress on a guest DLL hands the caller a stub of ITS pool).</summary>
+    /// <summary>Size of the dynamic stub pool given to a DLL that itself imports LoadLibrary*/GetProcAddress (still used for GetProcAddress on emulated system DLLs).</summary>
     public int DynamicStubsForLoaders { get; init; } = 256;
     /// <summary>Progress and diagnostics of the loader (not guest output).</summary>
     public Action<string>? Log { get; init; }
@@ -24,8 +24,7 @@ public sealed record GuestLibraryInfo(string Name, string WindowsPath, uint Hand
 /// <summary>
 /// Loads guest DLLs on LoadLibrary: finds the file in the sandbox like Windows would, translates it (cached), loads it into the SAME
 /// <see cref="GuestModuleSet"/> as the executable with its own Win32 state, runs DllMain(DLL_PROCESS_ATTACH) and hands out the module's guest base as its HMODULE.
-/// GetProcAddress on such a module returns a stub of the caller's dynamic pool that forwards to the export; the calling convention is inferred from the
-/// export's own <c>ret</c> instructions (<see cref="ExportReturnScanner"/>) and never guessed. See docs/binary-win32.md, "Guest DLLs".
+/// GetProcAddress on such a module returns the real guest address (module base + export RVA); calls through it are cross-module dispatch. See docs/binary-win32.md, "Guest DLLs".
 /// All entry points are serialised by one lock; loading only adds new modules at new bases, so running guest code is never disturbed.
 /// </summary>
 public sealed class GuestLibraryLoader : IDisposable
@@ -40,9 +39,6 @@ public sealed class GuestLibraryLoader : IDisposable
         public int RefCount = 1;
         public bool Pinned;
         public List<Lib> Dependencies = [];
-        public Lazy<(ControlFlowGraph Cfg, byte[] Mapped)>? Cfg;
-        public readonly Dictionary<ushort, (ExportSignature? Signature, string? Failure)> Signatures = [];
-        public readonly Dictionary<(GuestModule Caller, ushort Ordinal), uint> Stubs = [];
     }
 
     private readonly GuestLibraryOptions options;
@@ -237,8 +233,6 @@ public sealed class GuestLibraryLoader : IDisposable
     private void Release(Lib lib)
     {
         if (--lib.RefCount > 0 || lib.Pinned) return;
-        foreach (var ((caller, _), stub) in lib.Stubs) { try { caller.ReleaseStub(stub); } catch (Exception e) when (e is GuestException or ObjectDisposedException) { } }
-        lib.Stubs.Clear();
         try { Set.Unload(lib.Key); }
         catch (InvalidOperationException e) { Note($"FreeLibrary({lib.Key}): kept loaded: {e.Message}"); lib.RefCount = 1; return; }
         byKey.Remove(lib.Key); byHandle.Remove(lib.Base); occupied.RemoveAll(o => o.Start == lib.Base);
@@ -274,25 +268,10 @@ public sealed class GuestLibraryLoader : IDisposable
             return lib.Base + pe.Rva; // a data export: the variable's address, no stub
         }
 
-        var caller = GuestModule.Current;
-        if (caller is null || caller.IsDisposed) { Note($"GetProcAddress: {label}: no guest module is running on this thread."); return c.Ctx.Fail(Win32Error.ProcNotFound); }
-        if (caller.StubCapacity == 0)
-        {
-            Note($"GetProcAddress: {label}: the calling module was translated without a dynamic stub pool (BinaryCompilerOptions.DynamicStubs = 0), so it cannot receive a callable address.");
-            return c.Ctx.Fail(Win32Error.ProcNotFound);
-        }
-        if (lib.Stubs.TryGetValue((caller, pe.Ordinal), out var existing)) return existing;
-
-        if (!lib.Signatures.TryGetValue(pe.Ordinal, out var verdict)) lib.Signatures[pe.Ordinal] = verdict = Infer(lib, te, pe, label);
-        if (verdict.Signature is not { } signature) { Note(verdict.Failure!); return c.Ctx.Fail(Win32Error.ProcNotFound); }
-        try
-        {
-            var stub = GuestExportBridge.AllocateStub(caller, lib.Module!, te, signature, $"GetProcAddress->{label}");
-            lib.Stubs[(caller, pe.Ordinal)] = stub;
-            options.Log?.Invoke($"GetProcAddress({label}) -> stub 0x{stub:X8} ({Describe(signature)}; {(verdict.Failure is null ? "inferred from the export's ret instructions" : "")})");
-            return stub;
-        }
-        catch (GuestStubException e) { Note($"GetProcAddress: {label}: {e.Message}"); return c.Ctx.Fail(Win32Error.NotEnoughMemory); }
+        // The real address, as on Windows (base + export RVA): callers do arithmetic with it, and a call through it reaches the export's own translated code
+        // through cross-module dispatch, which needs no calling-convention knowledge because the callee pops its own arguments.
+        options.Log?.Invoke($"GetProcAddress({label}) -> 0x{lib.Base + pe.Rva:X8}");
+        return lib.Base + pe.Rva;
     }
 
     private uint ResolveForwarder(Win32Call c, string label, string forwarder, int hops)
@@ -312,31 +291,6 @@ public sealed class GuestLibraryLoader : IDisposable
         Note($"GetProcAddress: {label} forwards to '{forwarder}', which is not a loaded guest DLL or an implemented API.");
         return c.Ctx.Fail(Win32Error.ProcNotFound);
     }
-
-    private (ExportSignature? Signature, string? Failure) Infer(Lib lib, TranslatedExport te, PeExport pe, string label)
-    {
-        lib.Cfg ??= new Lazy<(ControlFlowGraph, byte[])>(() => { var mapped = lib.Image.MapImage(); return (ControlFlowGraph.Build(lib.Image, mapped), mapped); });
-        var (cfg, mapped) = lib.Cfg.Value;
-        var returns = ExportReturnScanner.Scan(cfg, lib.Image, mapped, pe.Rva);
-        ExportSignature? decorated = te.Convention switch
-        {
-            GuestCallingConvention.Cdecl => ExportSignature.Cdecl,
-            GuestCallingConvention.Stdcall when te.ArgBytes is { } b => ExportSignature.Stdcall(b / 4),
-            _ => null,
-        };
-        if (returns.Unanimous is { } pop)
-        {
-            var inferred = pop == 0 ? ExportSignature.Cdecl : pop % 4 == 0 ? ExportSignature.Stdcall(pop / 4) : null;
-            if (inferred is null) return (null, $"GetProcAddress: cannot determine the calling convention of {label} ({returns}): ret {pop} is not a multiple of 4.");
-            if (decorated is not null && (decorated.Convention != inferred.Convention || decorated.ArgCount is { } d && inferred.ArgCount is { } a && d != a))
-                return (null, $"GetProcAddress: the calling convention of {label} is contradictory: the code says {Describe(inferred)} ({returns}) but the name decoration says {Describe(decorated)}.");
-            return (inferred, null);
-        }
-        if (decorated is not null && returns.Found <= 1 && !returns.OpaqueIndirect && !returns.Undecoded) return (decorated, null); // import thunk or no ret found: the decoration is the only evidence
-        return (null, $"GetProcAddress: cannot determine the calling convention of {label} (returns: {returns})." + (decorated is null ? " The name carries no _name@N decoration either." : ""));
-    }
-
-    private static string Describe(ExportSignature s) => s.Convention == GuestCallingConvention.Stdcall ? $"stdcall {s.ArgCount * 4} bytes" : "cdecl";
 
     // ---- file location ----
 

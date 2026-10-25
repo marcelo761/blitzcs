@@ -6,8 +6,8 @@ using Xunit;
 namespace BlitzCS.BinaryCompiler.Win32.Tests;
 
 /// <summary>
-/// A guest EXE loads a guest DLL through LoadLibraryA and calls it through GetProcAddress stubs (hand-assembled PE32s). The EXE writes an array of
-/// dwords (what it observed) to stdout; the test decodes it. The calling convention of each export is inferred from the export's own ret instructions.
+/// A guest EXE loads a guest DLL through LoadLibraryA and calls it through the address GetProcAddress returns (hand-assembled PE32s): the REAL address (module base
+/// + export RVA), reached through cross-module dispatch with no calling-convention knowledge. The EXE writes an array of dwords (what it observed) to stdout; the test decodes it.
 /// </summary>
 [Collection("GuestRuntime")]
 public sealed class GuestDllTests : IDisposable
@@ -18,11 +18,11 @@ public sealed class GuestDllTests : IDisposable
     private static void P32(List<byte> c, uint v) => c.AddRange(BitConverter.GetBytes(v));
 
     // Export code offsets inside the DLL's .text.
-    private const uint AddcAt = 0x00, AddsAt = 0x10, ThunkAt = 0x20, MixedAt = 0x40, MainAt = 0x60;
+    private const uint AddcAt = 0x00, AddsAt = 0x10, ThunkAt = 0x20, MixedAt = 0x40, MainAt = 0x60, DvalAt = 0x1010; // DvalAt is relative to .text: it lies in .data (RVA 0x2010)
 
     /// <summary>
     /// addc: cdecl (plain ret); adds: stdcall (ret 8); thunk: jmp [GetTickCount's IAT slot] (no ret of its own); mixed: ret on one path, ret 8 on another;
-    /// DllMain: returns <paramref name="dllMainResult"/>. Exports sorted by name get ordinals addc=1, adds=2, mixed=3, thunk=4.
+    /// dval: a data export (0xDEADBEEF); DllMain: returns <paramref name="dllMainResult"/>. Exports sorted by name get ordinals addc=1, adds=2, dval=3, mixed=4, thunk=5.
     /// </summary>
     private static byte[] BuildDll(uint dllMainResult = 1)
     {
@@ -36,7 +36,9 @@ public sealed class GuestDllTests : IDisposable
         b.Relocate(PeFixtureBuilder.TextRva + ThunkAt + 2);
         Put(MixedAt, 0x83, 0x7C, 0x24, 0x04, 0x00, 0x74, 0x01, 0xC3, 0xC2, 0x08, 0x00);          // cmp dword [esp+4],0; je +1; ret; ret 8
         Put(MainAt, [0xB8, .. BitConverter.GetBytes(dllMainResult), 0xC2, 0x0C, 0x00]);           // mov eax,result; ret 12
-        return b.WithCode(code).Export("addc", AddcAt).Export("adds", AddsAt).Export("thunk", ThunkAt).Export("mixed", MixedAt).EntryPoint(MainAt).Build();
+        var data = new byte[0x40];
+        BitConverter.GetBytes(0xDEADBEEFu).CopyTo(data, 0x10);
+        return b.WithCode(code).WithData(data).Export("addc", AddcAt).Export("adds", AddsAt).Export("thunk", ThunkAt).Export("mixed", MixedAt).Export("dval", DvalAt).EntryPoint(MainAt).Build();
     }
 
     /// <summary>Tiny assembler for the EXE: every absolute address gets a relocation, so the loader can move the image.</summary>
@@ -45,10 +47,10 @@ public sealed class GuestDllTests : IDisposable
         public readonly PeFixtureBuilder B = new PeFixtureBuilder().AsExecutable();
         public readonly List<byte> C = [];
         public readonly byte[] Data = new byte[0x400];
-        public const uint Results = 0x000, LibName = 0x100, Addc = 0x110, Adds = 0x118, Thunk = 0x120, Mixed = 0x128, Missing = 0x130, Written = 0x140, Buf = 0x150;
+        public const uint Results = 0x000, LibName = 0x100, Addc = 0x110, Adds = 0x118, Thunk = 0x120, Mixed = 0x128, Missing = 0x130, Dval = 0x300, Written = 0x140, Buf = 0x150;
         private readonly Dictionary<string, uint> iat = [];
 
-        public Exe() { Str(LibName, "lib.dll"); Str(Addc, "addc"); Str(Adds, "adds"); Str(Thunk, "thunk"); Str(Mixed, "mixed"); Str(Missing, "missing.dll"); }
+        public Exe() { Str(LibName, "lib.dll"); Str(Addc, "addc"); Str(Adds, "adds"); Str(Thunk, "thunk"); Str(Mixed, "mixed"); Str(Missing, "missing.dll"); Str(Dval, "dval"); }
         public void Str(uint at, string s) => System.Text.Encoding.ASCII.GetBytes(s).CopyTo(Data, at);
         private uint Slot(string name) => iat.TryGetValue(name, out var s) ? s : iat[name] = B.Import("KERNEL32.dll", name);
         private static uint DataVa(uint off) => PeFixtureBuilder.ImageBase + PeFixtureBuilder.DataRva + off;
@@ -64,6 +66,8 @@ public sealed class GuestDllTests : IDisposable
         public void Store(uint off) { C.Add(0xA3); Abs(DataVa(off)); }              // mov [data+off], eax
         public void Load(uint off) { C.Add(0xA1); Abs(DataVa(off)); }              // mov eax,[data+off]
         public void CallMem(uint off) { C.AddRange([0xFF, 0x15]); Abs(DataVa(off)); } // call [data+off]
+        public void StoreEsp(uint off) { C.AddRange([0x89, 0x25]); Abs(DataVa(off)); }  // mov [data+off], esp
+        public void DerefEax() => C.AddRange([0x8B, 0x00]);                                // mov eax,[eax]
         public void Raw(params byte[] bytes) => C.AddRange(bytes);
 
         /// <summary>WriteFile(stdout, results, count*4); ExitProcess(0).</summary>
@@ -100,7 +104,7 @@ public sealed class GuestDllTests : IDisposable
     }
 
     [Fact]
-    public void LoadLibraryGetProcAddressCallsThroughInferredStubsAndFreeLibraryUnloads()
+    public void GetProcAddressReturnsTheRealAddressAndCallsThroughItWork()
     {
         File.WriteAllBytes(Path.Combine(dir, "lib.dll"), BuildDll());
         var e = new Exe();
@@ -109,9 +113,11 @@ public sealed class GuestDllTests : IDisposable
         void Gpa(uint name, uint into) { e.PushData(name); e.PushMem(0); e.Call("GetProcAddress"); e.Store(into); }
         Gpa(Exe.Addc, 0x80); Gpa(Exe.Adds, 0x84);
         e.PushImm8(12); e.PushImm8(30); e.CallMem(0x80); e.Raw(0x83, 0xC4, 0x08); e.Store(4);   // addc(30,12): cdecl, caller pops
-        e.PushImm8(13); e.PushImm8(30); e.CallMem(0x84); e.Store(8);                              // adds(30,13): stdcall, stub pops
-        Gpa(Exe.Thunk, 12); e.Call("GetLastError"); e.Store(16);                                  // thunk: cannot be determined
-        Gpa(Exe.Mixed, 20); e.Call("GetLastError"); e.Store(24);                                  // mixed returns: cannot be determined
+        e.PushImm8(13); e.PushImm8(30); e.CallMem(0x84); e.Store(8);                              // adds(30,13): stdcall, the callee pops
+        Gpa(Exe.Thunk, 12); e.CallMem(12); e.Store(16);                                           // thunk: a bare jmp [iat] to GetTickCount, no ret of its own
+        Gpa(Exe.Mixed, 0x60); e.StoreEsp(20); e.PushImm8(0); e.PushImm8(0); e.CallMem(0x60); e.StoreEsp(24); // mixed(0,0): ret 8 path, the callee pops
+        Gpa(Exe.Dval, 80); e.Load(80); e.DerefEax(); e.Store(84);                                // data export: the address of the variable
+        e.PushImm8(3); e.PushMem(0); e.Call("GetProcAddress"); e.Store(88);                       // ... also by ordinal
         e.PushImm8(2); e.PushMem(0); e.Call("GetProcAddress"); e.Store(28);                       // by ordinal 2 = adds
         e.PushData(Exe.LibName); e.Call("LoadLibraryA"); e.Store(32);                             // second load: same HMODULE
         e.PushData(Exe.Missing); e.Call("LoadLibraryA"); e.Store(36); e.Call("GetLastError"); e.Store(40);
@@ -121,17 +127,23 @@ public sealed class GuestDllTests : IDisposable
         e.PushMem(0); e.Call("FreeLibrary"); e.Store(56);                                         // 1 -> 0: DLL_PROCESS_DETACH, unloaded
         e.PushMem(0); e.Call("FreeLibrary"); e.Store(60); e.Call("GetLastError"); e.Store(64);    // already unloaded
         e.PushData(Exe.LibName); e.Call("GetModuleHandleA"); e.Store(68); e.Call("GetLastError"); e.Store(72);
-        e.Load(0x84); e.Store(76);                                                                // the by-name stub of adds
-        e.FinishWith(20);
+        e.Load(0x84); e.Store(76);                                                                // the by-name address of adds
+        e.FinishWith(23);
 
         var (w, r, log) = Run(e.Build(0));
         Assert.True(r.Failure is null, r.Failure + "\n" + log);
         Assert.NotEqual(0u, w[0]);                       // HMODULE = the module's guest base
         Assert.Equal(42u, w[1]);                         // addc(30,12)
-        Assert.Equal(43u, w[2]);                         // adds(30,13): stdcall inferred from "ret 8", the stub popped the arguments
-        Assert.Equal(0u, w[3]); Assert.Equal(127u, w[4]); // thunk: ERROR_PROC_NOT_FOUND
-        Assert.Equal(0u, w[5]); Assert.Equal(127u, w[6]); // mixed ret / ret 8
-        Assert.Equal(w[19], w[7]);                       // same pointer as the by-name lookup of adds (cached stub)
+        Assert.Equal(43u, w[2]);                         // adds(30,13): stdcall: "ret 8" popped the arguments
+        Assert.Equal(w[0] + PeFixtureBuilder.TextRva + ThunkAt, w[3]); // the address equals module base + export RVA from the PE export table
+        // w[4]: the bare "jmp [iat]" thunk reached GetTickCount and returned (the run continued with a balanced stack; the tick value itself is not asserted)
+        Assert.Equal(w[5], w[6]);                        // mixed: stack balanced after the call
+        Assert.Equal(w[0] + PeFixtureBuilder.TextRva + AddsAt, w[7]);
+        Assert.Equal(w[19], w[7]);                       // same pointer as the by-name lookup of adds
+        Assert.Equal(w[0] + PeFixtureBuilder.TextRva + AddsAt, w[19]);
+        Assert.Equal(w[0] + PeFixtureBuilder.DataRva + 0x10, w[20]); // data export: address of the data
+        Assert.Equal(0xDEADBEEFu, w[21]);                // and the guest can read it through that address
+        Assert.Equal(w[20], w[22]);
         Assert.Equal(w[0], w[8]);                        // loading twice returns the same HMODULE
         Assert.Equal(0u, w[9]); Assert.Equal(126u, w[10]); // ERROR_MOD_NOT_FOUND
         Assert.Equal((uint)"C:\\lib.dll".Length, w[11]); // GetModuleFileName(hmod)
@@ -139,8 +151,6 @@ public sealed class GuestDllTests : IDisposable
         Assert.Equal(1u, w[13]); Assert.Equal(1u, w[14]);
         Assert.Equal(0u, w[15]); Assert.Equal(6u, w[16]); // FreeLibrary of an unloaded handle: ERROR_INVALID_HANDLE
         Assert.Equal(0u, w[17]); Assert.Equal(126u, w[18]); // GetModuleHandle after unload
-        Assert.Contains("GetProcAddress: cannot determine the calling convention of lib!thunk", log + string.Join("\n", r.Diagnostics));
-        Assert.Contains(r.Diagnostics, d => d.Contains("lib!mixed") && d.Contains("ret/ret 8"));
     }
 
     [Fact]
@@ -195,7 +205,7 @@ public sealed class GuestDllTests : IDisposable
     }
 
     [Fact]
-    public void StubsOfOneLoadedDllAreCalledFromTwoGuestThreads()
+    public void ExportsOfOneLoadedDllAreCalledFromTwoGuestThreads()
     {
         File.WriteAllBytes(Path.Combine(dir, "lib.dll"), BuildDll());
         var e = new Exe();

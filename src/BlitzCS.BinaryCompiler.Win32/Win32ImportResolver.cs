@@ -106,6 +106,7 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         new Kernel32ExtraService(),
         new Kernel32StartupService(),
         new Kernel32WideService(),
+        new FilePathService(),
         new WinmmService(),
         new DirectSoundService(),
         new WinsockCoreService(),

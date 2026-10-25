@@ -192,17 +192,14 @@ The virtual machine has exactly one locale, en-US. Deliberately absent: RaiseExc
   are found in the sandbox are loaded first (reference counted); imports that are neither emulated nor in the sandbox stay unbound and fault by name when called.
   The set serialises Add/LoadAll/Unload with one lock; loading only adds new modules at new bases and links the memories of the peers (copy-on-write arrays), so running guest code is not disturbed.
 * **HMODULE** = the module's guest base. Repeated loads return the same HMODULE and count references; `GetModuleHandleEx` without flags adds one, `PIN` keeps the module for the process,
-  `UNCHANGED_REFCOUNT` adds none. `FreeLibrary` decrements; at zero the dynamic stubs handed out for it are released and `DLL_PROCESS_DETACH` + unload run. A module another loaded module still
+  `UNCHANGED_REFCOUNT` adds none. `FreeLibrary` decrements; at zero `DLL_PROCESS_DETACH` + unload run. A module another loaded module still
   imports from stays loaded (diagnosed). `GetModuleFileName(hmod)` returns `C:\<path inside the sandbox>`.
-* **GetProcAddress** on a guest module returns an address in the dynamic stub pool of the CALLING module (BcRun translates with `DynamicStubs` when the image imports LoadLibrary*/GetProcAddress;
-  a DLL that imports them gets `GuestLibraryOptions.DynamicStubsForLoaders` stubs). The stub forwards to the export through `GuestExportBridge` (the `ModuleLinker` bridge: cdecl window copy,
-  callee-pop count, EDX and ST0 forwarded). The same export asked twice returns the same stub. Forwarded exports resolve through the set (or to an implemented API); a data export returns its address.
-* **The calling convention is inferred from the callee, never guessed.** `ExportReturnScanner` walks the lifted CFG from the export (direct and conditional jumps, jump tables, fall-through; callees
-  are not followed) and collects every `ret`/`ret N`: all plain => cdecl (pop 0); all `ret N` with the same N => stdcall/thiscall-style with pop N (N multiple of 4). Mixed returns, no
-  return found (an export that is a bare `jmp [iat]` thunk), register-indirect jumps or undecoded bytes => the `_name@N`/`_name` decoration is used when it is present and consistent, else the call
-  fails with `NULL` + `ERROR_PROC_NOT_FOUND` and a diagnostic `GetProcAddress: cannot determine the calling convention of lib!name (returns: ...)` in `GuestLibraryLoader.Diagnostics`
-  (`BcRunResult.Diagnostics`, `Win32Options.DebugOutput`, `--verbose`). A decoration that contradicts the code is also a named failure. The verdict is cached per export. `this` (ECX) of thiscall
-  exports is NOT forwarded by the bridge.
+* **GetProcAddress** on a guest module returns the REAL guest address, as Windows does: module base + export RVA (code and data exports alike; a forwarder resolves to the address it
+  forwards to, through the set or to an implemented API). Programs do arithmetic with it (blitzcc's linker.dll computes the entry RVA of runtime.dll as `GetProcAddress(...) - base`), so
+  no stub stands in between. A call through it is an ordinary indirect call: the dispatch miss of the calling module consults the process-wide module registry and enters the export's
+  translated code (docs/binary-multimodule.md); the callee pops its own arguments on the shared guest stack, so cdecl, stdcall, thiscall and a bare `jmp [iat]` thunk export all work
+  without any calling-convention knowledge or inference. By ordinal or by name the answer is the same address; asking twice returns it twice. The dynamic stub pool
+  (`DynamicStubs`, `GuestLibraryOptions.DynamicStubsForLoaders`) remains only for what has no guest address of its own: GetProcAddress on emulated system DLLs and COM vtables.
 * **Per-module Win32 state.** Each module has its own context: heap, handles (files, events), TLS, FLS, environment snapshot and current directory are not shared between the EXE and a DLL
   (a HANDLE or a heap block from one module is meaningless in another). The module table, the sandbox and `Win32Options` are shared. A pointer to guest memory of any module is valid in all of them.
 * **Known limit (next blocker for blitzcc.exe):** a function pointer or C++ vtable that crosses a module boundary (the EXE calls a virtual method of an object a DLL returned) traps in the caller,
@@ -219,3 +216,13 @@ What is process-wide: the default and private heaps (`GetProcessHeap`/`HeapAlloc
 
 Memory: reads and writes go through the calling module's `GuestMemory`, which sees every module's regions (peers are linked when a module joins, before its DllMain runs). Allocations (heaps, virtual memory, permanent strings, COM objects) come from the first module that used the context, which is pinned
 (`GuestMemory.PinAsProcessAnchor`): `GuestModuleSet.Unload` refuses it while other modules are loaded. In the LoadLibrary flow that is the executable. Tests: `SharedWin32StateTests` (heap, CRT heap, TLS index, last error, event and critical section across two DLLs; the per-module resolver variant is the mutation witness).
+
+## File and path contracts for the compile-and-link path (FilePathService)
+
+Sandboxed like `FileService` (same path translation, case folding and handle table). The class summary of `FilePathService` is the contract. CopyFileA/W and CopyFileExA/W (ERROR_FILE_EXISTS 80 with
+bFailIfExists, ERROR_FILE_NOT_FOUND 2 / ERROR_PATH_NOT_FOUND 3, the target is overwritten otherwise, last-write time and read-only attribute are copied; progress routine and cancel flag are refused with
+ERROR_NOT_SUPPORTED), DeleteFileA/W, MoveFileA/W, MoveFileExA/W (ERROR_ALREADY_EXISTS 183 unless MOVEFILE_REPLACE_EXISTING; delay-until-reboot refused), GetFileAttributesA/W (replaces the former A-only
+version in `FileService`), GetFileAttributesExA/W, SetFileAttributesA/W (only READONLY is representable on the host), GetFileTime, SetFileTime, CreateDirectoryA/W, RemoveDirectoryA/W (ERROR_DIR_NOT_EMPTY 145),
+GetTempPathA/W (`C:\Temp\`), GetTempFileNameA/W, SearchPathA/W, GetLongPathNameA/W. Already present: GetFileSize(Ex), SetFilePointer(Ex), SetEndOfFile, FlushFileBuffers, Get/SetCurrentDirectory,
+GetFullPathName, CreateFile dispositions, FindFirst/NextFile. Not provided (no caller): GetShortPathName (no 8.3 names), CopyFile with a progress routine.
+Verified by `tests/BlitzCS.BinaryCompiler.Win32.Tests/FilePathTests.cs` and by the original blitzcc.exe finishing `-o` on both BcRun targets (docs/blitz3d-readiness.md, S6).

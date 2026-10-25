@@ -281,7 +281,7 @@ bases 0x50000000 (EXE), 0x500A0000, 0x500F0000 and the same outcome. The usage t
 **Next blocker (exact):** both exports return C++ interface objects (`Linker*`, `Runtime*`). blitzcc calls a virtual method through the vtable, whose slot holds a linker.dll code address
 (vtable slot at linker RVA 0x2139c -> RVA 0x41D0, a `mov eax, 0x2045e; ret`). The EXE's dispatch table only covers the EXE image, so the indirect call lands in the trap routine. The cross-module
 function pointer is the limit already documented in docs/binary-multimodule.md. A fix belongs in the code generator/runtime: a dispatch-miss fallback that recognises an address inside a peer module and
-forwards the call there through a bridge (thiscall: ECX must be forwarded and the pop count inferred from the callee's `ret N`, which `ExportReturnScanner` already does for exports). Then runtime.dll
+jumps into the peer's translated code (done in S4; GetProcAddress now returns real addresses as well). Then runtime.dll
 start-up (imports DINPUT8, DDRAW, d3dxof, GDI32, SHELL32 are not provided) and the user32/gdi32 contracts follow.
 
 ### Cross-module dispatch and one Win32 state (S4)
@@ -304,3 +304,27 @@ Observed (extracted SDK as sandbox, `--env blitzpath=C:\`, `--allow-errors`, lin
 ### Base independence of the code/data decision
 
 For images with a base relocation table the control-flow graph no longer depends on the load base. A fixup can only sit inside the displacement or immediate field of an instruction, so a decoded instruction that overlaps a relocated dword anywhere else (opcode, prefix, ModRM or SIB bytes) is an absolute-address table inside `.text` and is treated as data; the data-run trial decode uses the same test. The older heuristics (function-start trial decode, data after a call, rejected-mnemonic list) remain the fallback for images without relocations. Measured on the six SDK images, translating at 0x10000000 and at 0x50000000 yields identical sets of translated instruction RVAs, and the 8 spurious `BC_UNSUPPORTED_INSTRUCTION` errors seen in `blitzcc.exe` at 0x10000000 are gone (a fixed base the target cannot use still reports `BC_BASE_UNUSABLE_ON_TARGET`, which is a target policy and independent of this rule).
+
+### Compile and link finish (S6)
+
+The only missing contract was `KERNEL32!CopyFileA` (new `FilePathService`, below); no window, DirectX or registry access was needed for `-o`. SDK copy as writable sandbox (`C:\` = sandbox), `--env blitzpath=C:\`, `--allow-errors`.
+Verbatim stdout of `blitzcc -o C:\tmp\srcN.exe C:\tmp\srcN.bb` (BcRun exit 0 on linux-x64 and on windows-x64 under Wine/Proton 11.0):
+
+```
+BlitzCC V1.118
+(C)opyright 2000-2003 Blitz Research Ltd
+Compiling "C:\tmp\src1.bb"
+Parsing...
+Generating...
+Translating...
+Assembling...
+Creating executable "C:\tmp\src1.exe"...
+```
+
+| source | output | size | head |
+|---|---|---|---|
+| src1: `Print "hello"` | src1.exe | 1126912 | `MZ`, `PE\0\0` at e_lfanew, machine 0x014C |
+| src2: loop + function + Dim array + Type + While (20 lines) | src2.exe | 1127936 | same |
+| src3: `Include "C:\tmp\inc.bb"` (second file in the sandbox) + call | src3.exe | 1126912 | same (content differs from src1) |
+
+`cmp` of the linux-x64 and windows-x64 outputs: byte-identical for all three. No produced exe was executed. Next step: compare against the native Wine reference compile of the same sources.

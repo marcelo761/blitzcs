@@ -90,7 +90,7 @@ vorbisFile dispatch table, so the guest's indirect call reaches the managed hand
 
 ## Limits
 
-* Modules loaded after start-up by `LoadLibrary` (`GuestLibraryLoader`, docs/binary-win32.md) join the same set: `Add`/`LoadAll`/`Unload` are serialised by a lock, `GuestExportBridge.AllocateStub` hands the caller a stub that forwards to an export, and no loaded module is relocated.
+* Modules loaded after start-up by `LoadLibrary` (`GuestLibraryLoader`, docs/binary-win32.md) join the same set: `Add`/`LoadAll`/`Unload` are serialised by a lock, `GetProcAddress` hands out the export's real address (base + RVA; a call through it is cross-module dispatch), and no loaded module is relocated.
 
 * Data exports, forwarders, cycles: unsupported (diagnosed). Callbacks and function pointers passed *between* modules (module A hands its code address to module B, B calls it; a C++ vtable in
   one module reached from another) are supported by cross-module dispatch (section 3), not by the bridge.
@@ -127,5 +127,5 @@ clears the table pointer, before the module's host image is freed. Translated co
 (`GuestModuleSet.Unload` throws `InvalidOperationException`: "N other guest thread(s) are executing guest code ..."; the calling thread is excluded because FreeLibrary is itself a guest call). Limit: a thread that frees the module it is currently executing in (FreeLibrary(self) from its own code) is not detected, as on Windows.
 
 *Shared thread state.* A set owns one `GuestProcessEnvironment`: the registry, one PEB (ImageBaseAddress = the executable's; ProcessHeap shared), and **one TEB per OS thread** for all modules (SEH chain, TLS slots, LastError field, stack bounds). A call into another module that needs its own stack
-(the bridge, `GetProcAddress` stubs) switches StackBase/StackLimit and restores them; the SEH chain is only reset at the outermost entry of the thread. Implicit TLS: each module with a TLS directory gets a process-wide index (written to its index variable) and a data block in every thread's pointer array, also for threads that already exist when the module is loaded.
+(the bridge, cross-module dispatch) switches StackBase/StackLimit and restores them; the SEH chain is only reset at the outermost entry of the thread. Implicit TLS: each module with a TLS directory gets a process-wide index (written to its index variable) and a data block in every thread's pointer array, also for threads that already exist when the module is loaded.
 Details: docs/binary-teb-contract.md.

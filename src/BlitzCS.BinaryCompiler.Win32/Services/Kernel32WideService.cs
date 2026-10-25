@@ -69,7 +69,7 @@ public sealed class Kernel32WideService : Win32Service
         return 1;
     }
 
-    private static string GuestPath(Win32Call c, string name)
+    internal static string GuestPath(Win32Call c, string name)
     {
         // Normalised Windows path "C:\dir\file" for a (possibly relative) name; no existence check.
         var path = name.Replace('/', '\\');
