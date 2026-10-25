@@ -8,6 +8,15 @@ public static partial class Commands
     private static object? Call(string name, string returnType, string[] types, object[] arguments) =>
         (active ?? throw new InvalidOperationException("Run the program through the original-runtime x86 host.")).Call(name, returnType, types, arguments);
 
+    /// <summary>Reads the real factory's registration table without executing a BASIC program.</summary>
+    public static RuntimeRegistrationSnapshot Inspect(string runtimePath)
+    {
+        if (!OperatingSystem.IsWindows() || IntPtr.Size != 4)
+            throw new PlatformNotSupportedException("Runtime inspection requires Windows .NET x86 (or Proton).");
+        using var session = new Session(runtimePath);
+        return new(session.Version, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(runtimePath))).ToLowerInvariant(), session.Descriptors.AsReadOnly());
+    }
+
     public static void Run(string runtimePath, Action program)
     {
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 4)
@@ -24,6 +33,8 @@ public static partial class Commands
         private readonly nint runtime;
         private readonly nint table;
         private readonly Dictionary<string, (nint Pointer, string Descriptor)> symbols = new(StringComparer.OrdinalIgnoreCase);
+        internal readonly List<string> Descriptors = new();
+        internal int Version => Slot<VersionCall>(0)(runtime);
         private readonly Dictionary<string, Func<object[], object?>> calls = new(StringComparer.OrdinalIgnoreCase);
         private T Slot<T>(int index) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(Marshal.ReadIntPtr(table, index * 4));
         public Session(string path)
@@ -39,6 +50,7 @@ public static partial class Commands
                 var text = next(runtime);
                 if (text == 0) break;
                 var descriptor = Marshal.PtrToStringAnsi(text)!;
+                Descriptors.Add(descriptor);
                 var start = descriptor[0] is '%' or '#' or '$' ? 1 : 0;
                 var end = start;
                 while (end < descriptor.Length && (char.IsLetterOrDigit(descriptor[end]) || descriptor[end] == '_')) end++;
@@ -105,3 +117,5 @@ public static partial class Commands
     [UnmanagedFunctionPointer(CallingConvention.ThisCall)] delegate void Shutdown(nint self);
     [UnmanagedFunctionPointer(CallingConvention.ThisCall)] delegate void Execute(nint self, Entry entry, [MarshalAs(UnmanagedType.LPStr)] string arguments, nint debugger);
 }
+
+public sealed record RuntimeRegistrationSnapshot(int Version, string RuntimeSHA256, IReadOnlyList<string> Descriptors);

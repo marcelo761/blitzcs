@@ -12,6 +12,14 @@ try
         args = args[2..];
     }
     Console.Error.WriteLine($"BlitzCS original-runtime host: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}, {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}.");
+    if (args.Length > 0 && args[0] == "--inspect-runtime")
+    {
+        if (args.Length != 3) throw new ArgumentException("--inspect-runtime <original-runtime.dll> <new-snapshot.json>");
+        var snapshot = Commands.Inspect(args[1]);
+        using var file = new FileStream(args[2], FileMode.CreateNew, FileAccess.Write);
+        System.Text.Json.JsonSerializer.Serialize(file,snapshot,new System.Text.Json.JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+        return 0;
+    }
     if (args.Length > 0 && args[0] == "--run")
     {
         if (args.Length != 3 && !(args.Length == 5 && args[3] == "--capture")) throw new ArgumentException("--run <compiled.dll> <original-runtime.dll> [--capture <frame.bmp>]");

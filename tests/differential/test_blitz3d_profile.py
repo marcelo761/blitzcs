@@ -124,33 +124,46 @@ class Blitz3DProfileTests(unittest.TestCase):
         self.assertTrue((path.parent / profile["profiles"][0]).is_file())
         self.assertEqual(
             {
-                "TextureBumpEnvMat": ("Void", ["Integer", "Integer", "Integer", "Float"], "TextureBumpEnvMat%texture%x%y#envmat", "mavless_bin.zip!bin/runtime.dll+0xEAD30"),
-                "TextureBumpEnvOffset": ("Void", ["Integer", "Float"], "TextureBumpEnvOffset%texture#envoffset", "mavless_bin.zip!bin/runtime.dll+0xEACE4"),
-                "TextureBumpEnvScale": ("Void", ["Integer", "Float"], "TextureBumpEnvScale%texture#envmat", "mavless_bin.zip!bin/runtime.dll+0xEAD0C"),
+                "ErrorLog": ("String", [], "$ErrorLog"),
+                "TextureBumpEnvMat": ("Void", ["Integer", "Integer", "Integer", "Float"], "TextureBumpEnvMat%texture%x%y#envmat"),
+                "TextureBumpEnvOffset": ("Void", ["Integer", "Float"], "TextureBumpEnvOffset%texture#envoffset"),
+                "TextureBumpEnvScale": ("Void", ["Integer", "Float"], "TextureBumpEnvScale%texture#envmat"),
+                "TextureLodBias": ("Void", ["Float"], "TextureLodBias#bias"),
             },
             {
                 function["name"]: (
                     function["returnType"],
                     function["parameters"],
                     function["contract"]["symbol"],
-                    function["contract"]["source"],
                 )
                 for function in profile["functions"]
             },
         )
-        artifact = profile["metadata"]["sourceArtifact"]
-        self.assertEqual("ab1b66f0fca099f9bc5fbd13054ebe1bca009661598cde3c2091d7bdceef7749", artifact["archiveSha256"])
-        self.assertEqual("ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d", artifact["runtimeSha256"])
-        self.assertNotIn("ignoredLocalArchive", artifact)
-        self.assertNotIn("ignoredLocalRuntime", artifact)
-        self.assertEqual(3, len(profile["functions"]))
+        digest = "ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d"
+        self.assertEqual(digest, profile["metadata"]["runtimeSHA256"])
+        self.assertEqual(66644, profile["metadata"]["version"])
+        self.assertIn("Actual runtime registration text", profile["metadata"]["descriptorEncoding"])
+        self.assertEqual(5, len(profile["functions"]))
         for function in profile["functions"]:
             contract = function["contract"]
             self.assertEqual("scpcb.mavless-runtime", contract["provider"])
             self.assertEqual("runtime-registration", contract["resolution"])
             self.assertIsNone(contract["callingConvention"])
+            self.assertEqual(f"sha256:{digest}!registration:{function['name']}", contract["source"])
             self.assertEqual([], function["defaults"])
-            self.assertFalse({"binary", "library", "export"} & function.keys())
+            self.assertFalse({"assembly", "method", "binary", "library", "export"} & function.keys())
+
+    def test_scpcb_profile_reproduces_exactly_from_checked_runtime_snapshot(self):
+        from tools.generate_runtime_profile import build_profile as recover_profile
+
+        snapshot = json.loads((ROOT / "docs/evidence/scpcb-runtime-registrations.json").read_text(encoding="utf-8"))
+        self.assertEqual({"runtimeSHA256", "version", "descriptors"}, set(snapshot))
+        self.assertEqual(600, len(snapshot["descriptors"]))
+        self.assertTrue(all(isinstance(descriptor, str) for descriptor in snapshot["descriptors"]))
+        path = ROOT / "profiles/scpcb-mavless.json"
+        recovered = recover_profile(snapshot, PROFILE, path, provider="scpcb.mavless-runtime")
+        serialized = json.dumps(recovered, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+        self.assertEqual(path.read_text(encoding="utf-8"), serialized)
 
 
 if __name__ == "__main__":

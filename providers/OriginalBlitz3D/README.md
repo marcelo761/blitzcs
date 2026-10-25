@@ -45,3 +45,5 @@ With Blitz3D V1.118 runtime SHA-256 `ba120a4a0f15f2ac48e1e86f6465137bd480d0b4a28
 - The runtime reported version `132190`, 578 registrations and a 32-bit process. Original source and DLL hashes were unchanged.
 
 These are real original-engine x86 executions of BlitzCS-generated BASIC. They do not demonstrate a BCSBRE-recompiled x64 engine, original IDE execution, or full SCP:CB compatibility.
+
+`--inspect-runtime <runtime.dll> <new-snapshot.json>` reads the actual registration table without executing a BASIC program. The output must be new, and native dependencies must be available. Use `tools/generate_runtime_profile.py` to compare this snapshot with an existing historical profile; descriptors are declarations, not inferred executable bindings.
