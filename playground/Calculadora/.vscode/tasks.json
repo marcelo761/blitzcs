@@ -1,0 +1,71 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "BlitzCS: Compilar arquivo atual",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/../../src/BlitzCS.CLI",
+        "-c",
+        "Release",
+        "--no-build",
+        "--",
+        "build",
+        "${file}",
+        "-o",
+        "${workspaceFolder}/bin/${fileBasenameNoExtension}.dll"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/../.."
+      },
+      "problemMatcher": {
+        "owner": "blitzcs",
+        "fileLocation": "absolute",
+        "pattern": {
+          "regexp": "^(.*\\.bb)\\((\\d+),(\\d+)\\):\\s*(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "BlitzCS: Verificar sintaxe",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/../../src/BlitzCS.CLI",
+        "-c",
+        "Release",
+        "--no-build",
+        "--",
+        "check-syntax",
+        "${file}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/../.."
+      },
+      "problemMatcher": {
+        "owner": "blitzcs",
+        "fileLocation": "absolute",
+        "pattern": {
+          "regexp": "^(.*\\.bb)\\((\\d+),(\\d+)\\):\\s*(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
+      }
+    }
+  ]
+}
