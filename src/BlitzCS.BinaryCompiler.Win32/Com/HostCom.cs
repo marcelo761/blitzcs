@@ -45,19 +45,11 @@ public sealed unsafe class HostComInterface
     {
         var self = Pointer;
         var f = (*(nint**)self)[slot];
-        return args.Length switch
-        {
-            0 => (uint)((delegate* unmanaged<nint, int>)f)(self),
-            1 => (uint)((delegate* unmanaged<nint, nint, int>)f)(self, args[0]),
-            2 => (uint)((delegate* unmanaged<nint, nint, nint, int>)f)(self, args[0], args[1]),
-            3 => (uint)((delegate* unmanaged<nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2]),
-            4 => (uint)((delegate* unmanaged<nint, nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2], args[3]),
-            5 => (uint)((delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2], args[3], args[4]),
-            6 => (uint)((delegate* unmanaged<nint, nint, nint, nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2], args[3], args[4], args[5]),
-            7 => (uint)((delegate* unmanaged<nint, nint, nint, nint, nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2], args[3], args[4], args[5], args[6]),
-            8 => (uint)((delegate* unmanaged<nint, nint, nint, nint, nint, nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]),
-            _ => throw new NotSupportedException($"{Name}: a native COM call with {args.Length} arguments is not supported (maximum 8)."),
-        };
+        if (args.Length > 8) throw new NotSupportedException($"{Name}: a native COM call with {args.Length} arguments is not supported (maximum 8).");
+        Span<nint> all = stackalloc nint[1 + args.Length];
+        all[0] = self;
+        args.CopyTo(all[1..]);
+        return (uint)HostBridge.HostInvoke.Call(f, all);
     }
 
     public uint QueryInterface(Guid iid, out nint result)
@@ -81,13 +73,21 @@ public sealed unsafe class HostComInterface
     }
 }
 
-/// <summary>Per-call state of an adapted host COM call.</summary>
+/// <summary>
+/// Per-call state of an adapted host call: a COM method (<see cref="Call"/> is the guest COM call) or a flat DLL export of the host bridge (no COM object; the status passed to the
+/// completions is an HRESULT-style value, S_OK when the export reported success).
+/// </summary>
 public sealed class ComCallScope : IDisposable
 {
     private readonly List<Action<uint>> completions = [];
-    internal ComCallScope(GuestComCall call) { Call = call; }
-    public GuestComCall Call { get; }
-    public IWin32Memory Mem => Call.Mem;
+    private readonly GuestComCall? call;
+    internal ComCallScope(GuestComCall call) { this.call = call; Mem = call.Mem; Ctx = call.Ctx; }
+    internal ComCallScope(IWin32Memory mem, Win32Context ctx, uint[] guestArgs) { Mem = mem; Ctx = ctx; GuestArgs = guestArgs; }
+    public GuestComCall Call => call ?? throw new InvalidOperationException("This adapted call is a flat export, not a COM method.");
+    /// <summary>All guest argument words of a flat export call (an argument whose conversion depends on another one, such as a counted string, reads it here). Empty for COM calls.</summary>
+    public uint[] GuestArgs { get; } = [];
+    public IWin32Memory Mem { get; }
+    public Win32Context Ctx { get; }
     public NativeScope Native { get; } = new();
     /// <summary>Registers work to run after the native call returned (receives the HRESULT): copying results back to the guest, wrapping returned interfaces.</summary>
     public void OnCompleted(Action<uint> action) => completions.Add(action);
@@ -217,6 +217,7 @@ public sealed class HostComMethod
             return ComHr.InvalidArg;
         }
         var hr = host.Invoke(HostSlot, native);
+        HostBridge.WindowProcBridge.ThrowPendingCallbackFault();   // the native method may have sent messages to a guest window procedure
         scope.Complete(hr);
         return hr;
     }

@@ -36,6 +36,25 @@ public sealed class WinmmService : Win32Service
 
     private static uint DeviceError(uint id) => id == WaveMapper ? NoDriver : BadDeviceId;
 
+    private const uint TimerrNoCanDo = 97;
+    private sealed class Periods { public readonly ConcurrentDictionary<uint, int> Active = new(); }
+    private static readonly ConditionalWeakTable<Win32Context, Periods> PeriodTable = new();
+
+    private static uint Period(Win32Call c, int delta)
+    {
+        var period = c[0];
+        if (period < 1 || period > 1_000_000) return TimerrNoCanDo;
+        if (OperatingSystem.IsWindows())
+            return (uint)HostBridge.HostInvoke.Call(HostBridge.HostExports.Get("winmm.dll", delta > 0 ? "timeBeginPeriod" : "timeEndPeriod"), [(nint)period]);
+        var active = PeriodTable.GetValue(c.Ctx, _ => new Periods()).Active;
+        if (delta > 0) { active.AddOrUpdate(period, 1, (_, n) => n + 1); return 0; }
+        while (true)
+        {
+            if (!active.TryGetValue(period, out var n) || n == 0) return TimerrNoCanDo;
+            if (active.TryUpdate(period, n - 1, n)) return 0;
+        }
+    }
+
     protected override void Define()
     {
         WaveOutApi.Define((name, argc, handler) => Std(W, name, argc, handler));
@@ -53,6 +72,24 @@ public sealed class WinmmService : Win32Service
             Std(W, name, 3, c => (c[2] & 0x80000000) != 0 ? InvalHandle : BadDeviceId);
 
         Std(W, "timeGetTime", 0, _ => (uint)Environment.TickCount64);
+        // Timer resolution. On a Windows host (including Wine) these go to the host's winmm: timeBeginPeriod really changes the timer resolution that the host's Sleep and timers (which the
+        // guest's Sleep and timeSetEvent use) run at, and TIMECAPS has the same 8-byte layout. Elsewhere: the documented range 1..1000000 ms, and every timeEndPeriod must match a timeBeginPeriod.
+        Std(W, "timeGetDevCaps", 2, c =>
+        {
+            if (c[0] == 0 || c[1] < 8) return TimerrNoCanDo;
+            if (OperatingSystem.IsWindows())
+            {
+                Span<byte> caps = stackalloc byte[8];
+                uint r;
+                unsafe { fixed (byte* p = caps) r = (uint)HostBridge.HostInvoke.Call(HostBridge.HostExports.Get("winmm.dll", "timeGetDevCaps"), [(nint)p, 8]); }
+                if (r == 0) c.Mem.Write(c[0], caps);
+                return r;
+            }
+            c.Mem.WriteUInt32(c[0], 1); c.Mem.WriteUInt32(c[0] + 4, 1_000_000);
+            return 0;
+        });
+        Std(W, "timeBeginPeriod", 1, c => Period(c, +1));
+        Std(W, "timeEndPeriod", 1, c => Period(c, -1));
         Std(W, "timeSetEvent", 5, SetEvent);
         Std(W, "timeKillEvent", 1, c =>
         {

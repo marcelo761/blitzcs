@@ -393,6 +393,143 @@
       "type": "Blitz3DCS.Runtime.LegacyStrings",
       "method": "CurrentTime",
       "parameters": []
+    },
+    {
+      "name": "KeyDown",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "KeyDown",
+      "parameters": [
+        "Integer"
+      ]
+    },
+    {
+      "name": "KeyHit",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "KeyHit",
+      "parameters": [
+        "Integer"
+      ]
+    },
+    {
+      "name": "GetKey",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "GetKey",
+      "parameters": []
+    },
+    {
+      "name": "WaitKey",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "WaitKey",
+      "parameters": []
+    },
+    {
+      "name": "FlushKeys",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "FlushKeys",
+      "parameters": []
+    },
+    {
+      "name": "MouseDown",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "MouseDown",
+      "parameters": [
+        "Integer"
+      ]
+    },
+    {
+      "name": "MouseHit",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "MouseHit",
+      "parameters": [
+        "Integer"
+      ]
+    },
+    {
+      "name": "GetMouse",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "GetMouse",
+      "parameters": []
+    },
+    {
+      "name": "WaitMouse",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "WaitMouse",
+      "parameters": []
+    },
+    {
+      "name": "MouseWait",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "MouseWait",
+      "parameters": []
+    },
+    {
+      "name": "MouseX",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "MouseX",
+      "parameters": []
+    },
+    {
+      "name": "MouseY",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "MouseY",
+      "parameters": []
+    },
+    {
+      "name": "MouseZ",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "MouseZ",
+      "parameters": []
+    },
+    {
+      "name": "MouseXSpeed",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "MouseXSpeed",
+      "parameters": []
+    },
+    {
+      "name": "MouseYSpeed",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "MouseYSpeed",
+      "parameters": []
+    },
+    {
+      "name": "MouseZSpeed",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "MouseZSpeed",
+      "parameters": []
+    },
+    {
+      "name": "FlushMouse",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "FlushMouse",
+      "parameters": []
+    },
+    {
+      "name": "MoveMouse",
+      "assembly": "../../src/Blitz3DCS.Windowing/bin/Release/net10.0/Blitz3DCS.Windowing.dll",
+      "type": "Blitz3DCS.Windowing.LegacyInput",
+      "method": "MoveMouse",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ]
     }
   ]
 }

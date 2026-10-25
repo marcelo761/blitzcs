@@ -54,9 +54,16 @@ internal static class DsHost
         return false;
     }
 
-    public static nint MapWindow(uint guestHwnd)
+    public static nint MapWindow(Win32Options options, uint guestHwnd)
     {
         if (guestHwnd == 0) return 0;
+        if (options.UsesHostWindowing)
+        {
+            // with the window bridge the guest's HWNDs are the host's own (32-bit significant, sign-extended)
+            var host = HostBridge.HostHandles.ToHost(guestHwnd);
+            return HostBridge.HostInvoke.Call(HostBridge.HostExports.Get("user32.dll", "IsWindow"), [host]) != 0 ? host
+                : throw new ComArgumentException($"HWND 0x{guestHwnd:X8} is not a window of the host.");
+        }
         if (guestHwnd == User32BasicService.DesktopWindow) return DsNative.GetDesktopWindow();
         throw new ComArgumentException($"HWND 0x{guestHwnd:X8} is not a window of this component (only the desktop window and NULL exist).");
     }

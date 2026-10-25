@@ -4,8 +4,8 @@ using System.Runtime.CompilerServices;
 namespace BlitzCS.BinaryCompiler.Win32;
 
 /// <summary>
-/// Winsock bookkeeping and byte-order helpers (WSOCK32 by ordinal, WS2_32 by name). Ordinals checked against a Windows-compatible wsock32 export table (Wine's, which keeps the
-/// Windows ordinals): 8 htonl, 9 htons, 14 ntohl, 15 ntohs, 111 WSAGetLastError, 112 WSASetLastError, 115 WSAStartup, 116 WSACleanup, 151 __WSAFDIsSet.
+/// Winsock bookkeeping and byte-order helpers (WSOCK32 and WS2_32, by name and by ordinal). Ordinals checked against Windows-compatible wsock32 and ws2_32 export tables (Wine's, which keep the
+/// Windows ordinals; both DLLs use the same numbers for these functions): 8 htonl, 9 htons, 14 ntohl, 15 ntohs, 111 WSAGetLastError, 112 WSASetLastError, 115 WSAStartup, 116 WSACleanup, 151 __WSAFDIsSet.
 /// WSAStartup negotiates down to 2.2 (1.x versions are granted as requested up to 1.1), counts references per process and fills WSADATA (iMaxSockets/iMaxUdpDg 0, ignored since 2.0);
 /// a zero major version fails with WSAVERNOTSUPPORTED (10092) and a major above 2 with the same code while still reporting wHighVersion 2.2. WSACleanup without a prior WSAStartup
 /// fails with WSANOTINITIALISED (10093). WSAGetLastError is GetLastError (the same per-thread value on Windows). __WSAFDIsSet scans a real fd_set. SOCKETS THEMSELVES (socket, connect,
@@ -23,7 +23,7 @@ public sealed class WinsockCoreService : Win32Service
         void Both(string name, ushort ordinal, int argc, Win32Handler h)
         {
             StdOrdinal("WSOCK32.dll", name, ordinal, argc, h);
-            Std("WS2_32.dll", name, argc, h);
+            StdOrdinal("WS2_32.dll", name, ordinal, argc, h);
         }
         Both("htonl", 8, 1, c => BinaryPrimitives.ReverseEndianness(c[0]));
         Both("htons", 9, 1, c => BinaryPrimitives.ReverseEndianness((ushort)c[0]));

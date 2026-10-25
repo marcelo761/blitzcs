@@ -42,6 +42,15 @@ if [ ! -e "$WINEPREFIX/system.reg" ]; then
   wineboot -i >/dev/null 2>&1 || wineboot -u >/dev/null 2>&1 || true
   wineserver -w 2>/dev/null || true
 fi
+# Opt-in (default unchanged): BLITZCS_WINE_GRAPHICS=1 copies the Wine build's vkd3d DLLs into the prefix when they are missing. Wine's ddraw loads wined3d, which imports
+# libvkd3d-1.dll, and wineboot does not install it: without it LoadLibrary("ddraw.dll") fails in a 64-bit process (the host bridge of docs/binary-user32-bridge.md) and in a 32-bit one.
+if [ -n "${BLITZCS_WINE_GRAPHICS:-}" ]; then
+  for _arch in x86_64-windows:system32 i386-windows:syswow64; do
+    _src="$BLITZCS_WINE_ROOT/lib/vkd3d/${_arch%%:*}"; _dst="$WINEPREFIX/drive_c/windows/${_arch##*:}"
+    [ -d "$_src" ] && [ -d "$_dst" ] && for _f in "$_src"/libvkd3d*.dll; do [ -e "$_dst/$(basename "$_f")" ] || cp "$_f" "$_dst/"; done
+  done
+  unset _arch _src _dst _f
+fi
 # Opt-in (default unchanged): BLITZCS_WINE_AUDIO_DRIVER=pulse selects winepulse.drv, which honours PULSE_SINK. Proton-CachyOS otherwise loads
 # winepipewire.drv, which ignores PULSE_SINK (see docs/wine-audio-routing.md).
 if [ -n "${BLITZCS_WINE_AUDIO_DRIVER:-}" ]; then

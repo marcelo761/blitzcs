@@ -147,3 +147,14 @@ for row in json.loads(Path('artifacts/m19/local-differential.json').read_text())
     if row['name'] != 'm19-strings':
         assert Path(row['source']).name + ':line 1' in row['actual']['stderr']
 PY
+# M20: published window/input bindings and BASIC/C# state across native host cycles.
+mkdir -p artifacts/m20
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/LegacyInput/lifecycle.bb -o artifacts/m20/lifecycle/main.dll --externals samples/LegacyInput/runtime.json
+env SDL_VIDEO_DRIVER=dummy dotnet artifacts/m20/lifecycle/main.dll > artifacts/m20/lifecycle.stdout
+python3 - <<'PY'
+from pathlib import Path
+assert Path('artifacts/m20/lifecycle.stdout').read_text().splitlines() == [
+    '1', '37,53,0,0', '0,0,0,0,0,0', '0'] * 3 + ['3']
+assert Path('artifacts/m20/lifecycle/Blitz3DCS.Windowing.dll').is_file()
+PY
+env SDL_VIDEO_DRIVER=dummy python3 tools/differential.py --manifest tests/Compatibility/milestone20.json --externals samples/LegacyInput/runtime.json --report artifacts/m20/local-differential.json

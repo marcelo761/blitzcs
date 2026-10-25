@@ -4,6 +4,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/Blitz3DCS.Windowing/Blitz3DCS.Windowing.csproj" />
     <ProjectReference Include="../../src/Blitz3DCS.Runtime/Blitz3DCS.Runtime.csproj" />
     <ProjectReference Include="../../src/BlitzCS.CLI/BlitzCS.CLI.csproj" />
     <ProjectReference Include="../../src/BlitzCS.LegacyRuntime/BlitzCS.LegacyRuntime.csproj" />

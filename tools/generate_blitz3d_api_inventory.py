@@ -54,7 +54,11 @@ def category(module: str, name: str) -> str:
 # Deliberately narrow: these names have explicit public captured comparisons.
 STRING_FUNCTIONS = 'String Left Right Mid Instr Replace Upper Lower Trim LSet RSet Chr Asc Len Hex Bin CurrentDate CurrentTime'.lower().split()
 
+INPUT_FUNCTIONS = 'KeyDown KeyHit GetKey WaitKey FlushKeys MouseDown MouseHit GetMouse WaitMouse MouseWait MouseX MouseY MouseZ MouseXSpeed MouseYSpeed MouseZSpeed FlushMouse MoveMouse'.lower().split()
+
 VALIDATION = {
+    **dict.fromkeys([name for name in INPUT_FUNCTIONS if name not in {'waitmouse', 'mousewait'}],
+                    ('docs/evidence/m20-original-input.json', 'docs/evidence/m20-managed-input.json', 'scoped native XTest input comparison on X11; 13/14 behavior observations match with explicit SDL focus-release divergence; US-compatible layout, no renderer or Win32 host parity')),
     **dict.fromkeys(STRING_FUNCTIONS[:-2],
                     ('docs/evidence/m19-original.json', 'docs/evidence/m19-new-comparison.json', 'one deterministic string program, including all 256 byte values for case/trim; six error diagnostics have known process-termination divergence; no clock differential')),
     **dict.fromkeys('CreateBank FreeBank BankSize ResizeBank CopyBank PeekByte PeekShort PeekInt PeekFloat PokeByte PokeShort PokeInt PokeFloat'.lower().split(),
@@ -98,6 +102,13 @@ def validation_evidence(repo: Path, key: str) -> list[str]:
                 and comparison.get('unexpected_mismatch') == 0
                 and original.get('source_sha256')
                 and comparison.get('source_sha256') == original['source_sha256']):
+            return []
+    if key in INPUT_FUNCTIONS and evidence:
+        original = json.loads((repo / evidence[0]).read_text())
+        comparison = json.loads((repo / evidence[1]).read_text())
+        if not (original.get('exit_code') == comparison.get('exit_code') == 0
+                and original.get('fixture_sha256')
+                and comparison.get('fixture_sha256') == original['fixture_sha256']):
             return []
     return evidence
 
@@ -190,6 +201,11 @@ def build(root: Path, repo: Path, scp: Path | None = None) -> dict:
                 row['functional_scope'] = 'real local host clock formatting; no historical clock differential claimed'
             else:
                 row['functional_scope'] = 'managed CP1252 string operations and explicit encoding failures; see cited focused tests'
+        if key in INPUT_FUNCTIONS and managed_sources:
+            tests = ['tests/Blitz3DCS.Windowing.Tests/LegacyInputStateTests.cs', 'tests/Blitz3DCS.Windowing.Tests/SdlWindowBackendTests.cs', 'tests/BlitzCS.CLI.Tests/LegacyInputBindingTests.cs']
+            row['functional_evidence'] = sorted(set(managed_sources)) + [test for test in tests if (repo / test).is_file()]
+            row['states']['functional'] = 'implemented; focused managed and native tests cited'
+            row['functional_scope'] = 'explicit SDL3 window host; native routing and buffered legacy input; no Graphics3D renderer or Win32 HWND adapter'
         row['validation_evidence'] = evidence
         row['validation_scope'] = validation[2] if evidence else None
         row['descriptor_conflict'] = len(by_name[key]) > 1
@@ -247,7 +263,7 @@ def markdown(data: dict) -> str:
         for row in rows:
             out.append(f"| `{row['descriptor']}` | `{Path(row['source']).name}:{row['line']}` | {'yes' if row['states']['signature_known'] else 'internal ABI only'} | {'typed' if row['states']['typed_declaration'] else 'none'} | {'managed source' if row['states']['executable_binding'] else 'none established'} | {row['states']['functional']} | {row['states']['validated']} |")
     out += ['', 'Descriptor markers: `%` integer, `#` float, `$` string; no return marker means void. Internal `_bb…` registrations omit their ABI and are not public callable signatures.', '',
-            'The full 18-function string family has managed implementations and focused test evidence; historical validation is limited to the 16 deterministic functions with a completed comparison. CurrentDate and CurrentTime use the real local host clock and have no historical clock differential. Next family candidate: scalar math, followed by stream/file I/O. SCP lexical counts help rank candidates but do not prove resolved call frequency.', '']
+            'The full 18-function string family has managed implementations and focused test evidence; historical validation is limited to the 16 deterministic functions with a completed comparison. CurrentDate and CurrentTime use the real local host clock and have no historical clock differential. The keyboard/mouse family has 18 executable bindings through an explicit SDL3 window host, with validation scope documented separately in m20-windowing-input.md. Graphics declarations remain distinct from rendering implementations. Next family candidates include scalar math and stream/file I/O. SCP lexical counts help rank candidates but do not prove resolved call frequency.', '']
     return '\n'.join(out)
 
 

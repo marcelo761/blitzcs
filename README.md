@@ -10,7 +10,7 @@ BlitzCS is an independent project. It is not an official Blitz Research, Microso
 
 ## Quick start
 
-For the verified full-solution build, use **Linux**, the **.NET 10 SDK**, and a **C compiler available as `cc`**. The native integration test project explicitly requires Linux. Run these commands from a checkout of this repository:
+For the verified full-solution build, use **Linux**, the **.NET 10 SDK**, and a **C compiler available as `cc`**. The native integration test project explicitly requires Linux. Window/input tests additionally require SDL3 and, on Linux, Xvfb; interactive samples require a desktop display. Run these commands from a checkout of this repository:
 
 ```bash
 dotnet restore BlitzCS.slnx
@@ -45,6 +45,7 @@ This is a source distribution: no published NuGet package, global tool installat
 | `BlitzCS.LegacyRuntime` | Optional legacy errors and checked memory-bank services |
 | `Blitz3DCS.Runtime` | Engine-specific legacy file, string and system services |
 | `Blitz3DCS.Audio` | FSOUND compatibility layer, SDL3 output and managed PCM mixing |
+| `Blitz3DCS.Windowing` | Explicit SDL3 window host and legacy keyboard/mouse bindings; no renderer |
 
 **BlitzCS is language infrastructure; Blitz3DCS is an engine integration built on it.** The compiler has no dependency on the Blitz3DCS projects. Other engines can register their own typed external functions without adopting Blitz3D APIs.
 
@@ -137,7 +138,7 @@ Audio evidence includes non-silent PCM measured after SDL's disk output and play
 
 ## Current limitations and SCP status
 
-SCP: Containment Breach is a real-world compatibility case study. Its original sources and assets are **not distributed here**. The M19 audit records integrated syntax validation of `Main.bb` and its Include tree, with **5 of 30 files compiling independently**, up from 3/30. With the SCP contract catalog, integrated semantic compilation stops at **`fullscreen_window_fix.bb:84:2`, `MoveMouse`**. Checked banks and a real C buffer bridge work; `api_GetClientRect` has only a declared adapter contract and still requires an executable Win32 host binding. Graphics signatures remain unbound. The game assembly has not been emitted and the game does not run on BlitzCS. See [latest SCP audit and API coverage](docs/historical-api-m19.md).
+SCP: Containment Breach is a real-world compatibility case study. Its original sources and assets are **not distributed here**. The M20 audit preserves integrated syntax validation of `Main.bb` and its Include tree, with **5 of 30 files compiling independently**, unchanged from M19. With the SCP contract catalog, integrated semantic compilation now stops at **`fullscreen_window_fix.bb:95:2`, `RenderWorld`**, after resolving the previous input calls. Checked banks and a real C buffer bridge work; `api_GetClientRect` has only a declared adapter contract and still requires an executable Win32 host binding. Graphics signatures remain unbound. The game assembly has not been emitted and the game does not run on BlitzCS. See [window/input coverage and current SCP audit](docs/m20-windowing-input.md).
 
 There is no renderer, Vulkan backend, physics implementation or editor. Some native commands and external dependencies remain unavailable. `SystemProperty("AppHWND")` reports an unsupported capability without a real window host. Direct array/object interoperability is outside the public primitive `BB.` bridge. Floating-point boundaries, encodings and other historical corner cases still need broader differential coverage. `Print` targets the console here, while original Blitz3D draws to a graphical surface.
 
@@ -161,3 +162,7 @@ Copyright 2026 Marcelo Buratti de Freitas Filho. Project created and led by Marc
 Original BlitzCS and Blitz3DCS contributions in this repository are licensed under the **Apache License 2.0**, subject to the explicit scope and exclusions in [LICENSING.md](LICENSING.md). See [LICENSE](LICENSE), [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Third-party code, dependencies, excerpts and separately licensed fixtures retain their own terms.
 
 Blitz Research Ltd and the original Blitz3D authors provided the legacy compiler/runtime reference. Microsoft and .NET contributors provide .NET and Roslyn; SDL, libsndfile and xUnit contributors provide important runtime and test dependencies. SCP: Containment Breach and its contributors provide a separately licensed compatibility target. These acknowledgments do not imply endorsement or transfer of ownership.
+
+## Legacy window and input host
+
+The [M20 input example](samples/LegacyInput/window-input.bb) opens an SDL3 window and processes native keyboard/mouse events through typed external bindings, with shared BASIC/C# state. See [setup, contracts and verified limitations](docs/m20-windowing-input.md). This window host supplies no 3D rendering or Win32 adapter; the original SCP project still has unresolved runtime dependencies.

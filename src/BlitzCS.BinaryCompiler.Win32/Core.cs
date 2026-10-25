@@ -340,6 +340,20 @@ public sealed class Win32Options
     /// <summary>DirectSound reached through <c>dsound.dll!DirectSoundCreate</c> (see docs/binary-com.md). Default: the host's native dsound on a Windows host (including Wine), unavailable elsewhere (DSERR_NODRIVER). None: always DSERR_NODRIVER.</summary>
     public DirectSoundBackendKind DirectSound { get; init; } = DirectSoundBackendKind.Default;
 
+    /// <summary>
+    /// user32/gdi32 (windows, messages, GDI text) and the DirectX COM creation functions. Default: bridged to the host's native DLLs on a Windows host (including Wine), absent elsewhere
+    /// (docs/binary-user32-bridge.md). None: the previous sandbox subset (only the desktop window exists, every other window API faults by name). Host on a non-Windows host throws.
+    /// </summary>
+    public HostWindowingKind HostWindowing { get; init; } = HostWindowingKind.Default;
+
+    /// <summary>True when <see cref="HostWindowing"/> selects the host bridge on this host.</summary>
+    public bool UsesHostWindowing => HostWindowing switch
+    {
+        HostWindowingKind.None => false,
+        HostWindowingKind.Host => OperatingSystem.IsWindows() ? true : throw new Win32UsageException("Win32Options.HostWindowing = Host needs a Windows host (Windows or Wine)."),
+        _ => OperatingSystem.IsWindows(),
+    };
+
     /// <summary>waveOut backend (see docs/binary-audio.md). Default: HostWinmm on a Windows host (including Wine), None elsewhere. The environment variable BLITZCS_AUDIO=host|virtual|none overrides it.</summary>
     public WaveOutBackendKind WaveOut { get; init; } = WaveOutBackendKind.Default;
     /// <summary>VirtualSink: records every consumed buffer to this RIFF WAV file. HostWinmm: records every buffer written. Ignored (with a diagnostic) for the None backend.</summary>

@@ -45,7 +45,7 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
     {
         state = new SharedState { Refs = 1 };
         registry = state.Registry;
-        Services = state.Services = [.. services ?? DefaultServices()];
+        Services = state.Services = [.. services ?? DefaultServices(options)];
         foreach (var s in Services) s.Register(registry);
         Context = state.Context = new Win32Context(options ?? new Win32Options());
         Context.Process.RegisterSystem(registry.All.Select(a => a.Dll));
@@ -94,14 +94,24 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         };
     }
 
-    /// <summary>The standard composition. Each service can be omitted or replaced independently.</summary>
-    public static IEnumerable<IWin32Service> DefaultServices() =>
+    /// <summary>
+    /// The standard composition. Each service can be omitted or replaced independently. With <see cref="Win32Options.UsesHostWindowing"/> (the default on a Windows host) user32/gdi32 are
+    /// the host bridge (<see cref="HostUser32Service"/>, <see cref="HostGdi32Service"/>, <see cref="HostDirectXService"/>) and the sandbox subset keeps only MessageBoxA; elsewhere those
+    /// services are not part of the composition at all, so their APIs stay absent and fault by name.
+    /// </summary>
+    public static IEnumerable<IWin32Service> DefaultServices(Win32Options? options = null)
+    {
+        var host = (options ?? new Win32Options()).UsesHostWindowing;
+        return [.. Common(host), .. host ? new IWin32Service[] { new HostUser32Service(), new HostGdi32Service(), new HostDirectXService() } : []];
+    }
+
+    private static IEnumerable<IWin32Service> Common(bool hostWindowing) =>
     [
         new HeapService(), new MemoryService(), new SyncService(), new TlsService(), new ProcessService(),
         new StringService(), new FileService(), new CrtService(), new WinsockService(),
         new Advapi32RegistryService(),
         new Ole32Service(),
-        new User32BasicService(),
+        new User32BasicService(messageBoxOnly: hostWindowing),
         new MsvcrtRuntimeService(),
         new Kernel32ExtraService(),
         new Kernel32StartupService(),
