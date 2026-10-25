@@ -43,7 +43,7 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
     [Fact]
     public void ResolverBindsOnlyWhatIsImplemented()
     {
-        using var r = new Win32ImportResolver();
+        using var r = new Win32ImportResolver(new Win32Options { HostWindowing = HostWindowingKind.None });   // the sandbox user32 subset (the host bridge: HostWindowBridgeTests)
         Assert.NotNull(r.Resolve("kernel32.dll", "HeapAlloc", null));
         Assert.NotNull(r.Resolve("KERNEL32", "GetVersion", null)); // dll name rules: case-insensitive, extension optional
         Assert.Null(r.Resolve("kernel32.dll", "heapalloc", null)); // function names are case-sensitive
