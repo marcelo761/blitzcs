@@ -58,6 +58,7 @@ def main():
     for argument in ('sdk', 'host', 'proton', 'compatdata', 'steam', 'out'):
         parser.add_argument('--' + argument, type=Path, required=True)
     parser.add_argument('--display', required=True, help='Use an isolated test display')
+    parser.add_argument('--gc-regression', action='store_true', help='Also stress real native bindings and verify rendering after GC')
     options = parser.parse_args()
     sdk = options.sdk.resolve()
     source = sdk / 'help/commands/3d_examples/CreateCube.bb'
@@ -82,6 +83,15 @@ def main():
     commands = [
         ('compile', ['build', windows(source), '-o', windows(assembly), '--externals', windows(root/'providers/OriginalBlitz3D/runtime.json')]),
         ('execute', ['--run', windows(assembly), windows(runtime), '--capture', windows(frame)])]
+    gc_frame = out / 'NativeGC.bmp'
+    if options.gc_regression:
+        if gc_frame.exists():
+            gc_frame.unlink()
+        fixture = root / 'tests/fixtures/original-runtime/native-gc-render.bb'
+        gc_assembly = out / 'NativeGC.dll'
+        commands.extend([
+            ('gc-compile', ['build', windows(fixture), '-o', windows(gc_assembly), '--externals', windows(root/'providers/OriginalBlitz3D/runtime.json')]),
+            ('gc-execute', ['--run', windows(gc_assembly), windows(runtime), '--capture', windows(gc_frame)])])
     results = []
     try:
         for stage, arguments in commands:
@@ -117,8 +127,10 @@ def main():
             results.append(dict(stage=stage, exitCode=code, managedLog=managed.name))
             if code or 'X86' not in output or '.NET 10.' not in output:
                 raise RuntimeError(stage + ' did not complete in .NET 10 x86: ' + output)
-            if stage == 'execute' and 'Original Blitz3D runtime:' not in output:
+            if stage.endswith('execute') and 'Original Blitz3D runtime:' not in output:
                 raise RuntimeError('Original engine initialization was not confirmed')
+            if stage == 'gc-execute' and 'PASS original-runtime native ABI regression' not in output:
+                raise RuntimeError('Native ABI regression did not reach its completion marker')
         metrics = bitmap_metrics(frame)
         if metrics['nonBlackPixels'] == 0 or metrics['center'] == metrics['corner']:
             raise RuntimeError('No cube rendering established: ' + json.dumps(metrics))
@@ -126,6 +138,11 @@ def main():
             raise RuntimeError('Original input integrity check failed')
         report = dict(success=True, architecture='x86', compiler='BlitzCS', engine='original runtime.dll',
                       sourceUnchanged=True, runtimeUnchanged=True, stages=results, frame=metrics, **identities)
+        if options.gc_regression:
+            gc_metrics = bitmap_metrics(gc_frame)
+            if gc_metrics['nonBlackPixels'] == 0 or gc_metrics['center'] == gc_metrics['corner']:
+                raise RuntimeError('Native ABI regression did not establish rendering: ' + json.dumps(gc_metrics))
+            report['nativeGCFrame'] = gc_metrics
     except Exception as error:
         report = dict(success=False, error=str(error), stages=results, **identities)
         raise

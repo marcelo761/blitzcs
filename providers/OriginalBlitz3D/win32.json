@@ -1,0 +1,95 @@
+{
+  "functions": [
+    {
+      "name": "api_GetClientRect",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Win32",
+      "method": "GetClientRect",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true
+    },
+    {
+      "name": "api_GetDesktopWindow",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Win32",
+      "method": "GetDesktopWindow",
+      "parameters": [],
+      "returnType": "Integer"
+    },
+    {
+      "name": "api_SetWindowLong",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Win32",
+      "method": "SetWindowLong",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "api_SetWindowPos",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Win32",
+      "method": "SetWindowPos",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "api_GetFocus",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Win32",
+      "method": "GetFocus",
+      "parameters": [],
+      "returnType": "Integer"
+    },
+    {
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Win32",
+      "legacyAdapter": true,
+      "name": "GlobalMemoryStatus",
+      "method": "GlobalMemoryStatus",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Void",
+      "objectAdapterParameters": [
+        0
+      ]
+    },
+    {
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Win32",
+      "legacyAdapter": true,
+      "name": "api_GetModuleFileName",
+      "method": "GetModuleFileName",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacySignatureOverride": {
+        "parameters": [
+          "Integer",
+          "Integer",
+          "Integer"
+        ],
+        "reason": "GetModuleFileNameA writes to a mutable byte buffer. Original SCP Update.bb supplies a bank, although user32.decls incorrectly marks this output parameter as String."
+      }
+    }
+  ]
+}

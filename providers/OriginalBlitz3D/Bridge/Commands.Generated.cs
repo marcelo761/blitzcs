@@ -3,12 +3,14 @@ namespace BlitzCS.OriginalRuntime;
 public static partial class Commands
 {
     public static void RuntimeStats() { Call("RuntimeStats", "Void", [], []); }
+    public static int LoadSound(string p0) { return (int)Call("LoadSound", "Integer", ["String"], [p0])!; }
     public static void FreeSound(int p0) { Call("FreeSound", "Void", ["Integer"], [p0]); }
     public static void LoopSound(int p0) { Call("LoopSound", "Void", ["Integer"], [p0]); }
     public static void SoundPitch(int p0, int p1) { Call("SoundPitch", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static void SoundVolume(int p0, float p1) { Call("SoundVolume", "Void", ["Integer", "Float"], [p0, p1]); }
     public static void SoundPan(int p0, float p1) { Call("SoundPan", "Void", ["Integer", "Float"], [p0, p1]); }
     public static int PlaySound(int p0) { return (int)Call("PlaySound", "Integer", ["Integer"], [p0])!; }
+    public static int PlayMusic(string p0) { return (int)Call("PlayMusic", "Integer", ["String"], [p0])!; }
     public static int PlayCDTrack(int p0, int p1) { return (int)Call("PlayCDTrack", "Integer", ["Integer", "Integer"], [p0, p1])!; }
     public static void StopChannel(int p0) { Call("StopChannel", "Void", ["Integer"], [p0]); }
     public static void PauseChannel(int p0) { Call("PauseChannel", "Void", ["Integer"], [p0]); }
@@ -17,6 +19,7 @@ public static partial class Commands
     public static void ChannelVolume(int p0, float p1) { Call("ChannelVolume", "Void", ["Integer", "Float"], [p0, p1]); }
     public static void ChannelPan(int p0, float p1) { Call("ChannelPan", "Void", ["Integer", "Float"], [p0, p1]); }
     public static int ChannelPlaying(int p0) { return (int)Call("ChannelPlaying", "Integer", ["Integer"], [p0])!; }
+    public static int Load3DSound(string p0) { return (int)Call("Load3DSound", "Integer", ["String"], [p0])!; }
     public static int CreateBank(int p0) { return (int)Call("CreateBank", "Integer", ["Integer"], [p0])!; }
     public static void FreeBank(int p0) { Call("FreeBank", "Void", ["Integer"], [p0]); }
     public static int BankSize(int p0) { return (int)Call("BankSize", "Integer", ["Integer"], [p0])!; }
@@ -32,6 +35,8 @@ public static partial class Commands
     public static void PokeFloat(int p0, int p1, float p2) { Call("PokeFloat", "Void", ["Integer", "Integer", "Float"], [p0, p1, p2]); }
     public static int ReadBytes(int p0, int p1, int p2, int p3) { return (int)Call("ReadBytes", "Integer", ["Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3])!; }
     public static int WriteBytes(int p0, int p1, int p2, int p3) { return (int)Call("WriteBytes", "Integer", ["Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3])!; }
+    public static int CallDLL(string p0, string p1, int p2, int p3) { return (int)Call("CallDLL", "Integer", ["String", "String", "Integer", "Integer"], [p0, p1, p2, p3])!; }
+    public static void LoaderMatrix(string p0, float p1, float p2, float p3, float p4, float p5, float p6, float p7, float p8, float p9) { Call("LoaderMatrix", "Void", ["String", "Float", "Float", "Float", "Float", "Float", "Float", "Float", "Float", "Float"], [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9]); }
     public static void HWMultiTex(int p0) { Call("HWMultiTex", "Void", ["Integer"], [p0]); }
     public static int HWTexUnits() { return (int)Call("HWTexUnits", "Integer", [], [])!; }
     public static int GfxDriverCaps3D() { return (int)Call("GfxDriverCaps3D", "Integer", [], [])!; }
@@ -50,6 +55,8 @@ public static partial class Commands
     public static int TrisRendered() { return (int)Call("TrisRendered", "Integer", [], [])!; }
     public static float Stats3D(int p0) { return (float)Call("Stats3D", "Float", ["Integer"], [p0])!; }
     public static int CreateTexture(int p0, int p1, int p2, int p3) { return (int)Call("CreateTexture", "Integer", ["Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3])!; }
+    public static int LoadTexture(string p0, int p1) { return (int)Call("LoadTexture", "Integer", ["String", "Integer"], [p0, p1])!; }
+    public static int LoadAnimTexture(string p0, int p1, int p2, int p3, int p4, int p5) { return (int)Call("LoadAnimTexture", "Integer", ["String", "Integer", "Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4, p5])!; }
     public static void FreeTexture(int p0) { Call("FreeTexture", "Void", ["Integer"], [p0]); }
     public static void TextureBlend(int p0, int p1) { Call("TextureBlend", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static void TextureCoords(int p0, int p1) { Call("TextureCoords", "Void", ["Integer", "Integer"], [p0, p1]); }
@@ -58,11 +65,14 @@ public static partial class Commands
     public static void PositionTexture(int p0, float p1, float p2) { Call("PositionTexture", "Void", ["Integer", "Float", "Float"], [p0, p1, p2]); }
     public static int TextureWidth(int p0) { return (int)Call("TextureWidth", "Integer", ["Integer"], [p0])!; }
     public static int TextureHeight(int p0) { return (int)Call("TextureHeight", "Integer", ["Integer"], [p0])!; }
+    public static string TextureName(int p0) { return (string)Call("TextureName", "String", ["Integer"], [p0])!; }
     public static void SetCubeFace(int p0, int p1) { Call("SetCubeFace", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static void SetCubeMode(int p0, int p1) { Call("SetCubeMode", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static int TextureBuffer(int p0, int p1) { return (int)Call("TextureBuffer", "Integer", ["Integer", "Integer"], [p0, p1])!; }
     public static void ClearTextureFilters() { Call("ClearTextureFilters", "Void", [], []); }
+    public static void TextureFilter(string p0, int p1) { Call("TextureFilter", "Void", ["String", "Integer"], [p0, p1]); }
     public static int CreateBrush(float p0, float p1, float p2) { return (int)Call("CreateBrush", "Integer", ["Float", "Float", "Float"], [p0, p1, p2])!; }
+    public static int LoadBrush(string p0, int p1, float p2, float p3) { return (int)Call("LoadBrush", "Integer", ["String", "Integer", "Float", "Float"], [p0, p1, p2, p3])!; }
     public static void FreeBrush(int p0) { Call("FreeBrush", "Void", ["Integer"], [p0]); }
     public static void BrushColor(int p0, float p1, float p2, float p3) { Call("BrushColor", "Void", ["Integer", "Float", "Float", "Float"], [p0, p1, p2, p3]); }
     public static void BrushAlpha(int p0, float p1) { Call("BrushAlpha", "Void", ["Integer", "Float"], [p0, p1]); }
@@ -71,6 +81,9 @@ public static partial class Commands
     public static int GetBrushTexture(int p0, int p1) { return (int)Call("GetBrushTexture", "Integer", ["Integer", "Integer"], [p0, p1])!; }
     public static void BrushBlend(int p0, int p1) { Call("BrushBlend", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static void BrushFX(int p0, int p1) { Call("BrushFX", "Void", ["Integer", "Integer"], [p0, p1]); }
+    public static int LoadMesh(string p0, int p1) { return (int)Call("LoadMesh", "Integer", ["String", "Integer"], [p0, p1])!; }
+    public static int LoadAnimMesh(string p0, int p1) { return (int)Call("LoadAnimMesh", "Integer", ["String", "Integer"], [p0, p1])!; }
+    public static int LoadAnimSeq(int p0, string p1) { return (int)Call("LoadAnimSeq", "Integer", ["Integer", "String"], [p0, p1])!; }
     public static int CreateMesh(int p0) { return (int)Call("CreateMesh", "Integer", ["Integer"], [p0])!; }
     public static int CreateCube(int p0) { return (int)Call("CreateCube", "Integer", ["Integer"], [p0])!; }
     public static int CreateSphere(int p0, int p1) { return (int)Call("CreateSphere", "Integer", ["Integer", "Integer"], [p0, p1])!; }
@@ -156,19 +169,23 @@ public static partial class Commands
     public static void LightConeAngles(int p0, float p1, float p2) { Call("LightConeAngles", "Void", ["Integer", "Float", "Float"], [p0, p1, p2]); }
     public static int CreatePivot(int p0) { return (int)Call("CreatePivot", "Integer", ["Integer"], [p0])!; }
     public static int CreateSprite(int p0) { return (int)Call("CreateSprite", "Integer", ["Integer"], [p0])!; }
+    public static int LoadSprite(string p0, int p1, int p2) { return (int)Call("LoadSprite", "Integer", ["String", "Integer", "Integer"], [p0, p1, p2])!; }
     public static void RotateSprite(int p0, float p1) { Call("RotateSprite", "Void", ["Integer", "Float"], [p0, p1]); }
     public static void ScaleSprite(int p0, float p1, float p2) { Call("ScaleSprite", "Void", ["Integer", "Float", "Float"], [p0, p1, p2]); }
     public static void HandleSprite(int p0, float p1, float p2) { Call("HandleSprite", "Void", ["Integer", "Float", "Float"], [p0, p1, p2]); }
     public static void SpriteViewMode(int p0, int p1) { Call("SpriteViewMode", "Void", ["Integer", "Integer"], [p0, p1]); }
+    public static int LoadMD2(string p0, int p1) { return (int)Call("LoadMD2", "Integer", ["String", "Integer"], [p0, p1])!; }
     public static void AnimateMD2(int p0, int p1, float p2, int p3, int p4, float p5) { Call("AnimateMD2", "Void", ["Integer", "Integer", "Float", "Integer", "Integer", "Float"], [p0, p1, p2, p3, p4, p5]); }
     public static float MD2AnimTime(int p0) { return (float)Call("MD2AnimTime", "Float", ["Integer"], [p0])!; }
     public static int MD2AnimLength(int p0) { return (int)Call("MD2AnimLength", "Integer", ["Integer"], [p0])!; }
     public static int MD2Animating(int p0) { return (int)Call("MD2Animating", "Integer", ["Integer"], [p0])!; }
+    public static int LoadBSP(string p0, float p1, int p2) { return (int)Call("LoadBSP", "Integer", ["String", "Float", "Integer"], [p0, p1, p2])!; }
     public static void BSPLighting(int p0, int p1) { Call("BSPLighting", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static void BSPAmbientLight(int p0, float p1, float p2, float p3) { Call("BSPAmbientLight", "Void", ["Integer", "Float", "Float", "Float"], [p0, p1, p2, p3]); }
     public static int CreateMirror(int p0) { return (int)Call("CreateMirror", "Integer", ["Integer"], [p0])!; }
     public static int CreatePlane(int p0, int p1) { return (int)Call("CreatePlane", "Integer", ["Integer", "Integer"], [p0, p1])!; }
     public static int CreateTerrain(int p0, int p1) { return (int)Call("CreateTerrain", "Integer", ["Integer", "Integer"], [p0, p1])!; }
+    public static int LoadTerrain(string p0, int p1) { return (int)Call("LoadTerrain", "Integer", ["String", "Integer"], [p0, p1])!; }
     public static void TerrainDetail(int p0, int p1, int p2) { Call("TerrainDetail", "Void", ["Integer", "Integer", "Integer"], [p0, p1, p2]); }
     public static void TerrainShading(int p0, int p1) { Call("TerrainShading", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static float TerrainX(int p0, float p1, float p2, float p3) { return (float)Call("TerrainX", "Float", ["Integer", "Float", "Float", "Float"], [p0, p1, p2, p3])!; }
@@ -237,6 +254,7 @@ public static partial class Commands
     public static void EntityParent(int p0, int p1, int p2) { Call("EntityParent", "Void", ["Integer", "Integer", "Integer"], [p0, p1, p2]); }
     public static int CountChildren(int p0) { return (int)Call("CountChildren", "Integer", ["Integer"], [p0])!; }
     public static int GetChild(int p0, int p1) { return (int)Call("GetChild", "Integer", ["Integer", "Integer"], [p0, p1])!; }
+    public static int FindChild(int p0, string p1) { return (int)Call("FindChild", "Integer", ["Integer", "String"], [p0, p1])!; }
     public static void PaintEntity(int p0, int p1) { Call("PaintEntity", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static void EntityColor(int p0, float p1, float p2, float p3) { Call("EntityColor", "Void", ["Integer", "Float", "Float", "Float"], [p0, p1, p2, p3]); }
     public static void EntityAlpha(int p0, float p1) { Call("EntityAlpha", "Void", ["Integer", "Float"], [p0, p1]); }
@@ -249,11 +267,28 @@ public static partial class Commands
     public static void HideEntity(int p0) { Call("HideEntity", "Void", ["Integer"], [p0]); }
     public static void ShowEntity(int p0) { Call("ShowEntity", "Void", ["Integer"], [p0]); }
     public static void FreeEntity(int p0) { Call("FreeEntity", "Void", ["Integer"], [p0]); }
+    public static void NameEntity(int p0, string p1) { Call("NameEntity", "Void", ["Integer", "String"], [p0, p1]); }
+    public static string EntityName(int p0) { return (string)Call("EntityName", "String", ["Integer"], [p0])!; }
+    public static string EntityClass(int p0) { return (string)Call("EntityClass", "String", ["Integer"], [p0])!; }
+    public static int OpenFile(string p0) { return (int)Call("OpenFile", "Integer", ["String"], [p0])!; }
+    public static int ReadFile(string p0) { return (int)Call("ReadFile", "Integer", ["String"], [p0])!; }
+    public static int WriteFile(string p0) { return (int)Call("WriteFile", "Integer", ["String"], [p0])!; }
     public static void CloseFile(int p0) { Call("CloseFile", "Void", ["Integer"], [p0]); }
     public static int FilePos(int p0) { return (int)Call("FilePos", "Integer", ["Integer"], [p0])!; }
     public static int SeekFile(int p0, int p1) { return (int)Call("SeekFile", "Integer", ["Integer", "Integer"], [p0, p1])!; }
+    public static int ReadDir(string p0) { return (int)Call("ReadDir", "Integer", ["String"], [p0])!; }
     public static void CloseDir(int p0) { Call("CloseDir", "Void", ["Integer"], [p0]); }
+    public static string NextFile(int p0) { return (string)Call("NextFile", "String", ["Integer"], [p0])!; }
+    public static string CurrentDir() { return (string)Call("CurrentDir", "String", [], [])!; }
+    public static void ChangeDir(string p0) { Call("ChangeDir", "Void", ["String"], [p0]); }
+    public static void CreateDir(string p0) { Call("CreateDir", "Void", ["String"], [p0]); }
+    public static void DeleteDir(string p0) { Call("DeleteDir", "Void", ["String"], [p0]); }
+    public static int FileSize(string p0) { return (int)Call("FileSize", "Integer", ["String"], [p0])!; }
+    public static int FileType(string p0) { return (int)Call("FileType", "Integer", ["String"], [p0])!; }
+    public static void CopyFile(string p0, string p1) { Call("CopyFile", "Void", ["String", "String"], [p0, p1]); }
+    public static void DeleteFile(string p0) { Call("DeleteFile", "Void", ["String"], [p0]); }
     public static int CountGfxDrivers() { return (int)Call("CountGfxDrivers", "Integer", [], [])!; }
+    public static string GfxDriverName(int p0) { return (string)Call("GfxDriverName", "String", ["Integer"], [p0])!; }
     public static void SetGfxDriver(int p0) { Call("SetGfxDriver", "Void", ["Integer"], [p0]); }
     public static int CountGfxModes() { return (int)Call("CountGfxModes", "Integer", [], [])!; }
     public static int GfxModeExists(int p0, int p1, int p2) { return (int)Call("GfxModeExists", "Integer", ["Integer", "Integer", "Integer"], [p0, p1, p2])!; }
@@ -286,6 +321,8 @@ public static partial class Commands
     public static int GraphicsDepth() { return (int)Call("GraphicsDepth", "Integer", [], [])!; }
     public static void SetBuffer(int p0) { Call("SetBuffer", "Void", ["Integer"], [p0]); }
     public static int GraphicsBuffer() { return (int)Call("GraphicsBuffer", "Integer", [], [])!; }
+    public static int LoadBuffer(int p0, string p1) { return (int)Call("LoadBuffer", "Integer", ["Integer", "String"], [p0, p1])!; }
+    public static int SaveBuffer(int p0, string p1) { return (int)Call("SaveBuffer", "Integer", ["Integer", "String"], [p0, p1])!; }
     public static void BufferDirty(int p0) { Call("BufferDirty", "Void", ["Integer"], [p0]); }
     public static void LockBuffer(int p0) { Call("LockBuffer", "Void", ["Integer"], [p0]); }
     public static void UnlockBuffer(int p0) { Call("UnlockBuffer", "Void", ["Integer"], [p0]); }
@@ -309,18 +346,26 @@ public static partial class Commands
     public static void Rect(int p0, int p1, int p2, int p3, int p4) { Call("Rect", "Void", ["Integer", "Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4]); }
     public static void Oval(int p0, int p1, int p2, int p3, int p4) { Call("Oval", "Void", ["Integer", "Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4]); }
     public static void Line(int p0, int p1, int p2, int p3) { Call("Line", "Void", ["Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3]); }
+    public static void Text(int p0, int p1, string p2, int p3, int p4) { Call("Text", "Void", ["Integer", "Integer", "String", "Integer", "Integer"], [p0, p1, p2, p3, p4]); }
     public static void CopyRect(int p0, int p1, int p2, int p3, int p4, int p5, int p6, int p7) { Call("CopyRect", "Void", ["Integer", "Integer", "Integer", "Integer", "Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4, p5, p6, p7]); }
+    public static int LoadFont(string p0, int p1, int p2, int p3, int p4) { return (int)Call("LoadFont", "Integer", ["String", "Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4])!; }
     public static void FreeFont(int p0) { Call("FreeFont", "Void", ["Integer"], [p0]); }
     public static int FontWidth() { return (int)Call("FontWidth", "Integer", [], [])!; }
     public static int FontHeight() { return (int)Call("FontHeight", "Integer", [], [])!; }
+    public static int StringWidth(string p0) { return (int)Call("StringWidth", "Integer", ["String"], [p0])!; }
+    public static int StringHeight(string p0) { return (int)Call("StringHeight", "Integer", ["String"], [p0])!; }
+    public static int OpenMovie(string p0) { return (int)Call("OpenMovie", "Integer", ["String"], [p0])!; }
     public static int DrawMovie(int p0, int p1, int p2, int p3, int p4) { return (int)Call("DrawMovie", "Integer", ["Integer", "Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4])!; }
     public static int MovieWidth(int p0) { return (int)Call("MovieWidth", "Integer", ["Integer"], [p0])!; }
     public static int MovieHeight(int p0) { return (int)Call("MovieHeight", "Integer", ["Integer"], [p0])!; }
     public static int MoviePlaying(int p0) { return (int)Call("MoviePlaying", "Integer", ["Integer"], [p0])!; }
     public static void CloseMovie(int p0) { Call("CloseMovie", "Void", ["Integer"], [p0]); }
+    public static int LoadImage(string p0) { return (int)Call("LoadImage", "Integer", ["String"], [p0])!; }
+    public static int LoadAnimImage(string p0, int p1, int p2, int p3, int p4) { return (int)Call("LoadAnimImage", "Integer", ["String", "Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4])!; }
     public static int CopyImage(int p0) { return (int)Call("CopyImage", "Integer", ["Integer"], [p0])!; }
     public static int CreateImage(int p0, int p1, int p2) { return (int)Call("CreateImage", "Integer", ["Integer", "Integer", "Integer"], [p0, p1, p2])!; }
     public static void FreeImage(int p0) { Call("FreeImage", "Void", ["Integer"], [p0]); }
+    public static int SaveImage(int p0, string p1, int p2) { return (int)Call("SaveImage", "Integer", ["Integer", "String", "Integer"], [p0, p1, p2])!; }
     public static void GrabImage(int p0, int p1, int p2, int p3) { Call("GrabImage", "Void", ["Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3]); }
     public static int ImageBuffer(int p0, int p1) { return (int)Call("ImageBuffer", "Integer", ["Integer", "Integer"], [p0, p1])!; }
     public static void DrawImage(int p0, int p1, int p2, int p3) { Call("DrawImage", "Void", ["Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3]); }
@@ -347,6 +392,8 @@ public static partial class Commands
     public static int RectsOverlap(int p0, int p1, int p2, int p3, int p4, int p5, int p6, int p7) { return (int)Call("RectsOverlap", "Integer", ["Integer", "Integer", "Integer", "Integer", "Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4, p5, p6, p7])!; }
     public static int ImageRectOverlap(int p0, int p1, int p2, int p3, int p4, int p5, int p6) { return (int)Call("ImageRectOverlap", "Integer", ["Integer", "Integer", "Integer", "Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4, p5, p6])!; }
     public static int ImageRectCollide(int p0, int p1, int p2, int p3, int p4, int p5, int p6, int p7) { return (int)Call("ImageRectCollide", "Integer", ["Integer", "Integer", "Integer", "Integer", "Integer", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4, p5, p6, p7])!; }
+    public static void Write(string p0) { Call("Write", "Void", ["String"], [p0]); }
+    public static string Input(string p0) { return (string)Call("Input", "String", ["String"], [p0])!; }
     public static void Locate(int p0, int p1) { Call("Locate", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static void ShowPointer() { Call("ShowPointer", "Void", [], []); }
     public static void HidePointer() { Call("HidePointer", "Void", [], []); }
@@ -408,11 +455,20 @@ public static partial class Commands
     public static int Rand(int p0, int p1) { return (int)Call("Rand", "Integer", ["Integer", "Integer"], [p0, p1])!; }
     public static void SeedRnd(int p0) { Call("SeedRnd", "Void", ["Integer"], [p0]); }
     public static int RndSeed() { return (int)Call("RndSeed", "Integer", [], [])!; }
+    public static void AppTitle(string p0, string p1) { Call("AppTitle", "Void", ["String", "String"], [p0, p1]); }
+    public static void ExecFile(string p0) { Call("ExecFile", "Void", ["String"], [p0]); }
     public static void Delay(int p0) { Call("Delay", "Void", ["Integer"], [p0]); }
     public static int MilliSecs() { return (int)Call("MilliSecs", "Integer", [], [])!; }
+    public static string CommandLine() { return (string)Call("CommandLine", "String", [], [])!; }
+    public static string SystemProperty(string p0) { return (string)Call("SystemProperty", "String", ["String"], [p0])!; }
+    public static string GetEnv(string p0) { return (string)Call("GetEnv", "String", ["String"], [p0])!; }
+    public static void SetEnv(string p0, string p1) { Call("SetEnv", "Void", ["String", "String"], [p0, p1]); }
     public static int CreateTimer(int p0) { return (int)Call("CreateTimer", "Integer", ["Integer"], [p0])!; }
     public static int WaitTimer(int p0) { return (int)Call("WaitTimer", "Integer", ["Integer"], [p0])!; }
     public static void FreeTimer(int p0) { Call("FreeTimer", "Void", ["Integer"], [p0]); }
+    public static void DebugLog(string p0) { Call("DebugLog", "Void", ["String"], [p0]); }
+    public static string DottedIP(int p0) { return (string)Call("DottedIP", "String", ["Integer"], [p0])!; }
+    public static int CountHostIPs(string p0) { return (int)Call("CountHostIPs", "Integer", ["String"], [p0])!; }
     public static int HostIP(int p0) { return (int)Call("HostIP", "Integer", ["Integer"], [p0])!; }
     public static int CreateUDPStream(int p0) { return (int)Call("CreateUDPStream", "Integer", ["Integer"], [p0])!; }
     public static void CloseUDPStream(int p0) { Call("CloseUDPStream", "Void", ["Integer"], [p0]); }
@@ -423,6 +479,7 @@ public static partial class Commands
     public static int UDPMsgIP(int p0) { return (int)Call("UDPMsgIP", "Integer", ["Integer"], [p0])!; }
     public static int UDPMsgPort(int p0) { return (int)Call("UDPMsgPort", "Integer", ["Integer"], [p0])!; }
     public static void UDPTimeouts(int p0) { Call("UDPTimeouts", "Void", ["Integer"], [p0]); }
+    public static int OpenTCPStream(string p0, int p1, int p2) { return (int)Call("OpenTCPStream", "Integer", ["String", "Integer", "Integer"], [p0, p1, p2])!; }
     public static void CloseTCPStream(int p0) { Call("CloseTCPStream", "Void", ["Integer"], [p0]); }
     public static int CreateTCPServer(int p0) { return (int)Call("CreateTCPServer", "Integer", ["Integer"], [p0])!; }
     public static void CloseTCPServer(int p0) { Call("CloseTCPServer", "Void", ["Integer"], [p0]); }
@@ -436,17 +493,50 @@ public static partial class Commands
     public static int ReadShort(int p0) { return (int)Call("ReadShort", "Integer", ["Integer"], [p0])!; }
     public static int ReadInt(int p0) { return (int)Call("ReadInt", "Integer", ["Integer"], [p0])!; }
     public static float ReadFloat(int p0) { return (float)Call("ReadFloat", "Float", ["Integer"], [p0])!; }
+    public static string ReadString(int p0) { return (string)Call("ReadString", "String", ["Integer"], [p0])!; }
+    public static string ReadLine(int p0) { return (string)Call("ReadLine", "String", ["Integer"], [p0])!; }
     public static void WriteByte(int p0, int p1) { Call("WriteByte", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static void WriteShort(int p0, int p1) { Call("WriteShort", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static void WriteInt(int p0, int p1) { Call("WriteInt", "Void", ["Integer", "Integer"], [p0, p1]); }
     public static void WriteFloat(int p0, float p1) { Call("WriteFloat", "Void", ["Integer", "Float"], [p0, p1]); }
+    public static void WriteString(int p0, string p1) { Call("WriteString", "Void", ["Integer", "String"], [p0, p1]); }
+    public static void WriteLine(int p0, string p1) { Call("WriteLine", "Void", ["Integer", "String"], [p0, p1]); }
     public static void CopyStream(int p0, int p1, int p2) { Call("CopyStream", "Void", ["Integer", "Integer", "Integer"], [p0, p1, p2]); }
+    public static string String(string p0, int p1) { return (string)Call("String", "String", ["String", "Integer"], [p0, p1])!; }
+    public static string Left(string p0, int p1) { return (string)Call("Left", "String", ["String", "Integer"], [p0, p1])!; }
+    public static string Right(string p0, int p1) { return (string)Call("Right", "String", ["String", "Integer"], [p0, p1])!; }
+    public static string Replace(string p0, string p1, string p2) { return (string)Call("Replace", "String", ["String", "String", "String"], [p0, p1, p2])!; }
+    public static int Instr(string p0, string p1, int p2) { return (int)Call("Instr", "Integer", ["String", "String", "Integer"], [p0, p1, p2])!; }
+    public static string Mid(string p0, int p1, int p2) { return (string)Call("Mid", "String", ["String", "Integer", "Integer"], [p0, p1, p2])!; }
+    public static string Upper(string p0) { return (string)Call("Upper", "String", ["String"], [p0])!; }
+    public static string Lower(string p0) { return (string)Call("Lower", "String", ["String"], [p0])!; }
+    public static string Trim(string p0) { return (string)Call("Trim", "String", ["String"], [p0])!; }
+    public static string LSet(string p0, int p1) { return (string)Call("LSet", "String", ["String", "Integer"], [p0, p1])!; }
+    public static string RSet(string p0, int p1) { return (string)Call("RSet", "String", ["String", "Integer"], [p0, p1])!; }
+    public static string Chr(int p0) { return (string)Call("Chr", "String", ["Integer"], [p0])!; }
+    public static int Asc(string p0) { return (int)Call("Asc", "Integer", ["String"], [p0])!; }
+    public static int Len(string p0) { return (int)Call("Len", "Integer", ["String"], [p0])!; }
+    public static string Hex(int p0) { return (string)Call("Hex", "String", ["Integer"], [p0])!; }
+    public static string Bin(int p0) { return (string)Call("Bin", "String", ["Integer"], [p0])!; }
+    public static string CurrentDate() { return (string)Call("CurrentDate", "String", [], [])!; }
+    public static string CurrentTime() { return (string)Call("CurrentTime", "String", [], [])!; }
     public static int StartNetGame() { return (int)Call("StartNetGame", "Integer", [], [])!; }
+    public static int HostNetGame(string p0) { return (int)Call("HostNetGame", "Integer", ["String"], [p0])!; }
+    public static int JoinNetGame(string p0, string p1) { return (int)Call("JoinNetGame", "Integer", ["String", "String"], [p0, p1])!; }
     public static void StopNetGame() { Call("StopNetGame", "Void", [], []); }
+    public static int CreateNetPlayer(string p0) { return (int)Call("CreateNetPlayer", "Integer", ["String"], [p0])!; }
     public static void DeleteNetPlayer(int p0) { Call("DeleteNetPlayer", "Void", ["Integer"], [p0]); }
+    public static string NetPlayerName(int p0) { return (string)Call("NetPlayerName", "String", ["Integer"], [p0])!; }
     public static int NetPlayerLocal(int p0) { return (int)Call("NetPlayerLocal", "Integer", ["Integer"], [p0])!; }
+    public static int SendNetMsg(int p0, string p1, int p2, int p3, int p4) { return (int)Call("SendNetMsg", "Integer", ["Integer", "String", "Integer", "Integer", "Integer"], [p0, p1, p2, p3, p4])!; }
     public static int RecvNetMsg() { return (int)Call("RecvNetMsg", "Integer", [], [])!; }
     public static int NetMsgType() { return (int)Call("NetMsgType", "Integer", [], [])!; }
     public static int NetMsgFrom() { return (int)Call("NetMsgFrom", "Integer", [], [])!; }
     public static int NetMsgTo() { return (int)Call("NetMsgTo", "Integer", [], [])!; }
+    public static string NetMsgData() { return (string)Call("NetMsgData", "String", [], [])!; }
+    public static string ErrorLog() { return (string)Call("ErrorLog", "String", [], [])!; }
+    public static void TextureBumpEnvMat(int p0, int p1, int p2, float p3) { Call("TextureBumpEnvMat", "Void", ["Integer", "Integer", "Integer", "Float"], [p0, p1, p2, p3]); }
+    public static void TextureBumpEnvOffset(int p0, float p1) { Call("TextureBumpEnvOffset", "Void", ["Integer", "Float"], [p0, p1]); }
+    public static void TextureBumpEnvScale(int p0, float p1) { Call("TextureBumpEnvScale", "Void", ["Integer", "Float"], [p0, p1]); }
+    public static void TextureLodBias(float p0) { Call("TextureLodBias", "Void", ["Float"], [p0]); }
 }

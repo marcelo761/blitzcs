@@ -18,7 +18,7 @@ class OriginalRuntimeProviderTests(unittest.TestCase):
         result = subprocess.run([sys.executable, str(ROOT/"providers/OriginalBlitz3D/generate.py"), "--check"], capture_output=True, text=True)
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
-    def test_bindings_preserve_historical_numeric_contracts(self):
+    def test_bindings_preserve_historical_contracts_including_strings(self):
         historical = {f['name']: f for f in json.loads((ROOT/'profiles/blitz3d.json').read_text())['functions']}
         catalog = json.loads((ROOT/'providers/OriginalBlitz3D/runtime.json').read_text())
         self.assertEqual(['../../profiles/blitz3d.json'], catalog['profiles'])
@@ -26,8 +26,7 @@ class OriginalRuntimeProviderTests(unittest.TestCase):
             contract = historical[binding['name']]
             self.assertEqual(contract['parameters'], binding['parameters'])
             self.assertEqual(contract['returnType'], binding['returnType'])
-            self.assertNotIn('String', binding['parameters'] + [binding['returnType']])
-        self.assertTrue({'Graphics3D', 'CreateCamera', 'CreateCube', 'RenderWorld', 'ReadPixelFast'} <= {f['name'] for f in catalog['functions']})
+        self.assertTrue({'Graphics3D', 'CreateCamera', 'CreateCube', 'RenderWorld', 'ReadPixelFast', 'LoadTexture', 'EntityName', 'SystemProperty', 'AppTitle', 'ReadFile'} <= {f['name'] for f in catalog['functions']})
 
     def test_capture_verifier_distinguishes_rendered_pixels_from_background(self):
         pixels = struct.pack('<IIII', 0, 0xFF7F7F7F, 0, 0)

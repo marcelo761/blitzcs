@@ -36,6 +36,10 @@ public static partial class Commands
         internal readonly List<string> Descriptors = new();
         internal int Version => Slot<VersionCall>(0)(runtime);
         private readonly Dictionary<string, Func<object[], object?>> calls = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> tracedCalls = new((Environment.GetEnvironmentVariable("BLITZCS_ORIGINAL_TRACE") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), StringComparer.OrdinalIgnoreCase);
+        private static readonly System.Text.Json.JsonSerializerOptions TraceOptions = new()
+        { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
         private T Slot<T>(int index) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(Marshal.ReadIntPtr(table, index * 4));
         public Session(string path)
         {
@@ -75,13 +79,70 @@ public static partial class Commands
         }
         public object? Call(string name, string result, string[] types, object[] arguments)
         {
+            var trace = tracedCalls.Contains(name);
+            if (trace) Console.Error.WriteLine($"Original call {name}: {System.Text.Json.JsonSerializer.Serialize(arguments, TraceOptions)}");
+            if (trace && Environment.GetEnvironmentVariable("BLITZCS_ORIGINAL_TRACE_STACK") == "1")
+                Console.Error.WriteLine(new System.Diagnostics.StackTrace(1, true));
             if (!symbols.TryGetValue(name, out var symbol)) throw new MissingMethodException("Original runtime has no registration for " + name);
             if (!calls.TryGetValue(name, out var call))
             {
                 Validate(symbol.Descriptor, types, result);
                 calls[name] = call = BuildCall(symbol.Pointer, types, result);
             }
-            return call(arguments);
+            var native = (object[])arguments.Clone();
+            var transferred = false;
+            var strings = new List<nint>();
+            try
+            {
+                for (var i = 0; i < types.Length; i++)
+                    if (types[i] == "String") { var value = ToNativeString((string)arguments[i]); strings.Add(value); native[i] = value; }
+                // Runtime commands take ownership of each BBStr argument, exactly as the original compiler does.
+                transferred = true;
+                var returned = call(native);
+                var managedResult = result == "String" ? FromNativeString((nint)returned!) : returned;
+                if (trace) Console.Error.WriteLine($"Original result {name}: {System.Text.Json.JsonSerializer.Serialize(managedResult, TraceOptions)}");
+                return managedResult;
+            }
+            finally { if (!transferred) foreach (var value in strings) Internal<ReleaseString>("_bbStrRelease")(value); }
+        }
+        private T Internal<T>(string name) where T : Delegate => symbols.TryGetValue(name, out var symbol)
+            ? Marshal.GetDelegateForFunctionPointer<T>(symbol.Pointer) : throw new MissingMethodException("Original runtime has no registration for " + name);
+        private static readonly System.Text.Encoding LegacyEncoding = CreateEncoding();
+        private static System.Text.Encoding CreateEncoding()
+        {
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            return System.Text.Encoding.GetEncoding(1252, System.Text.EncoderFallback.ExceptionFallback, System.Text.DecoderFallback.ExceptionFallback);
+        }
+        private nint ToNativeString(string value)
+        {
+            var bytes = LegacyEncoding.GetBytes(value);
+            var buffer = Marshal.AllocHGlobal(bytes.Length + 1);
+            nint result = 0;
+            try
+            {
+                Marshal.Copy(bytes, 0, buffer, bytes.Length); Marshal.WriteByte(buffer, bytes.Length, 0);
+                result = Internal<ConvertString>("_bbCStrToStr")(buffer);
+                // C strings stop at NUL. Let the original engine construct embedded NULs and concatenate the remaining chunks.
+                for (var i = 0; i < bytes.Length; i++)
+                    if (bytes[i] == 0)
+                    {
+                        result = Internal<ConcatString>("_bbStrConcat")(result, Internal<CharacterString>("Chr")(0));
+                        result = Internal<ConcatString>("_bbStrConcat")(result, Internal<ConvertString>("_bbCStrToStr")(buffer + i + 1));
+                    }
+                var owned = result; result = 0; return owned;
+            }
+            finally { if (result != 0) Internal<ReleaseString>("_bbStrRelease")(result); Marshal.FreeHGlobal(buffer); }
+        }
+        private string FromNativeString(nint value)
+        {
+            if (value == 0) throw new InvalidOperationException("Original runtime returned a null BBStr.");
+            // Len consumes its argument; clone through the original helper, without inspecting C++ object layout.
+            var clone = Internal<LoadString>("_bbStrLoad")(ref value);
+            var length = Internal<StringLength>("Len")(clone);
+            var bytes = new byte[length];
+            var text = Internal<ConvertString>("_bbStrToCStr")(value); // consumes the original BBStr
+            Marshal.Copy(text, bytes, 0, bytes.Length);
+            return LegacyEncoding.GetString(bytes);
         }
         public void Dispose() { Slot<Shutdown>(4)(runtime); NativeLibrary.Free(library); }
     }
@@ -89,20 +150,25 @@ public static partial class Commands
     {
         var actualResult = descriptor[0] switch { '%' => "Integer", '#' => "Float", '$' => "String", _ => "Void" };
         var actualTypes = new List<string>();
-        // The numeric subset has no quoted string defaults containing type markers.
+        var quoted = false;
         for (var i = actualResult == "Void" ? 0 : 1; i < descriptor.Length; i++)
-            if (descriptor[i] is '%' or '#' or '$') actualTypes.Add(descriptor[i] switch { '%' => "Integer", '#' => "Float", _ => "String" });
+        {
+            if (descriptor[i] == '"') { quoted = !quoted; continue; }
+            if (!quoted && descriptor[i] is '%' or '#' or '$') actualTypes.Add(descriptor[i] switch { '%' => "Integer", '#' => "Float", _ => "String" });
+        }
         if (actualResult != result || !actualTypes.SequenceEqual(types))
             throw new InvalidOperationException("Runtime registration signature disagrees with profile: " + descriptor);
     }
     static Func<object[], object?> BuildCall(nint pointer, string[] types, string result)
     {
-        Type Clr(string type) => type switch { "Integer" => typeof(int), "Float" => typeof(float), "Void" => typeof(void), _ => throw new NotSupportedException(type) };
+        Type Clr(string type) => type switch { "Integer" => typeof(int), "Float" => typeof(float), "Void" => typeof(void), "String" => typeof(nint), _ => throw new NotSupportedException(type) };
         var method = new DynamicMethod("OriginalRuntimeCall", typeof(object), [typeof(object[])]);
         var il = method.GetILGenerator();
         for (var i = 0; i < types.Length; i++) { il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldc_I4, i); il.Emit(OpCodes.Ldelem_Ref); il.Emit(OpCodes.Unbox_Any, Clr(types[i])); }
         il.Emit(OpCodes.Ldc_I4, pointer.ToInt32()); il.Emit(OpCodes.Conv_I);
-        il.EmitCalli(OpCodes.Calli, CallingConvention.Cdecl, Clr(result), types.Select(Clr).ToArray());
+        // Registered x86 commands clean their arguments (also true for the string helpers).
+        // The factory and the managed entry callback have separate cdecl contracts.
+        il.EmitCalli(OpCodes.Calli, CallingConvention.StdCall, Clr(result), types.Select(Clr).ToArray());
         if (result == "Void") il.Emit(OpCodes.Ldnull); else il.Emit(OpCodes.Box, Clr(result));
         il.Emit(OpCodes.Ret);
         return method.CreateDelegate<Func<object[], object?>>();
@@ -110,6 +176,12 @@ public static partial class Commands
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandle(string? name);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate nint Factory();
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void Entry();
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate nint ConvertString(nint text);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate nint CharacterString(int character);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate nint ConcatString(nint left, nint right);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate nint LoadString(ref nint value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int StringLength(nint value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void ReleaseString(nint value);
     [UnmanagedFunctionPointer(CallingConvention.ThisCall)] delegate int VersionCall(nint self);
     [UnmanagedFunctionPointer(CallingConvention.ThisCall)] delegate nint Next(nint self);
     [UnmanagedFunctionPointer(CallingConvention.ThisCall)] delegate int Value(nint self, nint symbol);

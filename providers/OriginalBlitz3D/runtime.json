@@ -12,6 +12,16 @@
       "returnType": "Void"
     },
     {
+      "name": "LoadSound",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadSound",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
       "name": "FreeSound",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -71,6 +81,16 @@
       "method": "PlaySound",
       "parameters": [
         "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "PlayMusic",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "PlayMusic",
+      "parameters": [
+        "String"
       ],
       "returnType": "Integer"
     },
@@ -155,6 +175,16 @@
       "method": "ChannelPlaying",
       "parameters": [
         "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "Load3DSound",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Load3DSound",
+      "parameters": [
+        "String"
       ],
       "returnType": "Integer"
     },
@@ -330,6 +360,38 @@
         "Integer"
       ],
       "returnType": "Integer"
+    },
+    {
+      "name": "CallDLL",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "CallDLL",
+      "parameters": [
+        "String",
+        "String",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "LoaderMatrix",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoaderMatrix",
+      "parameters": [
+        "String",
+        "Float",
+        "Float",
+        "Float",
+        "Float",
+        "Float",
+        "Float",
+        "Float",
+        "Float",
+        "Float"
+      ],
+      "returnType": "Void"
     },
     {
       "name": "HWMultiTex",
@@ -510,6 +572,32 @@
       "returnType": "Integer"
     },
     {
+      "name": "LoadTexture",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadTexture",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "LoadAnimTexture",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadAnimTexture",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
       "name": "FreeTexture",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -597,6 +685,16 @@
       "returnType": "Integer"
     },
     {
+      "name": "TextureName",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "TextureName",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
       "name": "SetCubeFace",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -638,12 +736,36 @@
       "returnType": "Void"
     },
     {
+      "name": "TextureFilter",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "TextureFilter",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "Void"
+    },
+    {
       "name": "CreateBrush",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
       "method": "CreateBrush",
       "parameters": [
         "Float",
+        "Float",
+        "Float"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "LoadBrush",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadBrush",
+      "parameters": [
+        "String",
+        "Integer",
         "Float",
         "Float"
       ],
@@ -739,6 +861,39 @@
         "Integer"
       ],
       "returnType": "Void"
+    },
+    {
+      "name": "LoadMesh",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadMesh",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "LoadAnimMesh",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadAnimMesh",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "LoadAnimSeq",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadAnimSeq",
+      "parameters": [
+        "Integer",
+        "String"
+      ],
+      "returnType": "Integer"
     },
     {
       "name": "CreateMesh",
@@ -1694,6 +1849,18 @@
       "returnType": "Integer"
     },
     {
+      "name": "LoadSprite",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadSprite",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
       "name": "RotateSprite",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -1740,6 +1907,17 @@
       "returnType": "Void"
     },
     {
+      "name": "LoadMD2",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadMD2",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
       "name": "AnimateMD2",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -1780,6 +1958,18 @@
       "type": "BlitzCS.OriginalRuntime.Commands",
       "method": "MD2Animating",
       "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "LoadBSP",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadBSP",
+      "parameters": [
+        "String",
+        "Float",
         "Integer"
       ],
       "returnType": "Integer"
@@ -1836,6 +2026,17 @@
       "method": "CreateTerrain",
       "parameters": [
         "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "LoadTerrain",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadTerrain",
+      "parameters": [
+        "String",
         "Integer"
       ],
       "returnType": "Integer"
@@ -2635,6 +2836,17 @@
       "returnType": "Integer"
     },
     {
+      "name": "FindChild",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "FindChild",
+      "parameters": [
+        "Integer",
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
       "name": "PaintEntity",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -2769,6 +2981,67 @@
       "returnType": "Void"
     },
     {
+      "name": "NameEntity",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "NameEntity",
+      "parameters": [
+        "Integer",
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "EntityName",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "EntityName",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "EntityClass",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "EntityClass",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "OpenFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "OpenFile",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "ReadFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "ReadFile",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "WriteFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "WriteFile",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
       "name": "CloseFile",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -2800,6 +3073,16 @@
       "returnType": "Integer"
     },
     {
+      "name": "ReadDir",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "ReadDir",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
       "name": "CloseDir",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -2810,12 +3093,111 @@
       "returnType": "Void"
     },
     {
+      "name": "NextFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "NextFile",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "CurrentDir",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "CurrentDir",
+      "parameters": [],
+      "returnType": "String"
+    },
+    {
+      "name": "ChangeDir",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "ChangeDir",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "CreateDir",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "CreateDir",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "DeleteDir",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "DeleteDir",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "FileSize",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "FileSize",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "FileType",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "FileType",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "CopyFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "CopyFile",
+      "parameters": [
+        "String",
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "DeleteFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "DeleteFile",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
       "name": "CountGfxDrivers",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
       "method": "CountGfxDrivers",
       "parameters": [],
       "returnType": "Integer"
+    },
+    {
+      "name": "GfxDriverName",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "GfxDriverName",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
     },
     {
       "name": "SetGfxDriver",
@@ -3125,6 +3507,28 @@
       "returnType": "Integer"
     },
     {
+      "name": "LoadBuffer",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadBuffer",
+      "parameters": [
+        "Integer",
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "SaveBuffer",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "SaveBuffer",
+      "parameters": [
+        "Integer",
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
       "name": "BufferDirty",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -3388,6 +3792,20 @@
       "returnType": "Void"
     },
     {
+      "name": "Text",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Text",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "String",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Void"
+    },
+    {
       "name": "CopyRect",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -3403,6 +3821,20 @@
         "Integer"
       ],
       "returnType": "Void"
+    },
+    {
+      "name": "LoadFont",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadFont",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
     },
     {
       "name": "FreeFont",
@@ -3428,6 +3860,36 @@
       "type": "BlitzCS.OriginalRuntime.Commands",
       "method": "FontHeight",
       "parameters": [],
+      "returnType": "Integer"
+    },
+    {
+      "name": "StringWidth",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "StringWidth",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "StringHeight",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "StringHeight",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "OpenMovie",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "OpenMovie",
+      "parameters": [
+        "String"
+      ],
       "returnType": "Integer"
     },
     {
@@ -3485,6 +3947,30 @@
       "returnType": "Void"
     },
     {
+      "name": "LoadImage",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadImage",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "LoadAnimImage",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LoadAnimImage",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
       "name": "CopyImage",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -3515,6 +4001,18 @@
         "Integer"
       ],
       "returnType": "Void"
+    },
+    {
+      "name": "SaveImage",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "SaveImage",
+      "parameters": [
+        "Integer",
+        "String",
+        "Integer"
+      ],
+      "returnType": "Integer"
     },
     {
       "name": "GrabImage",
@@ -3851,6 +4349,26 @@
         "Integer"
       ],
       "returnType": "Integer"
+    },
+    {
+      "name": "Write",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Write",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "Input",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Input",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "String"
     },
     {
       "name": "Locate",
@@ -4434,6 +4952,27 @@
       "returnType": "Integer"
     },
     {
+      "name": "AppTitle",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "AppTitle",
+      "parameters": [
+        "String",
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "ExecFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "ExecFile",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
       "name": "Delay",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -4450,6 +4989,45 @@
       "method": "MilliSecs",
       "parameters": [],
       "returnType": "Integer"
+    },
+    {
+      "name": "CommandLine",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "CommandLine",
+      "parameters": [],
+      "returnType": "String"
+    },
+    {
+      "name": "SystemProperty",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "SystemProperty",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "GetEnv",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "GetEnv",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "SetEnv",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "SetEnv",
+      "parameters": [
+        "String",
+        "String"
+      ],
+      "returnType": "Void"
     },
     {
       "name": "CreateTimer",
@@ -4480,6 +5058,36 @@
         "Integer"
       ],
       "returnType": "Void"
+    },
+    {
+      "name": "DebugLog",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "DebugLog",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "DottedIP",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "DottedIP",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "CountHostIPs",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "CountHostIPs",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
     },
     {
       "name": "HostIP",
@@ -4582,6 +5190,18 @@
         "Integer"
       ],
       "returnType": "Void"
+    },
+    {
+      "name": "OpenTCPStream",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "OpenTCPStream",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer"
     },
     {
       "name": "CloseTCPStream",
@@ -4715,6 +5335,26 @@
       "returnType": "Float"
     },
     {
+      "name": "ReadString",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "ReadString",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "ReadLine",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "ReadLine",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
       "name": "WriteByte",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -4759,6 +5399,28 @@
       "returnType": "Void"
     },
     {
+      "name": "WriteString",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "WriteString",
+      "parameters": [
+        "Integer",
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "WriteLine",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "WriteLine",
+      "parameters": [
+        "Integer",
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
       "name": "CopyStream",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
@@ -4771,11 +5433,219 @@
       "returnType": "Void"
     },
     {
+      "name": "String",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "String",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "Left",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Left",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "Right",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Right",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "Replace",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Replace",
+      "parameters": [
+        "String",
+        "String",
+        "String"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "Instr",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Instr",
+      "parameters": [
+        "String",
+        "String",
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "Mid",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Mid",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "Upper",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Upper",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "Lower",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Lower",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "Trim",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Trim",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "LSet",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "LSet",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "RSet",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "RSet",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "Chr",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Chr",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "Asc",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Asc",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "Len",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Len",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "Hex",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Hex",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "Bin",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "Bin",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "CurrentDate",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "CurrentDate",
+      "parameters": [],
+      "returnType": "String"
+    },
+    {
+      "name": "CurrentTime",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "CurrentTime",
+      "parameters": [],
+      "returnType": "String"
+    },
+    {
       "name": "StartNetGame",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
       "method": "StartNetGame",
       "parameters": [],
+      "returnType": "Integer"
+    },
+    {
+      "name": "HostNetGame",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "HostNetGame",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "JoinNetGame",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "JoinNetGame",
+      "parameters": [
+        "String",
+        "String"
+      ],
       "returnType": "Integer"
     },
     {
@@ -4785,6 +5655,16 @@
       "method": "StopNetGame",
       "parameters": [],
       "returnType": "Void"
+    },
+    {
+      "name": "CreateNetPlayer",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "CreateNetPlayer",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer"
     },
     {
       "name": "DeleteNetPlayer",
@@ -4797,11 +5677,35 @@
       "returnType": "Void"
     },
     {
+      "name": "NetPlayerName",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "NetPlayerName",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "String"
+    },
+    {
       "name": "NetPlayerLocal",
       "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
       "type": "BlitzCS.OriginalRuntime.Commands",
       "method": "NetPlayerLocal",
       "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer"
+    },
+    {
+      "name": "SendNetMsg",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "SendNetMsg",
+      "parameters": [
+        "Integer",
+        "String",
+        "Integer",
+        "Integer",
         "Integer"
       ],
       "returnType": "Integer"
@@ -4837,6 +5741,14 @@
       "method": "NetMsgTo",
       "parameters": [],
       "returnType": "Integer"
+    },
+    {
+      "name": "NetMsgData",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "NetMsgData",
+      "parameters": [],
+      "returnType": "String"
     }
   ]
 }
