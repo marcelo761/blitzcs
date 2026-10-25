@@ -207,3 +207,15 @@ The virtual machine has exactly one locale, en-US. Deliberately absent: RaiseExc
   (a HANDLE or a heap block from one module is meaningless in another). The module table, the sandbox and `Win32Options` are shared. A pointer to guest memory of any module is valid in all of them.
 * **Known limit (next blocker for blitzcc.exe):** a function pointer or C++ vtable that crosses a module boundary (the EXE calls a virtual method of an object a DLL returned) traps in the caller,
   whose dispatch table only knows its own code (docs/binary-multimodule.md, Limits).
+
+
+## One process, one Win32 state (modules of a GuestModuleSet)
+
+Windows has one process heap, handle table, TLS/FLS index space, environment, current directory, command line and module list per process. `new GuestModuleSet(name => new Win32ImportResolver(...))` (one resolver, one `Win32Context` per module) is still allowed and still means
+"separate processes"; the modules of one *program* use `Win32ImportResolver.SharedFactory(options)` (what `GuestLibraryLoader` and `BcRun` do) or `resolver.ForAnotherModule()`: the views share the registry, the service instances and **one `Win32Context`** (refcounted: the context is disposed with the last view).
+
+What is process-wide: the default and private heaps (`GetProcessHeap`/`HeapAlloc` in one module, `HeapFree` in another; CRT `malloc`/`free`), virtual memory, the handle table (events, mutexes, files, threads), critical sections, `TlsAlloc`/`FlsAlloc` indices (the value per thread), `GetLastError`/`SetLastError`
+(per thread), the registry, the environment block, command line, current directory, the module list (`GetModuleHandle`, `LoadLibrary` bookkeeping), the process fault flag. What stays per module: `GuestModule.Current` (stub provider and `AllocateStub` pool, DllMain reason bookkeeping, `GetModuleHandle(NULL)` = `Win32Options.MainModuleBase`).
+
+Memory: reads and writes go through the calling module's `GuestMemory`, which sees every module's regions (peers are linked when a module joins, before its DllMain runs). Allocations (heaps, virtual memory, permanent strings, COM objects) come from the first module that used the context, which is pinned
+(`GuestMemory.PinAsProcessAnchor`): `GuestModuleSet.Unload` refuses it while other modules are loaded. In the LoadLibrary flow that is the executable. Tests: `SharedWin32StateTests` (heap, CRT heap, TLS index, last error, event and critical section across two DLLs; the per-module resolver variant is the mutation witness).

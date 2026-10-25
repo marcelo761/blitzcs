@@ -7,7 +7,8 @@ public sealed class ArtifactFormatException(string message) : Exception(message)
 
 public sealed class ArtifactSerializer
 {
-    public const int CurrentVersion = 4;
+    /// <summary>5: the dispatch miss routine consults the process-wide module registry through a cell at ContextOffset (cross-module dispatch). Version 4 artifacts have no such cell and are rejected.</summary>
+    public const int CurrentVersion = 5;
     private static readonly byte[] Magic = "BCSA"u8.ToArray();
     private const int MaxString = 1 << 20;
 
@@ -55,7 +56,10 @@ public sealed class ArtifactSerializer
         using var r = new BinaryReader(ms, Encoding.UTF8);
         if (!r.ReadBytes(4).AsSpan().SequenceEqual(Magic)) throw new ArtifactFormatException("Bad artifact magic.");
         var ver = r.ReadInt32();
-        if (ver != CurrentVersion) throw new ArtifactFormatException($"Unsupported artifact version {ver}.");
+        if (ver != CurrentVersion)
+            throw new ArtifactFormatException(ver < CurrentVersion
+                ? $"Unsupported artifact version {ver}: it was translated before cross-module dispatch (format {CurrentVersion}) and cannot call or return into other modules of a set. Re-translate the image (the cache key includes the compiler version, so a cache entry is simply regenerated)."
+                : $"Unsupported artifact version {ver} (this build reads {CurrentVersion}).");
         int Remaining() => (int)(ms.Length - ms.Position);
         int Count(int minElem) { var n = r.ReadInt32(); if (n < 0 || (long)n * minElem > Remaining()) throw new ArtifactFormatException("Bad element count."); return n; }
         string ReadStr() { var n = r.ReadInt32(); if (n < 0 || n > MaxString || n > Remaining()) throw new ArtifactFormatException("Bad string length."); return Encoding.UTF8.GetString(r.ReadBytes(n)); }

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Diagnostics printer for one PE32 image: mirrors tools/BcRun (mode bcrun) or tools/survey/BcSurvey (mode survey). Not part of BlitzCS.slnx. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>BlitzcDiag</AssemblyName>
+    <RootNamespace>BlitzcDiag</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/BlitzCS.BinaryCompiler/BlitzCS.BinaryCompiler.csproj" />
+  </ItemGroup>
+</Project>

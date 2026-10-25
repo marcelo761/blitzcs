@@ -65,6 +65,12 @@ public sealed unsafe class GuestMemory
 
     internal GuestMemory(GuestModule module) => this.module = module;
 
+    /// <summary>
+    /// Marks this module as the owner of process-wide allocations made on behalf of every module of its set (the shared Win32 state): the set refuses to unload it
+    /// while other modules are loaded, because their heap blocks and handles live in its address space.
+    /// </summary>
+    public void PinAsProcessAnchor() => module.IsProcessAnchor = true;
+
     internal void Add(GuestRegion region)
     {
         lock (gate) regions = [.. regions, region];

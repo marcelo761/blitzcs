@@ -117,14 +117,14 @@ public sealed class ModuleLinkTests
     }
 
     [Fact]
-    public void DependencyDllMainRunsFirst_AndEachModuleHasItsOwnState()
+    public void DependencyDllMainRunsFirst_AndEachModuleHasItsOwnDataButOneProcessBlock()
     {
         using var set = Set(out _);
         set.LoadAll();
         Assert.Equal(2u, set["a"].Bind("a_saw", GuestCallingConvention.Cdecl, 0).Call());              // B.DllMain set counter=1, A's DllMain called cnt() -> 2
         Assert.Equal(3u, set["a"].Bind("a_cnt", GuestCallingConvention.Cdecl, 0).Call());
         Assert.Equal(4u, set["b"].Bind("cnt", GuestCallingConvention.Cdecl, 0).Call());                // the same counter, in B's own address space
-        Assert.NotEqual(set["a"].PebAddress, set["b"].PebAddress);                                    // own PEB per module
+        Assert.Equal(set["a"].PebAddress, set["b"].PebAddress);                                       // one PEB per process (docs/binary-multimodule.md)
     }
 
     [Fact]

@@ -69,15 +69,16 @@ public sealed class TargetOsTests
     public void Linux_sysv_output_is_pinned_byte_for_byte(OptimizationProfile profile)
     {
         // Pinned from the translator before the Win64 ABI existed: the sysv runtime routines and guest code must never change by accident.
+        // Re-pinned once, deliberately, for cross-module dispatch (format 5): the only difference to the previous pin is the miss routine at host offset 0 (it now tries the module registry before the kind 1 trap) and the artifact has no other change.
         var art = For("linux-sysv", profile).Artifact;
         var hash = Convert.ToHexString(SHA256.HashData(art.HostImage));
         Assert.Equal(profile == OptimizationProfile.Debug ? PinnedDebug : PinnedRelease, hash);
     }
 
-    private const string PinnedDebug = "8590EF11744340294A0AA3C2EA2623C5EACE0DEDCC48EE108A5D02CCD7468BD1", PinnedRelease = "10FC2ADBF32D2B8C1714E2379E5A580A96E3EFDE2230F24F757BA8970475E432";
+    private const string PinnedDebug = "B0554C92E6C5D0599ABDC5551F4B67012B3C5574747AD7662A95A26CFA984ABB", PinnedRelease = "9D9BE2C3E280979C2125FBA550E6ACB2C97310290EB0BA79B68C9FF8A64B92C5";
 
 
-    private const string PinnedWinDebug = "0BCF56C738E1A25AF93984AE268A8A316D85A323F7C3E9B8FD0F7CF466C239D9", PinnedWinRelease = "A90F0706522AEA6A258B729DEAAFC18E3F5CE455A7A043961545C91FDA19634C";
+    private const string PinnedWinDebug = "09FB14E27C667A30B0DBB2ADCF72650CC62F24862DB6C4820EB6DCE078EBC0B1", PinnedWinRelease = "9A3B7BF773DBF67E191CC109B21C4F31026884CB6AF436F2918D8BF8FCAFF630";
 
     [Theory]
     [InlineData(OptimizationProfile.Debug), InlineData(OptimizationProfile.Release)]

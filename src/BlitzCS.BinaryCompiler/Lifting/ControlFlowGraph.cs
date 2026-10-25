@@ -98,6 +98,8 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
         Drain();
         if (image.Relocations.Count == 0) DiscoverImmediateRoots();
 
+        if (relocDataRejected > 0)
+            diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "CFG_RELOC_DATA", $"{relocDataRejected} decode attempt(s) were rejected because a base relocation lies over opcode bytes (relocated address tables inside code)."));
         if (dataAfterCall > 0)
             diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "CFG_DATA_AFTER_CALL", $"{dataAfterCall} call(s) are followed directly by bytes that decode as data (address tables or handler data placed after a call that does not return); the fall-through was not translated."));
         return new ControlFlowGraph
@@ -237,6 +239,8 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
         for (var n = 0; n < DataRunProbe; n++)
         {
             var ins = decoder.Decode();
+            // With a relocation table the base-dependent bytes are exactly the relocated dwords; one that lies over opcode bytes is an address table.
+            if (!ins.IsInvalid && relocSet.Count != 0 && RelocatedOverOpcode(decoder, in ins, (uint)(ins.IP - image.ImageBase))) return true;
             if (ins.IsInvalid || IsUserModeNonsense(ins.Mnemonic) || ins.Mnemonic is Mnemonic.Lds or Mnemonic.Les or Mnemonic.Int1
                 || (ins.Mnemonic is Mnemonic.Push or Mnemonic.Pop && ins.Op0Kind == OpKind.Register && ins.Op0Register == Register.ES)) return true;
             zeroAdds = ins.Code == Code.Add_rm8_r8 && ins.Length == 2 && mapped[ins.IP - image.ImageBase] == 0 ? zeroAdds + 1 : 0;
@@ -312,6 +316,14 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
                 diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Warning, "CFG_DECODE_FAILURE", $"Cannot decode an instruction at RVA 0x{rva:X}; the bytes are treated as data.", rva));
                 return;
             }
+            if (relocSet.Count != 0 && RelocatedOverOpcode(decoder, in ins, rva))
+            {
+                // A fixup can only sit in a displacement or immediate field. Anything else is a relocated pointer table decoded as code,
+                // which makes the code/data decision independent of the load base.
+                undecodable[rva] = "relocated pointer over opcode bytes (data)";
+                relocDataRejected++;
+                return;
+            }
             var gi = new GuestInstruction(rva, ins.Length, ins, speculative);
             insts[rva] = gi;
             var next = gi.NextRva;
@@ -344,6 +356,28 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
                     rva = next; continue;
             }
         }
+    }
+
+    private int relocDataRejected;
+
+    /// <summary>True when a base relocation overlaps the instruction at <paramref name="rva"/> without lying wholly inside one displacement or immediate field.</summary>
+    private bool RelocatedOverOpcode(Decoder decoder, in Instruction ins, uint rva)
+    {
+        var len = ins.Length;
+        ConstantOffsets? offsets = null;
+        for (var r = rva >= 3 ? rva - 3 : 0; r < rva + (uint)len; r++)
+        {
+            if (!relocSet.Contains(r)) continue;
+            // Location r..r+3 must lie in [rva, rva+len) and inside a single operand field.
+            if (r < rva) return true;
+            var rel = (int)(r - rva);
+            var o = offsets ??= decoder.GetConstantOffsets(in ins);
+            var ok = (o.HasDisplacement && rel >= o.DisplacementOffset && rel + 4 <= o.DisplacementOffset + o.DisplacementSize)
+                || (o.HasImmediate && rel >= o.ImmediateOffset && rel + 4 <= o.ImmediateOffset + o.ImmediateSize)
+                || (o.HasImmediate2 && rel >= o.ImmediateOffset2 && rel + 4 <= o.ImmediateOffset2 + o.ImmediateSize2);
+            if (!ok) return true;
+        }
+        return false;
     }
 
     private void AddTarget(Instruction ins, bool isCall)

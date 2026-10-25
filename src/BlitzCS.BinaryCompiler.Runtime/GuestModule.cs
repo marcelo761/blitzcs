@@ -26,6 +26,9 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     private int dependents;
 
+    /// <summary>True when allocations made for the whole process (shared Win32 state) live in this module; see <see cref="GuestMemory.PinAsProcessAnchor"/>.</summary>
+    internal volatile bool IsProcessAnchor;
+
     /// <summary>Number of modules (in a <see cref="GuestModuleSet"/>) whose imports are bound to this module's exports.</summary>
     internal int DependentCount => Volatile.Read(ref dependents);
     internal void AddDependent() => Interlocked.Increment(ref dependents);
@@ -39,7 +42,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         public uint ImportEsp;
         public Exception? PendingFault;
         public unsafe byte* CallContext;
-        public TebBlock? Teb;
+        public GuestProcessEnvironment.TebBlock? Teb;
         public uint ExtFlags, ExtEdx;           // extended import return staged by the running handler (GuestCall.SetReturnEdx / SetReturnSt0)
         public readonly byte[] ExtSt0 = new byte[10];
     }
@@ -64,12 +67,17 @@ public sealed unsafe partial class GuestModule : IDisposable
     private nuint guestMapLength, hostMapLength;
     private bool attached, disposed;
 
-    private GuestModule(TranslationArtifact artifact, GuestModuleOptions options)
+    private GuestModule(TranslationArtifact artifact, GuestModuleOptions options, GuestProcessEnvironment environment, string name)
     {
         this.artifact = artifact;
         this.options = options;
+        env = environment;
+        Name = name;
         Memory = new GuestMemory(this);
     }
+
+    /// <summary>The name the module was registered under in its set (the image base in hex for a module loaded on its own); used in diagnostics.</summary>
+    public string Name { get; }
 
 
     /// <summary>Disassembles the guest instruction at <paramref name="va"/> for a trap message; "an instruction" when the bytes are not readable.</summary>
@@ -120,7 +128,10 @@ public sealed unsafe partial class GuestModule : IDisposable
     /// <summary>The module whose guest code is running on this thread, for imports that need memory access.</summary>
     public static GuestModule? Current => current;
 
-    public static GuestModule Load(TranslationArtifact artifact, PeImage image, IGuestImportResolver imports, GuestModuleOptions? options = null)
+    public static GuestModule Load(TranslationArtifact artifact, PeImage image, IGuestImportResolver imports, GuestModuleOptions? options = null) =>
+        Load(artifact, image, imports, options, null, null);
+
+    internal static GuestModule Load(TranslationArtifact artifact, PeImage image, IGuestImportResolver imports, GuestModuleOptions? options, GuestProcessEnvironment? environment, string? name)
     {
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentNullException.ThrowIfNull(image);
@@ -130,7 +141,8 @@ public sealed unsafe partial class GuestModule : IDisposable
 
         options ??= new GuestModuleOptions();
         Validate(artifact, image, options);
-        var module = new GuestModule(artifact, options);
+        var module = new GuestModule(artifact, options, environment ?? new GuestProcessEnvironment(ownedBySet: false), name ?? $"0x{artifact.GuestImageBase:X8}");
+        module.env.Attach(module);
         try { module.Initialize(image, imports); }
         catch { module.Teardown(); throw; }
         return module;
@@ -139,6 +151,8 @@ public sealed unsafe partial class GuestModule : IDisposable
     private static void Validate(TranslationArtifact a, PeImage image, GuestModuleOptions options)
     {
         var host = PlatformMemory.Current;
+        if (a.FormatVersion < ArtifactSerializer.CurrentVersion)
+            throw new GuestLoadException($"The artifact has format version {a.FormatVersion}; this runtime needs {ArtifactSerializer.CurrentVersion} (cross-module dispatch: the translated code must reach the module registry). Re-translate the image.");
         var artifactTarget = a.TargetOs ?? BinaryTargets.LinuxSysV;
         if (!string.Equals(artifactTarget, host.TargetOs, StringComparison.Ordinal))
             throw new GuestLoadException($"The artifact was translated for target '{artifactTarget}' but this host is '{host.TargetOs}'. Artifacts are target specific (their runtime routines follow the host calling convention): re-translate with TargetOs = \"{host.TargetOs}\".");
@@ -244,6 +258,13 @@ public sealed unsafe partial class GuestModule : IDisposable
         for (var i = 0; i < bound.Length; i++)
             *(nint*)(hostMap + (nint)artifact.ImportThunkTableOffset + 8 * i) = bound[i].FunctionPointer;
         InitializeStubPool();
+        // Cross-module dispatch: the registry cell is filled and the module published before any guest code (TLS callbacks, DllMain) runs, because DllMain may hand
+        // its own function pointers to modules that call them while it is still running.
+        if (artifact.ContextOffset + ModuleRegistryLayout.CellOffset + 8UL > (ulong)artifact.HostImage.Length) throw new GuestLoadException("ContextOffset leaves no room for the module registry cell.");
+        *(nint*)(hostMap + (nint)(artifact.ContextOffset + ModuleRegistryLayout.CellOffset)) = env.RegistryAddress;
+        var tableEntries = (uint)((artifact.HostImage.Length - (long)artifact.DispatchTableOffset) / 4);
+        registryBound = tableEntries - 1;
+        registrySlot = env.Publish(artifact.GuestImageBase, registryBound, hostMap, hostMap + (nint)artifact.DispatchTableOffset);
         PlatformMemory.Current.Protect(hostMap, (nuint)artifact.CodeSize, MemoryProtection.ReadExecute);
 
         imageEntryRva = image.EntryPointRva; imageIsDll = image.IsDll;
@@ -377,6 +398,8 @@ public sealed unsafe partial class GuestModule : IDisposable
             if (state.Teb is null) CreateThreadTeb(state);
             var teb = state.Teb!;
             var outermost = state.Depth == 0;
+            var processOutermost = teb.Depth == 0;   // no guest code of any module of the process runs on this thread
+            uint savedStackBase = 0, savedStackLimit = 0;
             GuestStack stack;
             uint start;
             var savedEsp = state.ImportEsp;
@@ -391,7 +414,13 @@ public sealed unsafe partial class GuestModule : IDisposable
                 start = state.ImportEsp;
                 stack = FindStack(start);
             }
-            if (outermost) PrepareTebForCall(teb, stack.Top, stack.Low);
+            if (processOutermost) GuestProcessEnvironment.PrepareTebForCall(teb, stack.Top, stack.Low);
+            else if (outermost)
+            {
+                // A nested call into another module of the process runs on that module's own stack: the shared TEB follows it and is restored afterwards. The SEH chain is left alone.
+                savedStackBase = *(uint*)(teb.Map + (nint)TebStackBase); savedStackLimit = *(uint*)(teb.Map + (nint)TebStackLimit);
+                *(uint*)(teb.Map + (nint)TebStackBase) = stack.Top; *(uint*)(teb.Map + (nint)TebStackLimit) = stack.Low;
+            }
 
             var previous = current;
             try
@@ -419,11 +448,17 @@ public sealed unsafe partial class GuestModule : IDisposable
                 *(uint*)(callContext + 56) = kind switch { GuestReturn.St0 => 2u, GuestReturn.Xmm0 => 4u, St0IfPresent => 2u, _ => 0u };
                 current = this;
                 state.Depth++;
+                if (teb.Depth++ == 0) env.ThreadEntered();
                 var savedContext = state.CallContext;
                 state.CallContext = callContext;
                 uint eax;
                 try { eax = (uint)enter((ulong)hostTarget, esp, (ulong)callContext); }
-                finally { state.Depth--; current = previous; state.ImportEsp = savedEsp; state.CallContext = savedContext; }
+                finally
+                {
+                    state.Depth--; current = previous; state.ImportEsp = savedEsp; state.CallContext = savedContext;
+                    if (--teb.Depth == 0) env.ThreadLeft();
+                    else if (outermost) { *(uint*)(teb.Map + (nint)TebStackBase) = savedStackBase; *(uint*)(teb.Map + (nint)TebStackLimit) = savedStackLimit; }
+                }
 
                 var abi = *(uint*)(callContext + 112);
                 if ((abi & 1) != 0)
@@ -435,7 +470,9 @@ public sealed unsafe partial class GuestModule : IDisposable
                     if (trapKind == 4) throw new GuestFastFailException(*(uint*)(callContext + 8), (uint)trapAddress);
                     if (trapKind == 5) throw new GuestTrapException($"Guest executed {DescribeGuestInstruction((uint)trapAddress)} at 0x{trapAddress:X8}, a segment-register or far-pointer load whose new value is not the current flat selector (the guest runs in a flat model; this is a named deferred fault, not a translation error).");
                     throw new GuestTrapException(trapKind == 1
-                        ? $"Guest control flow reached untranslated code at 0x{trapAddress:X8} (indirect target not discovered at build time)."
+                        ? env.FindRetired((uint)trapAddress) is { } gone
+                            ? $"Guest control flow reached 0x{trapAddress:X8}, which lies inside module '{gone}' that has been unloaded (FreeLibrary/Unload): a function pointer or return address into it outlived the module."
+                            : $"Guest control flow reached untranslated code at 0x{trapAddress:X8} (indirect target not discovered at build time, and not inside any other module of this process)."
                         : trapKind == 3
                             ? $"Guest instruction at 0x{trapAddress:X8} used an fs: offset outside the thread environment block (run-time offset beyond the TLS slot array)."
                             : $"Guest executed an instruction the translator rejected at 0x{trapAddress:X8}.");
@@ -634,8 +671,11 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     private void Teardown()
     {
+        if (registrySlot >= 0) env.Retire(registrySlot, Name, artifact.GuestImageBase, registryBound);   // dead before the host image goes away
+        registrySlot = -1;
+        env.UnregisterTls(this);
         Memory.Clear();
-        FreeAllTebs();
+        env.Detach(this);
         lock (resourceLock)
         {
             foreach (var (_, (map, length)) in buffers) PlatformMemory.Current.Free(map, length);

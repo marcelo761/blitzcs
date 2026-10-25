@@ -96,6 +96,18 @@ public sealed record TranslationArtifact(
     string? TargetOs = null,   // host OS/ABI the runtime routines were generated for (BinaryTargets); null = legacy artifact = linux-sysv. The loader refuses a mismatch.
     int DynamicStubs = 0);   // import-style stubs emitted after the real imports (index Imports.Count + j: stub at ImportStubBaseRva + 16*index, thunk slot 8*index): the pool behind GuestModule.AllocateStub. 0 = none.
 
+/// <summary>
+/// Layout of the process-wide module registry that translated code consults when a dispatch target lies outside its own module (docs/binary-multimodule.md,
+/// "Cross-module dispatch"). The loader stores the registry's address in the 8-byte cell at <c>ContextOffset + CellOffset</c> of every module (0 = not part of a set).
+/// Header: u32 count (release-published), u32 capacity; 32-byte records from <see cref="HeaderSize"/>: u32 guest base, u32 bound (valid table indices, 0 = retired),
+/// u64 host code base (R12), u64 dispatch table address (R13, 0 = dead).
+/// </summary>
+public static class ModuleRegistryLayout
+{
+    public const uint CellOffset = 0;
+    public const int HeaderSize = 16, RecordSize = 32, GuestBase = 0, Bound = 4, HostBase = 8, Table = 16;
+}
+
 public enum OptimizationProfile { Debug, Release, ReleasePgo }
 
 /// <param name="LoadBase">Guest base address to translate for (64 KiB aligned, below 4 GiB). Null = the image's preferred base. Translated code embeds absolute addresses, so this is part of the cache key.</param>
@@ -110,7 +122,7 @@ public sealed record BinaryCompilerOptions(OptimizationProfile Profile = Optimiz
     /// <summary>Upper bound of <see cref="DynamicStubs"/> (each stub costs 16 bytes of guest address space and about 70 bytes of host code; 4096 stubs = 64 KiB stay inside the 64 KiB gap the module base allocator keeps between modules).</summary>
     public const int MaxDynamicStubs = 4096;
 
-    public const string CompilerVersion = "0.10.0";
+    public const string CompilerVersion = "0.12.0";
 }
 
 /// <summary>Target OS/ABI identifiers. Artifacts are target specific: the runtime routines (EnterGuest, import stubs) follow the host calling convention, and the loader refuses a mismatching artifact.</summary>

@@ -115,7 +115,7 @@ public static class BcRunner
         if (unbound.Count > 0) log($"{unbound.Count} import(s) are not provided and fault by name when called: {string.Join(", ", unbound)}");
 
         var processInfo = Win32ProcessInfo.From(win32);
-        var set = loader?.Set ?? new GuestModuleSet(_ => new Win32ImportResolver(win32));
+        var set = loader?.Set ?? new GuestModuleSet(Win32ImportResolver.SharedFactory(win32));
         loader?.Attach(win32, processInfo, loadImage);
         using (loader as IDisposable ?? set)
         {

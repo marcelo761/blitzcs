@@ -283,3 +283,24 @@ bases 0x50000000 (EXE), 0x500A0000, 0x500F0000 and the same outcome. The usage t
 function pointer is the limit already documented in docs/binary-multimodule.md. A fix belongs in the code generator/runtime: a dispatch-miss fallback that recognises an address inside a peer module and
 forwards the call there through a bridge (thiscall: ECX must be forwarded and the pop count inferred from the callee's `ret N`, which `ExportReturnScanner` already does for exports). Then runtime.dll
 start-up (imports DINPUT8, DDRAW, d3dxof, GDI32, SHELL32 are not provided) and the user32/gdi32 contracts follow.
+
+### Cross-module dispatch and one Win32 state (S4)
+
+Mechanism: the dispatch-miss routine consults the process-wide module registry and continues in the other module (docs/binary-multimodule.md section 3); the modules of the set share one TEB per thread and one `Win32Context` (docs/binary-win32.md).
+Observed (extracted SDK as sandbox, `--env blitzpath=C:\`, `--allow-errors`, linux-x64, translation cache warm, 2-5 s):
+
+| args | stdout | exit |
+|---|---|---|
+| `-h` | `Usage: blitzcc [-h|-q|+q|-c|-d|-k|+k|-v|-o exefile] [sourcefile.bb]` followed by the option list | 0 |
+| `-v` | `Compiler version:11.18:SoLoud`, `Runtime version:11.18:SoLoud`, `Debugger version:0.0:`, `Linker version:11.18:SoLoud` | 0 |
+| `-c C:\tmp\hello.bb` (`Print "hi"` / `WaitKey`) | `BlitzCC V1.118`, copyright line, `Compiling "C:\tmp\hello.bb"`, `Parsing...`, `Generating...`, `Translating...`, `Assembling...` | 0 |
+| none | empty | 0 |
+| `+h` | `Usage error` | 255 |
+| `-o C:\tmp\hello.exe C:\tmp\hello.bb` | the lines above plus `Creating executable "C:\tmp\hello.exe"...` | 125 (BcRun failure) |
+
+`-o` fails with `GuestImportException: The guest called unbound import KERNEL32.dll!CopyFileA, which no host service provides.` (blitzcc copies its runtime stub; the trace shows `GetProcAddress(runtime!_bbWinMain@0)` and `FreeLibrary(runtime)` just before).
+**Next blocker (exact):** `KERNEL32!CopyFileA` (then writing the executable through the sandbox); the runtime.dll start-up (user32/gdi32/DirectDraw/DirectInput imports, `DINPUT8`, `DDRAW`, `d3dxof`, `GDI32`, `SHELL32` are reported as not provided) has not been reached because `-v`/`-c` only call the version/compile virtuals, which do not initialise it.
+
+### Base independence of the code/data decision
+
+For images with a base relocation table the control-flow graph no longer depends on the load base. A fixup can only sit inside the displacement or immediate field of an instruction, so a decoded instruction that overlaps a relocated dword anywhere else (opcode, prefix, ModRM or SIB bytes) is an absolute-address table inside `.text` and is treated as data; the data-run trial decode uses the same test. The older heuristics (function-start trial decode, data after a call, rejected-mnemonic list) remain the fallback for images without relocations. Measured on the six SDK images, translating at 0x10000000 and at 0x50000000 yields identical sets of translated instruction RVAs, and the 8 spurious `BC_UNSUPPORTED_INSTRUCTION` errors seen in `blitzcc.exe` at 0x10000000 are gone (a fixed base the target cannot use still reports `BC_BASE_UNUSABLE_ON_TARGET`, which is a target policy and independent of this rule).

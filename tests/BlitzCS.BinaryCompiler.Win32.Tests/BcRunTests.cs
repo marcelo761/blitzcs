@@ -131,21 +131,31 @@ public sealed class BcRunTests : IDisposable
     }
 
     /// <summary>
-    /// With guest DLL loading, blitzcc loads bin/linker.dll and bin/runtime.dll, resolves linkerGetLinker/runtimeGetRuntime through GetProcAddress (cdecl, inferred from the
-    /// exports' ret instructions) and then calls a virtual method of the returned C++ object: the vtable points into linker.dll, which the EXE's dispatch table does not know.
-    /// That cross-module function-pointer call is the documented next blocker (docs/binary-multimodule.md, Limits).
+    /// With guest DLL loading, blitzcc loads bin/linker.dll and bin/runtime.dll, resolves linkerGetLinker/runtimeGetRuntime through GetProcAddress and then calls virtual methods of the
+    /// returned C++ objects: the vtables point into the DLLs (cross-module dispatch, docs/binary-multimodule.md section 3). `-v` asks all three objects for their version, `-h` prints the usage text.
     /// </summary>
     [Blitz3DSdkFact]
-    public void OriginalBlitzccLoadsItsDllsAndStopsAtTheCrossModuleVirtualCall()
+    public void OriginalBlitzccCallsTheVirtualMethodsOfItsDlls()
     {
         var sdk = Blitz3DSdkFactAttribute.Dir!;
-        var r = BcRunner.Run(new BcRunOptions
+        string Run(string arg, out uint exit)
         {
-            ExePath = Path.Combine(sdk, "bin", "blitzcc.exe"), SandboxRoot = sdk, AllowTranslationErrors = true,
-            Environment = new Dictionary<string, string> { ["blitzpath"] = "C:\\" },
-            Stdout = new MemoryStream(), Stderr = new MemoryStream(), Stdin = new MemoryStream(),
-        });
-        Assert.NotNull(r.Failure);
-        Assert.Contains("indirect target not discovered at build time", r.Failure);
+            var stdout = new MemoryStream();
+            var r = BcRunner.Run(new BcRunOptions
+            {
+                ExePath = Path.Combine(sdk, "bin", "blitzcc.exe"), SandboxRoot = sdk, AllowTranslationErrors = true, Args = [arg],
+                Environment = new Dictionary<string, string> { ["blitzpath"] = "C:\\" },
+                Stdout = stdout, Stderr = new MemoryStream(), Stdin = new MemoryStream(),
+            });
+            Assert.Null(r.Failure);
+            exit = r.ExitCode;
+            return System.Text.Encoding.ASCII.GetString(stdout.ToArray());
+        }
+        var version = Run("-v", out var code);
+        Assert.Equal(0u, code);
+        Assert.Contains("Compiler version:11.18", version); Assert.Contains("Runtime version:11.18", version); Assert.Contains("Linker version:11.18", version);   // runtime.dll and linker.dll answered
+        var usage = Run("-h", out code);
+        Assert.Equal(0u, code);
+        Assert.StartsWith("Usage: blitzcc [-h|-q|+q|-c|-d|-k|+k|-v|-o exefile] [sourcefile.bb]", usage);
     }
 }

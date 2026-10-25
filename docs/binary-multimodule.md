@@ -92,9 +92,40 @@ vorbisFile dispatch table, so the guest's indirect call reaches the managed hand
 
 * Modules loaded after start-up by `LoadLibrary` (`GuestLibraryLoader`, docs/binary-win32.md) join the same set: `Add`/`LoadAll`/`Unload` are serialised by a lock, `GuestExportBridge.AllocateStub` hands the caller a stub that forwards to an export, and no loaded module is relocated.
 
-* Data exports, forwarders, cycles: unsupported (diagnosed). Callbacks passed *between* modules as guest function pointers (module A hands its code address to module B) are not
-  possible: B's dispatch table only knows B's own code, so the call traps (`BC_UNTRANSLATED_TARGET`); route such callbacks through an import of B.
+* Data exports, forwarders, cycles: unsupported (diagnosed). Callbacks and function pointers passed *between* modules (module A hands its code address to module B, B calls it; a C++ vtable in
+  one module reached from another) are supported by cross-module dispatch (section 3), not by the bridge.
 * A cdecl bridge cannot know the real argument count (window above). Struct-by-value arguments larger than the window and register conventions (thiscall/fastcall) are not bridged.
 * The allocator picks from fixed windows and cannot see the live address space; a conflict is reported at load time with the occupants named.
 * The x87 stack must be empty at a bridged call (the callee's entry check reports `GuestAbiException` otherwise).
 * eax.dll (COM / DirectSound) was not run: it needs ole32/advapi32 services that the Win32 component does not provide.
+
+## 3. Cross-module dispatch (artifact format 5, compiler 0.11.0)
+
+Measured need: the original `blitzcc.exe` calls a virtual method of the object returned by `linker.dll!linkerGetLinker`; the vtable slot is a `linker.dll` code address and the EXE's dispatch
+table only covers the EXE. Every translated module has its own dispatch table (guest RVA to host offset from R12). A hit costs what it always did; the **miss** (target outside the table or entry 0) used
+to be the kind 1 trap. It is now a routine at host offset 0:
+
+1. `pushfq` (on the guest stack, below ESP: free memory), load the registry address from the cell at `ContextOffset + 0` of the module's own data area (the formerly unused 64-byte context area; 0 means the module is not in a set, so the trap stays);
+2. walk the **module registry**: a native array published by the runtime, one per `GuestModuleSet`: header `u32 count` (release store, only ever grows), `u32 capacity` (1024), then 32-byte records
+   `{u32 guestBase, u32 bound, u64 hostCodeBase, u64 dispatchTable}`. A record matches when `VA - guestBase < bound` (unsigned, so also `VA < guestBase`; a retired record has bound 0);
+3. on a match whose table is live and whose entry is non-zero: `r12 = hostCodeBase`, `r13 = dispatchTable`, `popfq`, `jmp r12 + entry`. Otherwise the kind 1 trap runs unchanged (message: "untranslated code at ... and not inside any other module of this process", or, for an address in
+   a module that was unloaded, "lies inside module 'x.dll' that has been unloaded").
+
+Returns work symmetrically: a `ret` in B to an address of A misses B's table, takes the same path and switches back. **Switched:** R12 (code base) and R13 (dispatch table). **Not switched:** R14 (call context: trap report, native RSP, import fault flag,
+x87 capture) and R15 (TEB): they belong to the thread's current guest call, not to the module. Import stubs executing in B use B's own thunk table (RIP-relative), so imports of B run as B's even when B was entered by a jump; managed imports see
+`GuestModule.Current` = the module the thread *entered* (its `Memory` sees every module's regions, so this only matters for module identity APIs).
+
+*Flags.* The miss routine preserves the arithmetic flags itself (pushfq/popfq), so a foreign call/return costs nothing in correctness over the in-module flag-preserving dispatch. It is entered from the flag-clobbering dispatch variant too (that variant is only used when
+every statically known target of *that image* ignores flags, the ABI assumption already documented in `DispatchTargetsIgnoreFlags`); the flags it then hands over are the ones that variant leaves. `FlagsAreIdenticalAcrossTheForeignCallAndReturn` forces the preserving variant on both sides.
+
+*Cost.* Zero extra instructions on a hit (benchmark: docs/binary-benchmark.md, "Cross-module dispatch"); a foreign call/return is a linear scan of the registry (a few dozen instructions). *Compatibility:* the cell and the routine make artifacts of format version 4 or older unusable
+(`ArtifactSerializer.CurrentVersion` 5, `CompilerVersion` 0.11.0 so cache keys change; the loader refuses an older in-memory artifact with "re-translate the image"). The SHA pins of `TargetOsTests` were re-pinned once for this change; the only difference to the old output is the routine at offset 0.
+Deviation from the written design: none in behaviour; the registry cell reuses the legacy context area instead of adding a data field, so no layout offset moved.
+
+*Lifetime.* `Publish` completes the record, writes the table pointer, then increments the count (release stores); slots are never reused (a reader can never see another module in a slot; 1024 loads per process, then `GuestLoadException`). `Retire` writes bound 0, then
+clears the table pointer, before the module's host image is freed. Translated code of one module can run inside another without that module's call accounting, so a module is **only unloaded while no other thread is in guest code anywhere in the process**
+(`GuestModuleSet.Unload` throws `InvalidOperationException`: "N other guest thread(s) are executing guest code ..."; the calling thread is excluded because FreeLibrary is itself a guest call). Limit: a thread that frees the module it is currently executing in (FreeLibrary(self) from its own code) is not detected, as on Windows.
+
+*Shared thread state.* A set owns one `GuestProcessEnvironment`: the registry, one PEB (ImageBaseAddress = the executable's; ProcessHeap shared), and **one TEB per OS thread** for all modules (SEH chain, TLS slots, LastError field, stack bounds). A call into another module that needs its own stack
+(the bridge, `GetProcAddress` stubs) switches StackBase/StackLimit and restores them; the SEH chain is only reset at the outermost entry of the thread. Implicit TLS: each module with a TLS directory gets a process-wide index (written to its index variable) and a data block in every thread's pointer array, also for threads that already exist when the module is loaded.
+Details: docs/binary-teb-contract.md.

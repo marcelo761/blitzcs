@@ -60,7 +60,9 @@ public sealed class GuestLibraryLoader : IDisposable
     {
         this.options = options ?? new GuestLibraryOptions();
         cache = this.options.CacheDirectory is { } d ? new TranslationCache(d) : null;
-        Set = new GuestModuleSet(name => new Win32ImportResolver(win32 ?? throw new InvalidOperationException("GuestLibraryLoader.Attach was not called.")));
+        // every module of the set is a module of one process: one Win32 state (heap, handles, TLS/FLS indices, critical sections ...), created from the Win32 options given to Attach
+        Func<string, IGuestImportResolver>? shared = null;
+        Set = new GuestModuleSet(name => (shared ??= Win32ImportResolver.SharedFactory(win32 ?? throw new InvalidOperationException("GuestLibraryLoader.Attach was not called.")))(name));
     }
 
     /// <summary>The set the executable and every loaded DLL live in.</summary>

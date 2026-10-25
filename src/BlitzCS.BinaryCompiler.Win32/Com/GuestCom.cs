@@ -154,7 +154,8 @@ public sealed class GuestComHost : IDisposable
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(module);
         var host = hosts.GetValue(context, c => { var h = new GuestComHost(c, module); c.AddDisposable(h); return h; });
-        if (!ReferenceEquals(host.Module, module)) throw new Win32UsageException("This Win32 context already serves another guest module's COM objects; create one resolver per module.");
+        // in a shared process state the host (and the stubs of its objects) live in the first module that created it; the other modules reach them by cross-module dispatch
+        if (!context.IsSharedByModules && !ReferenceEquals(host.Module, module)) throw new Win32UsageException("This Win32 context already serves another guest module's COM objects; create one resolver per module.");
         return host;
     }
 

@@ -27,15 +27,71 @@ public sealed class Win32Coverage
 /// </summary>
 public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImportResolver, IDisposable
 {
-    private readonly Win32Registry registry = new();
+    /// <summary>What the resolvers of one guest process share: the API registry, the service instances and the Win32 context (heaps, handle table, TLS/FLS index space, critical sections, files, registry ...). Reference counted: the context dies with the last resolver.</summary>
+    private sealed class SharedState
+    {
+        public readonly Win32Registry Registry = new();
+        public IReadOnlyList<IWin32Service> Services = [];
+        public Win32Context Context = null!;
+        public int Refs;
+        public readonly object Gate = new();
+    }
+
+    private readonly SharedState state;
+    private readonly Win32Registry registry;
+    private int disposed;
 
     public Win32ImportResolver(Win32Options? options = null, IEnumerable<IWin32Service>? services = null)
     {
-        Services = [.. services ?? DefaultServices()];
+        state = new SharedState { Refs = 1 };
+        registry = state.Registry;
+        Services = state.Services = [.. services ?? DefaultServices()];
         foreach (var s in Services) s.Register(registry);
-        Context = new Win32Context(options ?? new Win32Options());
+        Context = state.Context = new Win32Context(options ?? new Win32Options());
         Context.Process.RegisterSystem(registry.All.Select(a => a.Dll));
         Context.ApiLookup = (dll, name) => registry.Find(dll, name, null);
+    }
+
+    /// <summary>A view over the shared state of one process (one Win32Context, one set of service instances).</summary>
+    private Win32ImportResolver(SharedState shared)
+    {
+        state = shared; registry = shared.Registry; Services = shared.Services; Context = shared.Context;
+    }
+
+    /// <summary>
+    /// Another resolver for a further module of the process this resolver serves. Windows has one heap, handle table, TLS/FLS index space, environment, current
+    /// directory and module list per process, so the modules of one <see cref="GuestModuleSet"/> must see the same Win32 state: everything is shared and
+    /// only per-module identity stays with the module (<c>GuestModule.Current</c>: the stub provider, DllMain bookkeeping, the module handle). Disposing a view
+    /// releases its reference; the context is disposed with the last one.
+    /// </summary>
+    public Win32ImportResolver ForAnotherModule()
+    {
+        lock (state.Gate)
+        {
+            if (state.Refs == 0) throw new ObjectDisposedException(nameof(Win32ImportResolver), "The Win32 state of this process has been disposed.");
+            state.Refs++;
+        }
+        state.Context.MarkShared();
+        return new Win32ImportResolver(state);
+    }
+
+    /// <summary>
+    /// A resolver factory for <see cref="GuestModuleSet(Func{string, IGuestImportResolver}, ModuleLinkOptions?)"/> in which every module of the set gets a resolver over
+    /// the same Win32 state (the first call creates it from <paramref name="options"/>). Use it instead of <c>name =&gt; new Win32ImportResolver(options)</c> unless the modules
+    /// are meant to be separate processes.
+    /// </summary>
+    public static Func<string, IGuestImportResolver> SharedFactory(Win32Options? options = null, IEnumerable<IWin32Service>? services = null)
+    {
+        Win32ImportResolver? first = null;
+        var gate = new object();
+        return _ =>
+        {
+            lock (gate)
+            {
+                if (first is null || first.state.Refs == 0) return first = new Win32ImportResolver(options, services);   // a fresh process once the previous one is gone
+                return first.ForAnotherModule();
+            }
+        };
     }
 
     /// <summary>The standard composition. Each service can be omitted or replaced independently.</summary>
@@ -129,5 +185,11 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         }),
     ];
 
-    public void Dispose() => Context.Dispose();
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+        bool last;
+        lock (state.Gate) last = --state.Refs == 0;
+        if (last) Context.Dispose();
+    }
 }

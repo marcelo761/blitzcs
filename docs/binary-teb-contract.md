@@ -6,8 +6,8 @@ error (`BC_FS_UNSUPPORTED_OFFSET`). An access with a run-time offset (`fs:[reg]`
 generated code: it may only reach the TLS slot array, and anything outside it traps (trap kind 3) instead of reading unmodelled
 memory. No unmodelled field ever reads as a silent zero.
 
-One TEB (4 KiB, page aligned, in the low 4 GiB) exists per (module, OS thread) and lives as long as the module. Nested and re-entrant
-calls on one thread share it, as on Windows. Different threads never share one, so there is no lock on the hot path.
+One TEB (4 KiB, page aligned, in the low 4 GiB) exists per (guest process, OS thread): a module loaded on its own is its own process, and all modules of a `GuestModuleSet` are one process (`GuestProcessEnvironment`). It lives until the process
+environment is disposed (module disposal, or set disposal). Nested and re-entrant calls on one thread, and code that jumps from one module into another (docs/binary-multimodule.md, section 3), share it, as on Windows. Different threads never share one, so there is no lock on the hot path.
 The translated code addresses it through a callee-saved host register that is part of the per-call context.
 
 | FS offset | Field | Initial value | Access |
@@ -23,7 +23,7 @@ The translated code addresses it through a callee-saved host register that is pa
 | 0x34 | LastErrorValue | 0 | read/write |
 | 0xE10..0xF0F | TlsSlots[64] | 0 | read/write |
 
-PEB (one per module, 4 KiB): +0x02 BeingDebugged = 0, +0x08 ImageBaseAddress = image base, +0x18 ProcessHeap = 0 (no heap is
+PEB (one per process, 4 KiB; shared by the modules of a set, ImageBaseAddress = the executable's, a DLL's only while no executable is loaded): +0x02 BeingDebugged = 0, +0x08 ImageBaseAddress = image base, +0x18 ProcessHeap = 0 (no heap is
 modelled here; an image that uses it gets whatever the Win32 component provides), +0xA4 OSMajorVersion/+0xA8 OSMinorVersion/+0xAC OSBuildNumber are
 left to the Win32 component and are otherwise unsupported. (Superseded: see "PEB fields (EXE start-up)" below for the fields now modelled.)
 
@@ -56,3 +56,12 @@ program is `Win32ProcessInfo.VersionForImage` (the version the image declares, n
 `GuestModule.RunExecutable()` calls the entry point (stdcall, no arguments) on a fresh guest thread context and returns a `GuestExecutableResult`: the code of
 an `IGuestProcessExit` found in the inner chain of the `GuestImportException` (the Win32 component's `Win32ExitProcessException`: ExitProcess/TerminateProcess(self)), or EAX
 when the entry point returns. Any other failure (trap, unbound import, memory fault) propagates. DLL behaviour is unchanged: `DllMain` still runs at load.
+
+
+## Several modules (cross-module dispatch)
+
+* One TEB per thread for the whole set, so `fs:[0]` SEH chains, `TlsSlots`, `LastErrorValue` and `NT_TIB.Self` are the same whichever module's code reads them. The thread's `Depth` counts guest calls across all modules; the SEH chain is reset and StackBase/StackLimit are set only at the process-outermost entry, a nested entry on another module's stack
+  saves and restores the two stack fields.
+* Implicit TLS: `ThreadLocalStoragePointer` points to a 4 KiB array of data-block pointers shared by the modules; a module with a TLS directory is assigned the next index when it loads (written to its TLS index variable before the image is protected), a data block (template + zero fill) is created in the TEB of every existing thread at that moment and of every later thread,
+  and removed again when the module is unloaded. DLL_THREAD_ATTACH TLS callbacks still run per (module, thread) the first time the thread calls into the module.
+* The Win32 `LastError` is kept by the Win32 component (per thread, in the shared context); the TEB field is not mirrored (as before).

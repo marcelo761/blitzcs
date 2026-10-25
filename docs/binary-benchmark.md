@@ -221,3 +221,17 @@ samples: the instruction-count ratios are identical for every workload (int 1.00
 got slower relative to its native baseline (translated/native: int 1.00 -> 1.00, calls 1.24 -> 0.97, ind 1.32 -> 1.16, matmul 1.07 -> 1.02; the absolute times of the two
 runs differ because the machine was not isolated). The only generated-code change is `test r9d,r9d; js` in each import body, which these workloads do not execute.
 Rebased builds have the same layout as preferred-base builds (`RebaseTests.RebasedCodeHasTheSameShapeAndRunsIdenticallyAtBothBases`).
+
+## Cross-module dispatch (artifact format 5)
+
+The miss routine at host offset 0 gained the registry lookup; the hit path of ret, indirect call and jump-table dispatch is untouched. Instruction-count ratios of the four dispatch-heavy workloads are identical before and after (fib x1.22, calls x1.76, switch x1.32, ind x1.96).
+Wall time (`--samples 9 --cpu 3 --target-ms 150`, a loaded desktop, overhead = translated/native - 1):
+
+| workload | before | after (run 1) | after (run 2) |
+|---|---|---|---|
+| fib | 1.3 % | 7.2 % | 2.5 % |
+| calls | -1.9 % | 7.2 % | 3.1 % |
+| switch | 4.9 % | 6.5 % | 5.8 % |
+| ind | 15.3 % | 16.9 % | 15.5 % |
+
+The spread between two runs of the same build is as large as the change, so no effect is claimed beyond "no extra instructions on a hit".

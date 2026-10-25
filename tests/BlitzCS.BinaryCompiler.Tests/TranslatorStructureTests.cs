@@ -75,7 +75,8 @@ public sealed class TranslatorStructureTests
         {
             var art = Translate(SimpleCode, profile).Artifact;
             var insts = DecodeHost(art);
-            Assert.Equal(Code.Mov_rm32_imm32, insts[0].Ins.Code);                       // trap routine at host offset 0
+            Assert.Equal(Code.Pushfq, insts[0].Ins.Code);                              // miss routine at host offset 0: the foreign (cross-module) dispatch comes first ...
+            Assert.Contains(insts.Take(40), i => i.Ins.Code == Code.Mov_rm32_imm32);    // ... and ends in the kind 1 trap
             Assert.Equal(0, insts[0].Offset);
             Assert.True(insts[^1].Offset + insts[^1].Length <= art.CodeSize);
             Assert.Contains(insts, i => i.Offset == art.EnterGuestOffset);

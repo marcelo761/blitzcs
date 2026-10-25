@@ -30,6 +30,7 @@ public sealed class GuestModuleSet : IDisposable
     private int loadCounter;
     private readonly object gate = new();   // serialises Add/LoadAll/Unload: modules can be added while guest code of already loaded modules runs
     private bool disposed;
+    private readonly GuestProcessEnvironment environment = new(ownedBySet: true);   // module registry, PEB and per-thread TEBs shared by every module of the set
 
     public GuestModuleSet(IGuestImportResolver? hostImports = null, ModuleLinkOptions? options = null)
     {
@@ -106,7 +107,7 @@ public sealed class GuestModuleSet : IDisposable
             {
                 var resolver = new SiblingResolver(this, entry);
                 entry.Host ??= hostFactory?.Invoke(entry.DisplayName);
-                entry.Module = GuestModule.Load(entry.Artifact, entry.Image, new ChainedGuestImportResolver(entry.Host ?? host, resolver), entry.Options);
+                entry.Module = GuestModule.Load(entry.Artifact, entry.Image, new ChainedGuestImportResolver(entry.Host ?? host, resolver), entry.Options, environment, entry.DisplayName);
                 entry.Dependencies = resolver.Dependencies.ToList();
                 foreach (var dep in entry.Dependencies) dep.Module!.AddDependent();
                 foreach (var other in entries.Where(o => o != entry && o.Module is not null))   // one process, one address space: managed accesses see every module's regions
@@ -148,6 +149,12 @@ public sealed class GuestModuleSet : IDisposable
         if (e.Module is null) throw new InvalidOperationException($"Module '{name}' is not loaded.");
         var users = entries.Where(x => x.Module is not null && x.Dependencies.Contains(e)).Select(x => x.DisplayName).ToList();
         if (users.Count > 0) throw new InvalidOperationException($"Module '{name}' cannot be unloaded: {string.Join(", ", users)} still import(s) from it. Unload the dependents first.");
+        if (e.Module.IsProcessAnchor && entries.Count(x => x.Module is not null) > 1)
+            throw new InvalidOperationException($"Module '{name}' cannot be unloaded: the process-wide Win32 state (heaps, virtual memory, handles) of the other loaded modules lives in its address space. Unload the other modules first.");
+        // Translated code of any module can jump into this one without going through its call accounting, so a thread that is executing guest code anywhere in the process may
+        // be inside it. The module is only unloaded while no OTHER thread runs guest code; the calling thread (FreeLibrary is a guest call itself) is excluded.
+        var busy = environment.OtherActiveThreads();
+        if (busy > 0) throw new InvalidOperationException($"Module '{name}' cannot be unloaded: {busy} other guest thread(s) are executing guest code in this process and may be running inside it (code of one module can jump into another without call accounting). Retry when they are idle.");
         Release(e);
         (e.Host as IDisposable)?.Dispose();
         entries.Remove(e);
@@ -170,6 +177,7 @@ public sealed class GuestModuleSet : IDisposable
                 catch (Exception error) { (errors ??= []).Add(error); }
             }
         entries.Clear();
+        environment.Dispose();
         if (errors is not null) throw new AggregateException("One or more modules failed to dispose.", errors);
     }
 

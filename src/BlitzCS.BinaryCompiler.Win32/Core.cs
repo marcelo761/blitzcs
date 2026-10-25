@@ -70,7 +70,7 @@ public interface IWin32Memory
 }
 
 /// <summary>Adapts the runtime's <see cref="GuestMemory"/>.</summary>
-public sealed class GuestMemoryAdapter(GuestMemory memory) : IWin32Memory
+public sealed class GuestMemoryAdapter(GuestMemory memory, GuestMemory? allocator = null) : IWin32Memory
 {
     private sealed class Alloc(GuestBuffer buffer) : IWin32Allocation
     {
@@ -88,7 +88,8 @@ public sealed class GuestMemoryAdapter(GuestMemory memory) : IWin32Memory
     public void Write(uint a, ReadOnlySpan<byte> s) => Memory.Write(a, s);
     public string ReadAnsiString(uint a, int max = 65536) => Memory.ReadAnsiString(a, max);
     public bool IsMapped(uint a, uint l) => Memory.IsMapped(a, l);
-    public IWin32Allocation Allocate(int size) => new Alloc(Memory.Allocate(size));
+    /// <summary>Allocations come from <paramref name="allocator"/> when given (the process anchor of a shared Win32 state), else from this memory's own module.</summary>
+    public IWin32Allocation Allocate(int size) => new Alloc((allocator ?? Memory).Allocate(size));
     public bool TryQueryPage(uint a, out GuestPageInfo info) => Memory.TryQueryPage(a, out info);
     public ulong NextMappedAddress(uint a) => Memory.NextMappedAddress(a);
     public bool TryProtect(uint a, uint l, MemoryProtection p, uint tag, out string? refusal) => Memory.TryProtect(a, l, p, tag, out refusal);
@@ -343,7 +344,7 @@ public sealed class Win32Options
     public WaveOutObserver? WaveOutSliceObserver { get; init; }
 }
 
-/// <summary>Per-process emulation state shared by the services. One instance must serve exactly one guest module.</summary>
+/// <summary>Per-process emulation state shared by the services. One instance serves one guest process: a single module, or all modules of a <see cref="GuestModuleSet"/> when the resolvers were made with <see cref="Win32ImportResolver.SharedFactory"/>.</summary>
 public sealed class Win32Context : IDisposable
 {
     private readonly object bindGate = new();
@@ -426,14 +427,31 @@ public sealed class Win32Context : IDisposable
 
     public uint CurrentThreadId => 1000u + 4u * (uint)Environment.CurrentManagedThreadId;
 
-    /// <summary>Binds the context to the memory of the first guest module that calls it; another module is refused.</summary>
+    private bool sharedByModules;
+    internal bool IsSharedByModules => sharedByModules;
+    private GuestMemory? anchor;
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<GuestMemory, IWin32Memory> moduleMemories = new();
+
+    /// <summary>
+    /// Declares that several modules of one guest process use this context (<see cref="Win32ImportResolver.ForAnotherModule"/>). Their memories are all accepted; reads and
+    /// writes go through the calling module's own memory (which sees every module's regions), allocations (heaps, virtual memory, process-lifetime strings) come from the
+    /// first module that used the context, which is pinned (<see cref="GuestMemory.PinAsProcessAnchor"/>): it cannot be unloaded while other modules are loaded.
+    /// </summary>
+    internal void MarkShared() { lock (bindGate) { sharedByModules = true; anchor?.PinAsProcessAnchor(); } }
+
+    /// <summary>Binds the context to the memory of the first guest module that calls it; another module is refused unless the context is shared by the modules of one process.</summary>
     internal IWin32Memory Bind(GuestMemory guest)
     {
         lock (bindGate)
         {
-            if (memory is null) { memoryOwner = guest; memory = new GuestMemoryAdapter(guest); }
-            else if (!ReferenceEquals(memoryOwner, guest)) throw new Win32UsageException("This Win32ImportResolver already serves another guest module; create one resolver per module.");
-            return memory;
+            if (memory is null)
+            {
+                memoryOwner = guest; anchor = guest; memory = new GuestMemoryAdapter(guest);
+                if (sharedByModules) guest.PinAsProcessAnchor();
+            }
+            if (ReferenceEquals(memoryOwner, guest)) return memory;
+            if (!sharedByModules) throw new Win32UsageException("This Win32ImportResolver already serves another guest module; create one resolver per module, or share the process state with Win32ImportResolver.SharedFactory / ForAnotherModule.");
+            return moduleMemories.GetValue(guest, g => new GuestMemoryAdapter(g, anchor));
         }
     }
 
