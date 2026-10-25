@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><RuntimeIdentifier>win-x86</RuntimeIdentifier><PlatformTarget>x86</PlatformTarget><AssemblyName>BlitzCS.OriginalRuntime.Host</AssemblyName></PropertyGroup>
+<ItemGroup><ProjectReference Include="../Bridge/Bridge.csproj"/><ProjectReference Include="../../../src/BlitzCS.CLI/BlitzCS.CLI.csproj"/></ItemGroup>
+</Project>
