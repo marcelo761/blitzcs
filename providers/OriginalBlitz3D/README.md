@@ -51,6 +51,8 @@ Place the compiled BASIC assembly at `dist/MyGame/program/Main.dll`, its managed
 
 Starting the EXE without arguments executes the compiled BASIC assembly inside the original runtime in that process. Paths resolve against the configuration file, so the caller's working directory does not matter. Keep the published folder together: the executable still requires its managed assemblies, native engine DLLs and assets. The launcher assembly name must differ from the compiled program's assembly name. Existing explicit host commands continue to work.
 
+Omit `log` or set it to `null` to disable application file logging. Disable `BLITZCS_ORIGINAL_TRACE` separately when comparing performance; it serializes and flushes selected native calls and results.
+
 ## Scope and native ABI
 
 The generated catalog composes the existing historical profile and provides 532 bindings, including strings. Blitz3D strings are owned C++ objects, not C strings: the adapter uses the original engine's construction, copying, concatenation, conversion and release helpers, including for embedded NULs. Missing registrations and signature disagreements fail explicitly before the native call. Generation establishes bindings, not execution coverage for every command.

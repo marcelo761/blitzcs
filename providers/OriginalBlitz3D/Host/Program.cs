@@ -24,10 +24,14 @@ internal static class Program
                 if (File.Exists(configuration))
                 {
                     var application = ApplicationLaunch.Load(configuration);
-                    Directory.CreateDirectory(Path.GetDirectoryName(application.Log)!);
                     Directory.SetCurrentDirectory(application.WorkingDirectory);
                     Environment.SetEnvironmentVariable("BLITZCS_ORIGINAL_NATIVE_ROOT", application.NativeRoot);
-                    args = ["--log", application.Log, "--run", application.Program, application.Runtime];
+                    args = ["--run", application.Program, application.Runtime];
+                    if (application.Log is { } applicationLog)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(applicationLog)!);
+                        args = ["--log", applicationLog, .. args];
+                    }
                 }
             }
             if (args.Length >= 2 && args[0] == "--log")

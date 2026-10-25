@@ -33,6 +33,18 @@ public sealed class ApplicationLaunchTests : IDisposable
         Assert.Equal(Path.Combine(root, "logs", "session.log"), launch.Log);
     }
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NullOrOmittedLogDisablesFileLogging(bool omit)
+    {
+        Inputs();
+        var config = Config();
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(config))!.AsObject();
+        if (omit) document.Remove("log"); else document["log"] = null;
+        File.WriteAllText(config, document.ToJsonString());
+        Assert.Null(ApplicationLaunch.Load(config).Log);
+    }
+    [Theory]
     [InlineData("program/Game.dll")]
     [InlineData("native/runtime.dll")]
     public void MissingProgramOrNativeRuntimeFailsBeforeLaunching(string missing)
