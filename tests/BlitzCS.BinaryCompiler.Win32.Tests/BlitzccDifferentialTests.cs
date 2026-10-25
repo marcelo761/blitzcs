@@ -61,11 +61,67 @@ public sealed class BlitzccDifferentialTests : IDisposable
 
         """;
 
+    // Compile errors: stdout (CRLF line ends) and exit code of the original blitzcc.exe -c under Wine 11 (Proton), dedicated prefix; Wine's own "ntsync" stderr line is not stdout.
+    // blitzcc reports these errors with a C++ throw from deep in the parser/semantic phase that its main catches: guest SEH across guest frames (docs/binary-seh.md).
+    private const string JoyUDirNative =
+        "BlitzCC V1.118\r\n(C)opyright 2000-2003 Blitz Research Ltd\r\nCompiling \"C:\\help\\commands\\2d_examples\\JoyUDir.bb\"\r\nParsing...\r\n" +
+        "\"C:\\help\\commands\\2d_examples\\JoyUDir.bb\":2:1:2:1:Expecting end-of-file\r\n";
+    private const string StartNetGameNative =
+        "BlitzCC V1.118\r\n(C)opyright 2000-2003 Blitz Research Ltd\r\nCompiling \"C:\\help\\commands\\2d_examples\\StartNetGame.bb\"\r\nParsing...\r\nGenerating...\r\n" +
+        "\"C:\\help\\commands\\2d_examples\\StartNetGame.bb\":1:1:1:1:Function 'startnetgame' not found\r\n";
+    // blitzcc ends with exit(-1): ExitProcess(0xFFFFFFFF). The native run's process status under Wine is 255 (the low byte, as POSIX reports it), and so is BcRun's.
+    private const uint CompileErrorExitCode = 0xFFFFFFFF;
+    private const int NativeWineProcessStatus = 255;
+
     private readonly string dir = Directory.CreateTempSubdirectory("blitzccdiff-").FullName;
     public void Dispose() { try { Directory.Delete(dir, true); } catch (IOException) { } }
 
     /// <summary>Compiles <paramref name="source"/> with the original blitzcc.exe in a writable copy of the SDK's bin directory and returns the produced executable.</summary>
     private byte[] Compile(string main, params (string Name, string Text)[] files)
+    {
+        var sandbox = PrepareSandbox();
+        foreach (var (name, text) in files) File.WriteAllBytes(Path.Combine(sandbox, name), Encoding.ASCII.GetBytes(text));
+        var output = Path.Combine(sandbox, "out.exe");
+        File.Delete(output);
+        var (r, said, diagnostics) = RunBlitzcc(sandbox, ["-o", "C:\\out.exe", "C:\\" + main]);
+        Assert.True(r.Failure is null && r.ExitCode == 0 && File.Exists(output), $"blitzcc failed (exit {r.ExitCode}, {r.Failure}):\n{said}\n{diagnostics}");
+        return File.ReadAllBytes(output);
+    }
+
+    private (BcRunResult Result, string Stdout, string Diagnostics) RunBlitzcc(string sandbox, string[] args)
+    {
+        var stdout = new MemoryStream();
+        var log = new List<string>();
+        var r = BcRunner.Run(new BcRunOptions
+        {
+            ExePath = Path.Combine(sandbox, "bin", "blitzcc.exe"), SandboxRoot = sandbox, AllowTranslationErrors = true,
+            Args = args,
+            Environment = new Dictionary<string, string> { ["blitzpath"] = "C:\\" },
+            CacheDirectory = Path.Combine(dir, "cache"), Log = log.Add,
+            Stdout = stdout, Stderr = new MemoryStream(), Stdin = new MemoryStream(),
+        });
+        return (r, Encoding.Latin1.GetString(stdout.ToArray()), string.Join("\n", r.Diagnostics));
+    }
+
+    /// <summary>
+    /// Compiles an SDK source that has a compile error with <c>-c</c>, at the same path (<c>C:\help\commands\2d_examples\...</c>) as the native reference run, and checks that
+    /// the diagnostic and the exit code are exactly the native ones.
+    /// </summary>
+    private void AssertCompileError(string name, string expectedStdout)
+    {
+        var sandbox = PrepareSandbox();
+        var rel = Path.Combine("help", "commands", "2d_examples", name);
+        Directory.CreateDirectory(Path.Combine(sandbox, "help", "commands", "2d_examples"));
+        File.Copy(Path.Combine(Blitz3DSdkFactAttribute.Dir!, rel), Path.Combine(sandbox, rel), overwrite: true);
+        var (r, said, diagnostics) = RunBlitzcc(sandbox, ["-c", "C:\\help\\commands\\2d_examples\\" + name]);
+        Assert.True(r.Failure is null, $"blitzcc did not end by itself: {r.Failure}\n{said}\n{diagnostics}");
+        Assert.True(r.CalledExit, "blitzcc reports compile errors through exit(), i.e. ExitProcess");
+        Assert.Equal(CompileErrorExitCode, r.ExitCode);
+        Assert.Equal(NativeWineProcessStatus, (int)(r.ExitCode & 0xFF));
+        Assert.Equal(expectedStdout, said);
+    }
+
+    private string PrepareSandbox()
     {
         var sdk = Blitz3DSdkFactAttribute.Dir!;
         var sandbox = Path.Combine(dir, "sandbox");
@@ -76,22 +132,7 @@ public sealed class BlitzccDifferentialTests : IDisposable
             foreach (var sub in new[] { "cfg", "userlibs" })
                 if (Directory.Exists(Path.Combine(sdk, sub))) foreach (var f in Directory.GetFiles(Path.Combine(sdk, sub))) { Directory.CreateDirectory(Path.Combine(sandbox, sub)); File.Copy(f, Path.Combine(sandbox, sub, Path.GetFileName(f))); }
         }
-        foreach (var (name, text) in files) File.WriteAllBytes(Path.Combine(sandbox, name), Encoding.ASCII.GetBytes(text));
-        var output = Path.Combine(sandbox, "out.exe");
-        File.Delete(output);
-        var stdout = new MemoryStream();
-        var log = new List<string>();
-        var r = BcRunner.Run(new BcRunOptions
-        {
-            ExePath = Path.Combine(sandbox, "bin", "blitzcc.exe"), SandboxRoot = sandbox, AllowTranslationErrors = true,
-            Args = ["-o", "C:\\out.exe", "C:\\" + main],
-            Environment = new Dictionary<string, string> { ["blitzpath"] = "C:\\" },
-            CacheDirectory = Path.Combine(dir, "cache"), Log = log.Add,
-            Stdout = stdout, Stderr = new MemoryStream(), Stdin = new MemoryStream(),
-        });
-        var said = Encoding.Latin1.GetString(stdout.ToArray());
-        Assert.True(r.Failure is null && r.ExitCode == 0 && File.Exists(output), $"blitzcc failed (exit {r.ExitCode}, {r.Failure}):\n{said}\n{string.Join("\n", r.Diagnostics)}");
-        return File.ReadAllBytes(output);
+        return sandbox;
     }
 
     private static void AssertDigest(string expected, byte[] actual, string what)
@@ -123,6 +164,12 @@ public sealed class BlitzccDifferentialTests : IDisposable
     [Blitz3DSdkFact]
     public void IncludeIsByteIdenticalToTheNativeWineReference() =>
         AssertDigest(IncSha256, Compile("inc_main.bb", ("inc_main.bb", IncMainSource), ("inc_lib.bb", IncLibSource)), "inc_main.bb");
+
+    [Blitz3DSdkFact]
+    public void ACompileErrorInTheParserPrintsTheNativeDiagnosticAndExitCode() => AssertCompileError("JoyUDir.bb", JoyUDirNative);
+
+    [Blitz3DSdkFact]
+    public void AnUnknownFunctionPrintsTheNativeDiagnosticAndExitCode() => AssertCompileError("StartNetGame.bb", StartNetGameNative);
 
     /// <summary>Mutation check: a single flipped hex digit of the expected digest must fail the comparison, with the PE region in the message.</summary>
     [Blitz3DSdkFact]

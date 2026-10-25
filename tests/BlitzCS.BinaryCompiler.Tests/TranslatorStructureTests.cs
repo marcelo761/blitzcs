@@ -53,7 +53,9 @@ public sealed class TranslatorStructureTests
         Assert.Single(art.Imports);
         Assert.NotEqual(0u, TableEntry(art, art.ExitGuestRva));
         Assert.NotEqual(0u, TableEntry(art, art.ImportStubBaseRva));
-        Assert.Equal(0u, TableEntry(art, art.ImportStubBaseRva + 16));                  // beyond the imports: trap
+        Assert.Equal(ImportStubLayout.RuntimeStubCount, art.RuntimeStubs);
+        for (var k = 1u; k <= ImportStubLayout.RuntimeStubCount; k++) Assert.NotEqual(0u, TableEntry(art, art.ImportStubBaseRva + 16 * k));   // the runtime stubs (guest SEH)
+        Assert.Equal(0u, TableEntry(art, art.ImportStubBaseRva + 16 * (1 + (uint)ImportStubLayout.RuntimeStubCount)));   // beyond them: trap
         Assert.Equal(0u, TableEntry(art, PeFixtureBuilder.TextRva + 0x7FF));            // not code: trap
         var export = Assert.Single(art.Exports);
         Assert.Equal("_f", export.Name); Assert.Equal(PeFixtureBuilder.TextRva, export.GuestRva);

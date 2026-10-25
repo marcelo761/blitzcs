@@ -32,8 +32,9 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         var cov = Win32ImportResolver.Coverage;
         Assert.Contains(cov.Priority, p => p is { Dll: "kernel32.dll", Name: "HeapAlloc", Implemented: true });
         var missing = cov.Missing.Select(m => m.Dll + "!" + m.Name).ToHashSet();
-        Assert.Contains("kernel32.dll!RtlUnwind", missing);
-        Assert.Contains("kernel32.dll!RaiseException", missing);
+        Assert.Contains("user32.dll!ShowWindow", missing);
+        Assert.Contains(cov.Priority, p => p is { Dll: "kernel32.dll", Name: "RtlUnwind", Implemented: true, Service: "Kernel32.Process" });       // guest SEH (docs/binary-seh.md)
+        Assert.Contains(cov.Priority, p => p is { Dll: "kernel32.dll", Name: "RaiseException", Implemented: true, Service: "Kernel32.Process" });
         Assert.DoesNotContain("ole32.dll!CoCreateInstance", missing);
         Assert.DoesNotContain("wsock32.dll!#11", missing);
         Assert.DoesNotContain(missing, m => m.StartsWith("kernel32.dll!Heap"));
@@ -46,7 +47,7 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         Assert.NotNull(r.Resolve("kernel32.dll", "HeapAlloc", null));
         Assert.NotNull(r.Resolve("KERNEL32", "GetVersion", null)); // dll name rules: case-insensitive, extension optional
         Assert.Null(r.Resolve("kernel32.dll", "heapalloc", null)); // function names are case-sensitive
-        Assert.Null(r.Resolve("kernel32.dll", "RtlUnwind", null));
+        Assert.Null(r.Resolve("kernel32.dll", "CreateRemoteThread", null));
         Assert.NotNull(r.Resolve("user32.dll", "GetDesktopWindow", null));
         Assert.Null(r.Resolve("user32.dll", "ShowWindow", null));
         Assert.Null(r.Resolve("msvcrt.dll", "_not_a_real_crt_function", null));
@@ -67,7 +68,7 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
     public void DirectCallValidatesNameAndArgumentCount()
     {
         using var w = new World();
-        Assert.Throws<KeyNotFoundException>(() => w.Kernel("RtlUnwind"));
+        Assert.Throws<KeyNotFoundException>(() => w.Kernel("CreateRemoteThread"));
         Assert.Throws<ArgumentException>(() => w.Kernel("HeapAlloc", 1, 2));
         using var other = new World();
         Assert.NotEqual(0u, w.Kernel("GetProcessHeap"));

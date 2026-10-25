@@ -203,7 +203,7 @@ What the six images need beyond that, in the order a start-up reaches it:
 | 9 | **Command line and environment**: `Win32Options.CommandLine` default `program.exe`; environment blocks are served empty by default and read from the host never | `ProcessService.cs` | present, defaults must be set per run |
 | 10 | **Dynamic loading of guest DLLs** (`LoadLibraryExW`) | blitzcc.exe strings name `runtime.dll`, `linker.dll`, `debugger.dll` (not traced); Win32 `LoadLibraryA` serves emulated system DLLs and registered host modules only | missing for guest DLLs |
 | 11 | `fs:` offsets used: `0x00`, `0x18`, `0x30` only (non-speculative code), all modelled; `gs:` used once, in the data region of blitzcc.exe | `BC_SEGMENT_OVERRIDE` | no gap |
-| 12 | SEH: `__try` chains are built (see `docs/binary-seh.md`); exception dispatch is not needed for a normal run | decision in that document | none now |
+| 12 | SEH: `__try` chains are built; software-exception dispatch (`RaiseException`, `RtlUnwind`) is implemented for frame-based SEH within one guest call (see `docs/binary-seh.md`, "Implementation") | `SehDifferentialTests`, `BlitzccDifferentialTests` | hardware faults and the cases listed there stay named faults |
 
 ## 5. Ranked next mechanisms and recommended order
 
@@ -218,7 +218,7 @@ Each item is reusable beyond Blitz3D (any MSVC-built PE32). Counts are from sect
 | 5 | **EXE entry path** (`GuestModule`/`BinaryLibrary` run `mainCRTStartup`, map `Win32ExitProcessException` to an exit code, set `MainModuleBase` and the PEB image base from the loaded module, command line, stdio) | 3 EXEs; none runnable today | any EXE |
 | 6 | **PEB completeness**: `ProcessParameters` (with `RTL_USER_PROCESS_PARAMETERS`: Flags, ImagePathName, CommandLine, Environment), `NtGlobalFlag`, `ProcessHeap`, OS version, `Ldr`; and make an unmodelled PEB read fail loudly instead of reading a zero page | 2 distinct PEB reads per image in non-speculative code (offsets +0x10 and +0x68) | any MSVC 2015+ image |
 | 7 | **kernel32 modern-CRT set** (21 functions in the entry closure of all six images, 8 more in five) plus Unicode/locale/console variants | counts in section 3: absent 12-13 + 8-18 + 4-5 functions per image in the CRT/wide/SEH groups | the start-up of every image |
-| 8 | **`RaiseException`/`UnhandledExceptionFilter` as a named terminal fault**, then (only if a scenario needs it) software exceptions as designed in `docs/binary-seh.md` | blitzcc.exe: 44 reachable `throw` sites, 33 in the entry closure; 0 reachable `RtlUnwind` | compile-error paths of blitzcc.exe |
+| 8 | **Software exceptions** (`RaiseException`, `RtlUnwind`): done, see `docs/binary-seh.md` ("Implementation"); an unhandled one is the named `GuestUnhandledException` | blitzcc.exe: 44 reachable `throw` sites, 33 in the entry closure | compile-error paths of blitzcc.exe (done, see below) |
 | 9 | **Guest `LoadLibrary`/`GetProcAddress` for DLLs of the same set** (`ModuleLinker` exists; the Win32 `LoadLibrary` does not consult it) | blitzcc.exe's string table names runtime.dll/linker.dll/debugger.dll | blitzcc.exe driving linker.dll |
 | 10 | **Window/message contract** (user32 + gdi32 + a headless window sink): 35 + 14 functions for runtime.dll, 232 + 108 for the IDEs | 74 + 19 call sites in runtime.dll; 6,413 + 1,005 in debugger.dll | runtime.dll start-up (it creates windows in its initialisation path, not traced) |
 | 11 | **DirectX/COM creation contracts** (`DirectDrawCreateEx`, `DirectInput8Create`, `DirectXFileCreate` return COM objects) and winmm timers (`timeGetDevCaps/BeginPeriod/EndPeriod`, 4 functions) | runtime.dll only: 4 creation functions, 11 call sites; the DirectDraw/Direct3D surface behind them is the large part and is explicitly not started here | Blitz3D programs, graphics |
@@ -328,3 +328,10 @@ Creating executable "C:\tmp\src1.exe"...
 | src3: `Include "C:\tmp\inc.bb"` (second file in the sandbox) + call | src3.exe | 1126912 | same (content differs from src1) |
 
 `cmp` of the linux-x64 and windows-x64 outputs: byte-identical for all three. No produced exe was executed. Next step: compare against the native Wine reference compile of the same sources.
+
+## blitzcc compile-error path
+
+`blitzcc -c` on a source with an error (StartNetGame.bb, JoyUDir.bb in the SDK) reports the error with a C++ `throw` deep in the parser/semantic phase that blitzcc's `main` catches. With guest SEH
+(`docs/binary-seh.md`, "Implementation") BcRun prints exactly the native diagnostic and ends with `ExitProcess(0xFFFFFFFF)` (process status 255, as native under Wine): pinned by
+`BlitzccDifferentialTests.ACompileErrorInTheParserPrintsTheNativeDiagnosticAndExitCode` and `AnUnknownFunctionPrintsTheNativeDiagnosticAndExitCode` (linux-x64, and windows-x64 under Wine). A translator defect that hid
+this for JoyUDir (code before a throw helper call dropped by the data-after-call probe) is fixed. The corpus differential (`docs/blitz3d-reference.md`) now compares these two error runs too.

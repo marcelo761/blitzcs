@@ -246,6 +246,9 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
             zeroAdds = ins.Code == Code.Add_rm8_r8 && ins.Length == 2 && mapped[ins.IP - image.ImageBase] == 0 ? zeroAdds + 1 : 0;
             if (zeroAdds >= 3) return true;
             if (ins.FlowControl is FlowControl.Return or FlowControl.UnconditionalBranch or FlowControl.IndirectBranch or FlowControl.Interrupt or FlowControl.Exception) return false;
+            // Clean code that reaches a call before anything data-like is real code (a throw site: arguments, then a call to a function that never returns, then the
+            // handler's address table). Only the bytes after that call are data; the sweep applies this test again there.
+            if (n > 0 && ins.FlowControl is FlowControl.Call or FlowControl.IndirectCall) return false;
         }
         return false;
     }

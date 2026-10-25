@@ -94,7 +94,8 @@ public sealed record TranslationArtifact(
     IReadOnlyList<BinaryDiagnostic> Diagnostics,
     uint? RebasedFromImageBase = null,   // non-null when the translated image was rebased from this preferred base (SourceSha256 stays the original file hash)
     string? TargetOs = null,   // host OS/ABI the runtime routines were generated for (BinaryTargets); null = legacy artifact = linux-sysv. The loader refuses a mismatch.
-    int DynamicStubs = 0);   // import-style stubs emitted after the real imports (index Imports.Count + j: stub at ImportStubBaseRva + 16*index, thunk slot 8*index): the pool behind GuestModule.AllocateStub. 0 = none.
+    int DynamicStubs = 0,   // import-style stubs emitted after the real imports (index Imports.Count + j: stub at ImportStubBaseRva + 16*index, thunk slot 8*index): the pool behind GuestModule.AllocateStub. 0 = none.
+    int RuntimeStubs = 0);  // import-style stubs after the dynamic pool (index Imports.Count + DynamicStubs + k) that the runtime binds to its own handlers (ImportStubLayout.RuntimeStubCount; the guest SEH continuations). 0 = none (hand-built artifacts).
 
 /// <summary>
 /// Layout of the process-wide module registry that translated code consults when a dispatch target lies outside its own module (docs/binary-multimodule.md,
@@ -102,6 +103,24 @@ public sealed record TranslationArtifact(
 /// Header: u32 count (release-published), u32 capacity; 32-byte records from <see cref="HeaderSize"/>: u32 guest base, u32 bound (valid table indices, 0 = retired),
 /// u64 host code base (R12), u64 dispatch table address (R13, 0 = dead).
 /// </summary>
+/// <summary>
+/// What every import stub records in the per-call context besides the protocol of <see cref="TranslationArtifact"/> (docs/binary-seh.md, "Import stub contract").
+/// On entry each stub stores the guest's callee-saved registers EBX, EBP, ESI and EDI at the call into the context, so a managed import can build an exact
+/// x86 CONTEXT; runtime stubs also store EAX (the value a guest function returned to them). An extended return (bit 63) whose flags at CtxImportFlags contain
+/// <see cref="RedirectFlag"/> does not return to the caller: EAX of the import result is the guest address of a register image laid out like the integer part
+/// of an x86 CONTEXT (from CONTEXT.Edi at +0x9C: Edi, Esi, Ebx, Edx, Ecx, Eax, Ebp, Eip, SegCs, EFlags, Esp), and the stub loads the eight general registers
+/// and continues at Eip (through the normal dispatch, so the target must be translated code).
+/// </summary>
+public static class ImportStubLayout
+{
+    public const int CtxGuestEbx = 20, CtxGuestEbp = 36, CtxGuestEsi = 52, CtxGuestEdi = 92, CtxGuestEax = 76;
+    public const uint RedirectFlag = 4;
+    /// <summary>Offsets inside the register image (relative to CONTEXT.Edi).</summary>
+    public const int ImageEdi = 0, ImageEsi = 4, ImageEbx = 8, ImageEdx = 12, ImageEcx = 16, ImageEax = 20, ImageEbp = 24, ImageEip = 28, ImageEsp = 40;
+    /// <summary>Runtime stubs every translated artifact carries (after the dynamic pool): 0 = SEH handler-return continuation, 1 = SEH dispatcher/unwind frame handler.</summary>
+    public const int RuntimeStubCount = 2;
+}
+
 public static class ModuleRegistryLayout
 {
     public const uint CellOffset = 0;
@@ -122,7 +141,7 @@ public sealed record BinaryCompilerOptions(OptimizationProfile Profile = Optimiz
     /// <summary>Upper bound of <see cref="DynamicStubs"/> (each stub costs 16 bytes of guest address space and about 70 bytes of host code; 4096 stubs = 64 KiB stay inside the 64 KiB gap the module base allocator keeps between modules).</summary>
     public const int MaxDynamicStubs = 4096;
 
-    public const string CompilerVersion = "0.12.0";
+    public const string CompilerVersion = "0.13.0";
 }
 
 /// <summary>Target OS/ABI identifiers. Artifacts are target specific: the runtime routines (EnterGuest, import stubs) follow the host calling convention, and the loader refuses a mismatching artifact.</summary>

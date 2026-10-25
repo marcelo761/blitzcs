@@ -70,21 +70,24 @@ public sealed class TargetOsTests
     {
         // Pinned from the translator before the Win64 ABI existed: the sysv runtime routines and guest code must never change by accident.
         // Re-pinned once, deliberately, for cross-module dispatch (format 5): the only difference to the previous pin is the miss routine at host offset 0 (it now tries the module registry before the kind 1 trap) and the artifact has no other change.
+        // Re-pinned again, deliberately, for guest SEH (format 6): every import stub records EBX/EBP/ESI/EDI in the call context, the extended-return tail gained the register-image
+        // redirect, and two runtime stubs follow the imports (ImportStubLayout); the guest code is unchanged.
         var art = For("linux-sysv", profile).Artifact;
         var hash = Convert.ToHexString(SHA256.HashData(art.HostImage));
         Assert.Equal(profile == OptimizationProfile.Debug ? PinnedDebug : PinnedRelease, hash);
     }
 
-    private const string PinnedDebug = "B0554C92E6C5D0599ABDC5551F4B67012B3C5574747AD7662A95A26CFA984ABB", PinnedRelease = "9D9BE2C3E280979C2125FBA550E6ACB2C97310290EB0BA79B68C9FF8A64B92C5";
+    private const string PinnedDebug = "28E754D2CA2DA9B2216988A13F62B7BBDD6DC1CF69D35B3F64DDAE53581F703B", PinnedRelease = "092AE70CE0389C9E00A0AE01BFB203BBEE8B74F326282D1D32B5D890D030D227";
 
 
-    private const string PinnedWinDebug = "09FB14E27C667A30B0DBB2ADCF72650CC62F24862DB6C4820EB6DCE078EBC0B1", PinnedWinRelease = "9A3B7BF773DBF67E191CC109B21C4F31026884CB6AF436F2918D8BF8FCAFF630";
+    private const string PinnedWinDebug = "EE0C51CECB5C1416AA83C4D4B2599F7F757AAC0B8DDC60D687E3F7A1FB7CDE34", PinnedWinRelease = "4617AF058F70192459037F75AB6DFBD7879936E56FEBED3A2AB387BF1279B54D";
 
     [Theory]
     [InlineData(OptimizationProfile.Debug), InlineData(OptimizationProfile.Release)]
     public void Windows_x64_output_without_a_stub_pool_is_pinned_byte_for_byte(OptimizationProfile profile)
     {
         // Pinned from the translator at commit 49eaa1b, before the dynamic stub pool existed (DynamicStubs = 0 must change nothing: same code, same layout); the linux-sysv pins above are the same check.
+        // Re-pinned deliberately for guest SEH (format 6), the same change as the linux-sysv pins.
         var hash = Convert.ToHexString(SHA256.HashData(For("windows-x64", profile).Artifact.HostImage));
         Assert.Equal(profile == OptimizationProfile.Debug ? PinnedWinDebug : PinnedWinRelease, hash);
     }
@@ -105,12 +108,14 @@ public sealed class TargetOsTests
         Assert.Equal(plain.ExitGuestRva, pooled.ExitGuestRva);
         uint Entry(TranslationArtifact a, uint rva) => BitConverter.ToUInt32(a.HostImage, (int)(a.DispatchTableOffset + 4 * rva));
         var first = pooled.ImportStubBaseRva;
-        for (var k = 0u; k < 1 + 5; k++) Assert.NotEqual(0u, Entry(pooled, first + 16 * k));    // 1 real import + 5 pool stubs
-        Assert.Equal(0u, Entry(pooled, first + 16 * 6));                                          // beyond the pool: still the trap
-        Assert.Equal(0u, Entry(plain, first + 16 * 1));
-        var distinct = Enumerable.Range(0, 6).Select(k => Entry(pooled, first + 16u * (uint)k)).Distinct().Count();
-        Assert.Equal(6, distinct);                                                                // each stub has its own body (own thunk slot)
-        Assert.True(pooled.DispatchTableOffset >= pooled.ImportThunkTableOffset + 8u * 6);       // the thunk table has a slot per stub
+        const uint R = ImportStubLayout.RuntimeStubCount;                                         // runtime stubs (guest SEH) always follow the pool
+        for (var k = 0u; k < 1 + 5 + R; k++) Assert.NotEqual(0u, Entry(pooled, first + 16 * k));  // 1 real import + 5 pool stubs + the runtime stubs
+        Assert.Equal(0u, Entry(pooled, first + 16 * (6 + R)));                                    // beyond them: still the trap
+        Assert.NotEqual(0u, Entry(plain, first + 16 * 1));
+        Assert.Equal(0u, Entry(plain, first + 16 * (1 + R)));
+        var distinct = Enumerable.Range(0, 6 + (int)R).Select(k => Entry(pooled, first + 16u * (uint)k)).Distinct().Count();
+        Assert.Equal(6 + (int)R, distinct);                                                       // each stub has its own body (own thunk slot)
+        Assert.True(pooled.DispatchTableOffset >= pooled.ImportThunkTableOffset + 8u * (6 + R));  // the thunk table has a slot per stub
         // the guest code itself is unchanged: same translated bytes for the export, relative to the (moved) layout
         var f = pooled.Exports.Single(e => e.Name == "_f").HostOffset - plain.Exports.Single(e => e.Name == "_f").HostOffset;
         Assert.True(f > 0);                                                                       // the pool bodies precede the guest code

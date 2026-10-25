@@ -192,4 +192,23 @@ public sealed class TranslatorSegmentVexTests
         var real = Translate(realCode, OptimizationProfile.Release).Artifact;
         Assert.DoesNotContain(real.Diagnostics, d => d.Code == "CFG_DATA_AFTER_CALL");
     }
+
+    [Fact]
+    public void CodeBetweenACallAndAThrowSiteTableIsStillTranslated()
+    {
+        // call plain; mov eax,7; push eax; pop edx; call neverReturns; <address table>  with  neverReturns: add esp,4 (drops the return address); ret
+        // The sweep after the first call must see the clean code up to the second call, not classify the whole run (which ends in table bytes) as data.
+        var r = Run(a =>
+        {
+            var plain = a.CreateLabel(); var never = a.CreateLabel();
+            a.call(plain);
+            a.mov(eax, 7);
+            a.push(eax); a.pop(edx);
+            a.call(never);
+            a.db(0x5C, 0x10, 0x40, 0x00, 0x62, 0x10, 0x40, 0x00, 0x63, 0x10, 0x40, 0x00, 0x7E, 0x10, 0x40, 0x00);
+            a.Label(ref plain); a.ret();
+            a.Label(ref never); a.add(esp, 4); a.ret();
+        });
+        Assert.Equal(7u, r);
+    }
 }

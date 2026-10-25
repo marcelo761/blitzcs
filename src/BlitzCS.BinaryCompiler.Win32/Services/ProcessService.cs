@@ -283,6 +283,9 @@ public sealed class ProcessService : Win32Service
         Std(K, "FreeLibrary", 1, LibraryApi.Free);
         Std(K, "GetProcAddress", 2, LibraryApi.ProcAddress);
         Std(K, "SetUnhandledExceptionFilter", 1, c => c.Ctx.Process.ExchangeUnhandledFilter(c[0]));
+        // Guest SEH (docs/binary-seh.md): dispatch over the FS:[0] chain and unwinding are done by the guest runtime; the handlers are guest code.
+        Std(K, "RaiseException", 4, c => GuestStructuredExceptions.RaiseException(c.Guest));
+        Std(K, "RtlUnwind", 4, c => GuestStructuredExceptions.RtlUnwind(c.Guest));
         Std(K, "IsBadReadPtr", 2, c => c[1] == 0 ? 0u : c.Mem.IsMapped(c[0], c[1]) ? 0u : 1u);
         Std(K, "IsBadWritePtr", 2, c => c[1] == 0 ? 0u : c.Mem.IsMapped(c[0], c[1]) ? 0u : 1u);
         Std(K, "IsBadCodePtr", 1, c => c.Mem.IsMapped(c[0], 1) ? 0u : 1u);

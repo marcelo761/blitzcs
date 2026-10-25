@@ -49,3 +49,29 @@ python3 -I tools/survey/compare_blitzcc.py <reference.exe> <bcrun.exe>
 python3 -I tools/survey/compare_blitzcc.py --ignore-timestamp <reference.exe> <bcrun.exe>
 ```
 Exit 0 identical, 1 different (each differing range is printed with its offset, length and PE region), 2 error. `--ignore-timestamp` masks the COFF TimeDateStamp and the optional-header CheckSum.
+
+## Corpus differential
+`tools/survey/blitzcc_corpus.sh <SDK dir> <max count>` compiles each selected `*.bb` of the SDK natively (Wine, `-c` then `-o`) and under BcRun (`--target linux-x64`), then compares the two exes with `compare_blitzcc.py`. A source the native compiler rejects is compiled with `-c` under BcRun too, and the two runs must print the same stdout (the diagnostic; Wine's own `ntsync` stderr line is not compared) and end with the same exit status. Native sandbox: the dedicated prefix's `drive_c`; BcRun sandbox: a copy of the SDK. Both use the string `C:\<relative path>`, so the command line is identical on both sides.
+
+Command run (SDK = Blitz3D V1.118, 704 `.bb` files, 60 selected by evenly spaced size, smallest first):
+```
+BLITZCS_WINE_PREFIX=<prefix with vkd3d DLLs> tools/survey/blitzcc_corpus.sh <SDK dir> 60 > corpus.tsv
+```
+
+| metric | count |
+|---|---|
+| sources tried | 60 |
+| native compile errors (`-c`) | 2 (`help/commands/2d_examples/StartNetGame.bb`: `Function 'startnetgame' not found`; `JoyUDir.bb`: `Expecting end-of-file`) |
+| compile errors with the same stdout and exit status under BcRun (guest SEH, `docs/binary-seh.md`) | 2 of 2 (exit 255 both) |
+| compared (both exes produced) | 58 |
+| identical | 58 |
+| different | 0 |
+| BcRun failures | 0 |
+
+Re-run after guest SEH (format 6 artifacts: every import stub changed): 60 of 60 `identical = yes` (58 executables byte-identical, 2 compile errors matching), native total 17.3 s, BcRun total 25.2 s.
+A first run of that day reported `samples/birdie/Quick Deform/qd.bb` different in 4 bytes of `.rsrc` (offset 0x10B42C): the native exe had `3d275554` where BcRun wrote zeros. Three further
+native compiles of the same source wrote zeros, like BcRun and like the earlier corpus run, so the native compiler leaves those 4 bytes nondeterministic (uninitialised); the full re-run was identical.
+
+Timing (wall, per source): native `-o` total 17.2 s, average 0.30 s; BcRun `-o` total 23.2 s, average 0.40 s (BcRun cache shared across the run, so the first translation is included).
+
+The 58 native exes are 1126912 to 1157120 bytes. Because nothing differed, no offset analysis or bisection was needed. The TSV is at `/tmp/claude-1000/j-corpus.tsv`.

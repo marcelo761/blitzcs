@@ -44,6 +44,8 @@ public sealed unsafe partial class GuestModule : IDisposable
         public unsafe byte* CallContext;
         public GuestProcessEnvironment.TebBlock? Teb;
         public uint ExtFlags, ExtEdx;           // extended import return staged by the running handler (GuestCall.SetReturnEdx / SetReturnSt0)
+        public uint ExtRedirect;                // guest address of the register image of a redirect (ImportStubLayout.RedirectFlag)
+        public uint CallLow, CallTop;           // guest stack range owned by the innermost guest call of this module on this thread: [stack limit, its frame) (guest SEH boundary)
         public readonly byte[] ExtSt0 = new byte[10];
     }
 
@@ -183,7 +185,8 @@ public sealed unsafe partial class GuestModule : IDisposable
         var len = (long)a.HostImage.Length;
         if (a.EnterGuestOffset >= a.CodeSize) throw new GuestLoadException("EnterGuestOffset lies outside the code area.");
         if (a.ContextOffset < a.CodeSize || a.ContextOffset + 64L > len) throw new GuestLoadException("ContextOffset must lie inside the RW data area.");
-        if (a.ImportThunkTableOffset < a.CodeSize || a.ImportThunkTableOffset + 8L * (a.Imports.Count + a.DynamicStubs) > len)
+        if (a.RuntimeStubs is not (0 or ImportStubLayout.RuntimeStubCount)) throw new GuestLoadException($"The artifact declares {a.RuntimeStubs} runtime stubs; this runtime expects 0 or {ImportStubLayout.RuntimeStubCount}.");
+        if (a.ImportThunkTableOffset < a.CodeSize || a.ImportThunkTableOffset + 8L * (a.Imports.Count + a.DynamicStubs + a.RuntimeStubs) > len)
             throw new GuestLoadException("ImportThunkTableOffset must lie inside the RW data area.");
         if (a.ExitGuestRva < a.GuestImageSize || a.ImportStubBaseRva < a.GuestImageSize)
             throw new GuestLoadException("ExitGuestRva and ImportStubBaseRva must be synthetic RVAs at or above SizeOfImage.");
@@ -221,7 +224,7 @@ public sealed unsafe partial class GuestModule : IDisposable
 
         // 2. Guest image at the fixed base.
         var ps = (uint)PlatformMemory.Current.PageSize;
-        var end = Math.Max(artifact.GuestImageSize, Math.Max(artifact.ExitGuestRva + 1UL, artifact.ImportStubBaseRva + 16UL * (uint)Math.Max(1, bound.Length + artifact.DynamicStubs)));
+        var end = Math.Max(artifact.GuestImageSize, Math.Max(artifact.ExitGuestRva + 1UL, artifact.ImportStubBaseRva + 16UL * (uint)Math.Max(1, bound.Length + artifact.DynamicStubs + artifact.RuntimeStubs)));
         var size = (end + ps - 1) / ps * ps;
         if ((ulong)artifact.GuestImageBase + size > uint.MaxValue)
             throw new GuestAddressSpaceException("Guest image plus synthetic region does not fit below 4 GiB.");
@@ -403,6 +406,7 @@ public sealed unsafe partial class GuestModule : IDisposable
             GuestStack stack;
             uint start;
             var savedEsp = state.ImportEsp;
+            var (savedCallLow, savedCallTop) = (state.CallLow, state.CallTop);
             if (outermost)
             {
                 stack = RentStack();
@@ -451,11 +455,13 @@ public sealed unsafe partial class GuestModule : IDisposable
                 if (teb.Depth++ == 0) env.ThreadEntered();
                 var savedContext = state.CallContext;
                 state.CallContext = callContext;
+                state.CallLow = stack.Low; state.CallTop = esp;
                 uint eax;
                 try { eax = (uint)enter((ulong)hostTarget, esp, (ulong)callContext); }
                 finally
                 {
                     state.Depth--; current = previous; state.ImportEsp = savedEsp; state.CallContext = savedContext;
+                    state.CallLow = savedCallLow; state.CallTop = savedCallTop;
                     if (--teb.Depth == 0) env.ThreadLeft();
                     else if (outermost) { *(uint*)(teb.Map + (nint)TebStackBase) = savedStackBase; *(uint*)(teb.Map + (nint)TebStackLimit) = savedStackLimit; }
                 }
@@ -536,6 +542,7 @@ public sealed unsafe partial class GuestModule : IDisposable
             if (state.ExtFlags != 0 && state.CallContext != null)
             {
                 var ctx = state.CallContext; // CtxEdx / CtxImportFlags / CtxSt0Raw of the calling guest call (scratch until the call exits)
+                if ((state.ExtFlags & ImportStubLayout.RedirectFlag) != 0) eax = (eax & ~0xFFFFFFFFUL) | state.ExtRedirect;
                 *(uint*)(ctx + 48) = state.ExtEdx;
                 *(uint*)(ctx + 60) = state.ExtFlags;
                 if ((state.ExtFlags & 2) != 0) state.ExtSt0.AsSpan().CopyTo(new Span<byte>(ctx + 64, 10));

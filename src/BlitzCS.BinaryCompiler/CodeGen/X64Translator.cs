@@ -56,7 +56,7 @@ public sealed class X64Translator
 
         var exitRva = (image.SizeOfImage + 15u) & ~15u;
         var stubBase = exitRva + 16;
-        var importCount = (uint)image.Imports.Count + (uint)options.DynamicStubs;  // real imports followed by the dynamic stub pool (0 = none: layout unchanged)
+        var importCount = (uint)image.Imports.Count + (uint)options.DynamicStubs + ImportStubLayout.RuntimeStubCount;  // real imports, the dynamic stub pool (0 = none), then the runtime stubs (guest SEH)
         var tableEntries = stubBase + 16 * importCount + 16;
         var ctxRel = 0u;
         var thunkRel = 64u;
@@ -78,7 +78,7 @@ public sealed class X64Translator
             if (attempt == 6) throw new InvalidOperationException("Host code layout did not reach a fixed point.");
         }
 
-        int ImportBodyCount() => image.Imports.Count + options.DynamicStubs;
+        int ImportBodyCount() => image.Imports.Count + options.DynamicStubs + ImportStubLayout.RuntimeStubCount;
 
         (X64CodeGen, CodeEmitter.Result) Generate(ulong dataBase, Func<ulong, uint>? previousOffsets, CodeEmitter? seed)
         {
@@ -143,6 +143,6 @@ public sealed class X64Translator
         return new TranslationArtifact(
             ArtifactSerializer.CurrentVersion, image.Sha256, cacheKey, image.ImageBase, image.SizeOfImage, host, codeSize,
             (uint)(codeSize + tableRel), (uint)(codeSize + thunkRel), (uint)(codeSize + ctxRel), enc.OffsetOf(gen.EnterLabel),
-            exitRva, stubBase, addressMap, exports, image.Imports, diagnostics, image.RebasedFrom?.OriginalImageBase, targetOs, options.DynamicStubs);
+            exitRva, stubBase, addressMap, exports, image.Imports, diagnostics, image.RebasedFrom?.OriginalImageBase, targetOs, options.DynamicStubs, ImportStubLayout.RuntimeStubCount);
     }
 }

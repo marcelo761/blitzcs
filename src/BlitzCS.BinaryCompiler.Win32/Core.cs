@@ -172,6 +172,9 @@ public readonly ref struct Win32Call
 
     private readonly GuestCall? guest;
 
+    /// <summary>The guest call behind this API call (for APIs implemented by the guest runtime itself, such as SEH); throws when the API runs for host code.</summary>
+    internal GuestCall Guest => guest ?? throw new Win32UsageException("This API needs a running guest module.");
+
     /// <summary>Calls guest code at <paramref name="address"/> (callbacks such as _initterm entries, qsort comparers). Only available when the API runs for a guest module.</summary>
     public uint CallGuest(uint address, params ReadOnlySpan<uint> args) =>
         (guest ?? throw new Win32UsageException("This API calls back into guest code and needs a running guest module.")).CallGuest(address, args);

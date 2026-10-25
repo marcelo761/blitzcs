@@ -255,10 +255,17 @@ internal sealed partial class X64CodeGen
         EmitDispatchPreservingFlags();
 
         var importExt = E.NewLabel();
-        for (var k = 0; k < image.Imports.Count + dynamicStubs; k++)
+        var runtimeFirst = image.Imports.Count + dynamicStubs;
+        for (var k = 0; k < runtimeFirst + ImportStubLayout.RuntimeStubCount; k++)
         {
             var body = E.NewLabel(); ImportBodyLabels.Add(body);
             E.Place(body);
+            // Import stub contract (ImportStubLayout): the guest's callee-saved registers at the call, and for the runtime stubs also EAX, go into the call context.
+            A(Instruction.Create(Code.Mov_rm32_r32, Ctx(ImportStubLayout.CtxGuestEbx), Register.EBX));
+            A(Instruction.Create(Code.Mov_rm32_r32, Ctx(ImportStubLayout.CtxGuestEbp), Register.EBP));
+            A(Instruction.Create(Code.Mov_rm32_r32, Ctx(ImportStubLayout.CtxGuestEsi), Register.ESI));
+            A(Instruction.Create(Code.Mov_rm32_r32, Ctx(ImportStubLayout.CtxGuestEdi), Register.EDI));
+            if (k >= runtimeFirst) A(Instruction.Create(Code.Mov_rm32_r32, Ctx(ImportStubLayout.CtxGuestEax), Register.EAX));
             A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.ESP));
             A(Instruction.Create(Code.Mov_r64_rm64, Register.RSP, Ctx(CtxNativeRsp)));
             if (Win64)
@@ -432,9 +439,11 @@ internal sealed partial class X64CodeGen
     private void EmitImportExtendedReturn(ulong label)
     {
         E.Place(label);
-        var noEdx = E.NewLabel(); var noSt0 = E.NewLabel();
+        var noEdx = E.NewLabel(); var noSt0 = E.NewLabel(); var redirect = E.NewLabel();
         A(Instruction.Create(Code.And_rm32_imm32, Register.R9D, 0x7FFFFFFF));
         A(Instruction.Create(Code.Mov_r32_rm32, Register.R10D, Ctx(CtxImportFlags)));
+        A(Instruction.Create(Code.Test_rm32_imm32, Register.R10D, (int)ImportStubLayout.RedirectFlag));
+        Jcc(ConditionCode.ne, redirect);
         A(Instruction.Create(Code.Test_rm32_imm32, Register.R10D, 2));
         Jcc(ConditionCode.e, noSt0);
         A(Instruction.Create(Code.Fld_m80fp, Ctx(CtxSt0Raw)));
@@ -448,6 +457,21 @@ internal sealed partial class X64CodeGen
         A(Instruction.Create(Code.Lea_r32_m, Register.R8D, M(Register.R8D, Register.R9D, 1, 4)));
         A(Instruction.Create(Code.Mov_r32_rm32, Register.ESP, Register.R8D));
         A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R10D));
+        Jmp(DispatchLabel);
+
+        // Redirect (ImportStubLayout.RedirectFlag): EAX = guest address of a CONTEXT-shaped register image. All eight general registers are loaded from it and
+        // execution continues at its Eip through the dispatch (an untranslated Eip traps by name like any other indirect target).
+        E.Place(redirect);
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R10D, Register.EAX));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EDI, M(Register.R10, ImportStubLayout.ImageEdi)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.ESI, M(Register.R10, ImportStubLayout.ImageEsi)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EBX, M(Register.R10, ImportStubLayout.ImageEbx)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EDX, M(Register.R10, ImportStubLayout.ImageEdx)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.ECX, M(Register.R10, ImportStubLayout.ImageEcx)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EAX, M(Register.R10, ImportStubLayout.ImageEax)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EBP, M(Register.R10, ImportStubLayout.ImageEbp)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, M(Register.R10, ImportStubLayout.ImageEip)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.ESP, M(Register.R10, ImportStubLayout.ImageEsp)));
         Jmp(DispatchLabel);
     }
 
