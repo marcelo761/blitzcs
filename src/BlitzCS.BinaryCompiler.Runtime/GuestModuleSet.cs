@@ -28,6 +28,7 @@ public sealed class GuestModuleSet : IDisposable
     private readonly List<Entry> entries = [];
     private readonly List<BridgeCounter> counters = [];
     private int loadCounter;
+    private readonly object gate = new();   // serialises Add/LoadAll/Unload: modules can be added while guest code of already loaded modules runs
     private bool disposed;
 
     public GuestModuleSet(IGuestImportResolver? hostImports = null, ModuleLinkOptions? options = null)
@@ -58,6 +59,11 @@ public sealed class GuestModuleSet : IDisposable
     /// <summary>Registers a module (artifact and the matching, possibly rebased, image). Nothing is loaded until <see cref="LoadAll"/>.</summary>
     public GuestModuleSet Add(string name, TranslationArtifact artifact, PeImage image, ExportConventions? conventions = null, GuestModuleOptions? moduleOptions = null)
     {
+        lock (gate) return AddCore(name, artifact, image, conventions, moduleOptions);
+    }
+
+    private GuestModuleSet AddCore(string name, TranslationArtifact artifact, PeImage image, ExportConventions? conventions, GuestModuleOptions? moduleOptions)
+    {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(artifact);
@@ -86,7 +92,9 @@ public sealed class GuestModuleSet : IDisposable
     public IReadOnlyList<GuestModule> LoadedModules => [.. entries.Where(e => e.Module is not null).OrderBy(e => e.LoadOrder).Select(e => e.Module!)];
 
     /// <summary>Loads every registered, not yet loaded module in dependency order. On failure everything loaded by this call is disposed again (reverse order) and the error is rethrown.</summary>
-    public void LoadAll()
+    public void LoadAll() { lock (gate) LoadAllCore(); }
+
+    private void LoadAllCore()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         var pending = entries.Where(e => e.Module is null).ToList();
@@ -118,7 +126,23 @@ public sealed class GuestModuleSet : IDisposable
     }
 
     /// <summary>Disposes one module. Fails with <see cref="InvalidOperationException"/> while another loaded module is still linked to it.</summary>
-    public void Unload(string name)
+    public void Unload(string name) { lock (gate) UnloadCore(name); }
+
+    /// <summary>True when a module registered under <paramref name="name"/> exists in the set (loaded or not).</summary>
+    public bool Contains(string name) { lock (gate) return entries.Any(x => x.Key == NormalizeName(name)); }
+
+    /// <summary>Removes a module that was added but failed to load (or was never loaded), disposing the host resolver created for it. Loaded modules are untouched.</summary>
+    public void Discard(string name)
+    {
+        lock (gate)
+            foreach (var e in entries.Where(x => x.Key == NormalizeName(name) && x.Module is null).ToList())
+            {
+                entries.Remove(e);
+                (e.Host as IDisposable)?.Dispose();
+            }
+    }
+
+    private void UnloadCore(string name)
     {
         var e = entries.FirstOrDefault(x => x.Key == NormalizeName(name)) ?? throw new KeyNotFoundException($"No module named '{name}' in the set.");
         if (e.Module is null) throw new InvalidOperationException($"Module '{name}' is not loaded.");

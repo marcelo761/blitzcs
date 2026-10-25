@@ -111,7 +111,7 @@ public sealed class RealPackedSampleTests(ITestOutputHelper output)
         // The derived image has no relocation table, so function-pointer tables are found by scanning data; the speculative roots may decode into
         // data and are reported as these two warnings only.
         foreach (var w in artifact.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Warning && d.Code is not ("CFG_DECODE_FAILURE" or "BC_UNTRANSLATED_TARGET")).Take(8)) output.WriteLine($"warn {w.Code} @{w.GuestRva:X}: {w.Message}");
-        Assert.All(artifact.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Warning), d => Assert.Contains(d.Code, new[] { "CFG_DECODE_FAILURE", "BC_UNTRANSLATED_TARGET", "BC_UNSUPPORTED_INSTRUCTION", "BC_SEGMENT_OVERRIDE" }));
+        Assert.All(artifact.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Warning), d => Assert.Contains(d.Code, new[] { "CFG_DECODE_FAILURE", "BC_UNTRANSLATED_TARGET", "BC_UNSUPPORTED_INSTRUCTION", "BC_SEGMENT_OVERRIDE", "BC_DEFERRED_SEGMENT_FAULT" }));
         Assert.Contains(artifact.Diagnostics, d => d.Code == "CFG_POINTER_SCAN_ROOTS");
 
         using var resolver = new Win32ImportResolver();

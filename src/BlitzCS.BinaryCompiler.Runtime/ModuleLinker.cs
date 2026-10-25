@@ -61,11 +61,18 @@ internal static class ModuleBridge
 {
     internal static GuestImport Create(GuestModule target, TranslatedExport export, ExportSignature signature, int window, BridgeCounter counter)
     {
+        var (handler, pop) = CreateHandler(target, export, signature, window, counter);
+        return GuestImport.Create(handler, pop);
+    }
+
+    /// <summary>The forwarding handler and the bytes the guest stub must pop: shared by static module imports and by the stubs GetProcAddress hands out.</summary>
+    internal static (GuestImportHandler Handler, uint Pop) CreateHandler(GuestModule target, TranslatedExport export, ExportSignature signature, int window, BridgeCounter counter)
+    {
         var host = target.HostImageBase + (nint)export.HostOffset;
         var stdcall = signature.Convention == GuestCallingConvention.Stdcall;
         var words = stdcall ? signature.ArgCount!.Value : window;
         var pop = stdcall ? checked((uint)(4 * words)) : 0u;
-        return GuestImport.Create(call =>
+        GuestImportHandler handler = call =>
         {
             Interlocked.Increment(ref counter.Calls);
             Span<uint> args = stackalloc uint[words];
@@ -80,7 +87,8 @@ internal static class ModuleBridge
                 call.SetReturnSt0(raw);
             }
             return result.Eax;
-        }, pop);
+        };
+        return (handler, pop);
     }
 
     private static int Capture(GuestCall call, Span<uint> destination, bool exact)
@@ -91,5 +99,22 @@ internal static class ModuleBridge
             while (n > 0 && ((ulong)first + 4UL * (uint)n > uint.MaxValue || !call.Memory.IsMapped(first, 4u * (uint)n))) n--;
         if (n > 0) call.Memory.Read(first, MemoryMarshal.AsBytes(destination[..n]));
         return n;
+    }
+}
+
+/// <summary>
+/// Run-time bridging for code that resolves an export after the modules were linked (GetProcAddress on a guest DLL): a dynamic stub of the CALLER's pool
+/// that forwards to the export of another module of the same set with the same argument window, EDX and ST0 handling as a static module import.
+/// </summary>
+public static class GuestExportBridge
+{
+    /// <summary>Allocates a stub in <paramref name="caller"/>'s dynamic pool (see <see cref="GuestModule.AllocateStub"/>). Release it with <see cref="GuestModule.ReleaseStub"/>.</summary>
+    public static uint AllocateStub(GuestModule caller, GuestModule target, TranslatedExport export, ExportSignature signature, string label, int cdeclWindowDwords = 16)
+    {
+        ArgumentNullException.ThrowIfNull(caller); ArgumentNullException.ThrowIfNull(target); ArgumentNullException.ThrowIfNull(export); ArgumentNullException.ThrowIfNull(signature);
+        if (signature.Convention == GuestCallingConvention.Stdcall && signature.ArgCount is not >= 0) throw new ArgumentException("A stdcall export needs an exact argument count.", nameof(signature));
+        if (signature.Convention is not (GuestCallingConvention.Cdecl or GuestCallingConvention.Stdcall)) throw new ArgumentException($"{signature.Convention} exports cannot be bridged.", nameof(signature));
+        var (handler, pop) = ModuleBridge.CreateHandler(target, export, signature, cdeclWindowDwords, new BridgeCounter(label));
+        return caller.AllocateStub(handler, pop);
     }
 }

@@ -558,6 +558,7 @@ internal sealed partial class X64CodeGen
             Jmp(kind == 2 ? Trap2Label : Trap1Label);
         }
         EmitFsTrapStubs();
+        EmitLateTraps();
         EmitShadowTables();
     }
 
@@ -749,6 +750,7 @@ internal sealed partial class X64CodeGen
                 fsOperand = fm;
             }
         }
+        if (TryLowerSegmentOrFastFail(g, fsOperand, out var segFalls)) return segFalls;
         for (var op = 0; op < i.OpCount; op++)
         {
             var k = i.GetOpKind(op);
@@ -897,7 +899,14 @@ internal sealed partial class X64CodeGen
 
         var oc = i.Code.ToOpCode();
         if (oc.Encoding == EncodingKind.D3NOW) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "3DNow! is not supported"); return false; }
-        if (oc.Encoding != EncodingKind.Legacy) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "VEX/EVEX/XOP encodings are not supported"); return false; }
+        if (oc.Encoding == EncodingKind.VEX && i.Code is Code.VEX_Vzeroall)
+        {
+            // vzeroall in 64-bit mode would also clear ymm8-15, which the host keeps for its own use: clear the 8 registers a 32-bit guest has.
+            foreach (var y in Ymm0To7) A(Instruction.Create(Code.VEX_Vpxor_ymm_ymm_ymmm256, y, y, y));
+            return true;
+        }
+        if (oc.Encoding != EncodingKind.Legacy && oc.Encoding != EncodingKind.VEX) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "EVEX/XOP encodings are not supported (VEX is passed through)"); return false; }
+        if (oc.Encoding == EncodingKind.VEX && VexRejection(i) is { } vexWhy) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", vexWhy); return false; }
         if (!oc.Mode64) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "not valid in 64-bit mode and has no lowering"); return false; }
         if (oc.IsPrivileged || oc.IsStackInstruction || i.Mnemonic is Mnemonic.In or Mnemonic.Out or Mnemonic.Insb or Mnemonic.Insw or Mnemonic.Insd
             or Mnemonic.Outsb or Mnemonic.Outsw or Mnemonic.Outsd or Mnemonic.Int or Mnemonic.Int1 or Mnemonic.Into or Mnemonic.Syscall

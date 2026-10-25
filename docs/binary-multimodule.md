@@ -90,6 +90,8 @@ vorbisFile dispatch table, so the guest's indirect call reaches the managed hand
 
 ## Limits
 
+* Modules loaded after start-up by `LoadLibrary` (`GuestLibraryLoader`, docs/binary-win32.md) join the same set: `Add`/`LoadAll`/`Unload` are serialised by a lock, `GuestExportBridge.AllocateStub` hands the caller a stub that forwards to an export, and no loaded module is relocated.
+
 * Data exports, forwarders, cycles: unsupported (diagnosed). Callbacks passed *between* modules as guest function pointers (module A hands its code address to module B) are not
   possible: B's dispatch table only knows B's own code, so the call traps (`BC_UNTRANSLATED_TARGET`); route such callbacks through an import of B.
 * A cdecl bridge cannot know the real argument count (window above). Struct-by-value arguments larger than the window and register conventions (thiscall/fastcall) are not bridged.

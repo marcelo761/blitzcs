@@ -15,7 +15,7 @@ public static class Win32Error
         NotEnoughMemory = 8, InvalidData = 13, OutOfMemory = 14, NoMoreFiles = 18, NotSupported = 50, FileExists = 80, InvalidParameter = 87,
         InsufficientBuffer = 122, ModNotFound = 126, ProcNotFound = 127, NegativeSeek = 131, BadPathname = 161, AlreadyExists = 183,
         EnvVarNotFound = 203, InvalidAddress = 487, NoMoreItems = 259, InvalidFlags = 1004, NoUnicodeTranslation = 1113, HandleEof = 38,
-        NotOwner = 288, TooManyPosts = 298, InvalidUserBuffer = 1784, NotEnoughQuota = 1816, BadLength = 24, NoAccess = 998;
+        NotOwner = 288, TooManyPosts = 298, InvalidUserBuffer = 1784, NotEnoughQuota = 1816, BadLength = 24, NoAccess = 998, BadExeFormat = 193, DllInitFailed = 1114;
 }
 
 /// <summary>Raised when the guest calls the emulated Win32 surface in a way real Windows would answer with a crash or undefined behaviour (for example leaving an unowned critical section). The guest call is abandoned; nothing is silently ignored.</summary>
@@ -35,7 +35,7 @@ public sealed class Win32SelfModifyingCodeException(string module, uint start, u
 }
 
 /// <summary>ExitProcess/TerminateProcess(self). The host process is never terminated: the guest call is abandoned with this exception (it is the inner exception of the runtime's GuestImportException).</summary>
-public sealed class Win32ExitProcessException(uint exitCode, string api) : Exception($"The guest called {api}({exitCode}); the host process keeps running.")
+public sealed class Win32ExitProcessException(uint exitCode, string api) : Exception($"The guest called {api}({exitCode}); the host process keeps running."), IGuestProcessExit
 {
     public uint ExitCode { get; } = exitCode;
 }
@@ -195,6 +195,12 @@ public readonly ref struct Win32Call
     /// <summary>Also returns <paramref name="value"/> in EDX (high half of a 64-bit result).</summary>
     public void ReturnEdx(uint value) => (guest ?? throw new Win32UsageException("EDX results need a running guest module.")).SetReturnEdx(value);
 
+    /// <summary>
+    /// Sets the high half of a 64-bit result (EDX for a guest; always also recorded in <see cref="Win32Context.HighResult"/> so host-side callers and tests can read it).
+    /// The low half is the handler's return value.
+    /// </summary>
+    public void ReturnHigh(uint value) { Ctx.HighResult = value; guest?.SetReturnEdx(value); }
+
     /// <summary>Returns a double in ST0.</summary>
     public void ReturnSt0(double value) => (guest ?? throw new Win32UsageException("x87 results need a running guest module.")).SetReturnSt0(value);
 
@@ -297,6 +303,8 @@ public sealed class Win32Options
 {
     /// <summary>Directory that "C:\" and relative Windows paths map into. Null: every path-based file API fails with ERROR_ACCESS_DENIED.</summary>
     public string? SandboxRoot { get; init; }
+    /// <summary>Loads guest DLLs for LoadLibrary* / GetModuleHandle* / GetProcAddress / FreeLibrary (null: only the emulated DLLs and host-registered modules are loadable). See <see cref="GuestLibraryLoader"/>.</summary>
+    public GuestLibraryLoader? GuestLibraries { get; init; }
     public bool CaseInsensitiveFileNames { get; init; } = true;
     public string CommandLine { get; init; } = "program.exe";
     public string MainModulePath { get; init; } = "C:\\program.exe";
@@ -305,6 +313,10 @@ public sealed class Win32Options
     public int AnsiCodePage { get; init; } = 1252;
     public int OemCodePage { get; init; } = 437;
     public Win32Version Version { get; init; } = new();
+    /// <summary>True: the standard handles are console handles (GetConsoleMode succeeds, WriteConsole/ReadConsole work on them). False (default): redirected streams, where the console APIs fail with ERROR_INVALID_HANDLE exactly as on Windows.</summary>
+    public bool StdoutIsConsole { get; init; }
+    public bool StderrIsConsole { get; init; }
+    public bool StdinIsConsole { get; init; }
     public Stream? Stdin { get; init; }
     public Stream? Stdout { get; init; }
     public Stream? Stderr { get; init; }
@@ -338,6 +350,7 @@ public sealed class Win32Context : IDisposable
     private IWin32Memory? memory;
     private object? memoryOwner;
     private readonly ThreadLocal<uint> lastError = new(() => 0);
+    private readonly ThreadLocal<uint> highResult = new(() => 0);
     private uint nextHandle = 0x100;
     private readonly ConcurrentDictionary<uint, object> handles = new();
 
@@ -386,8 +399,18 @@ public sealed class Win32Context : IDisposable
     internal TlsState Tls { get; }
     internal ProcessState Process { get; }
     internal FileState Files { get; }
+    internal FlsState Fls { get; } = new();
 
     public uint LastError { get => lastError.Value; set => lastError.Value = value; }
+
+    /// <summary>High 32 bits of the last 64-bit result of the calling thread (see <see cref="Win32Call.ReturnHigh"/>).</summary>
+    public uint HighResult { get => highResult.Value; internal set => highResult.Value = value; }
+
+    /// <summary>Per-process random value that EncodePointer/DecodePointer mix into pointers (Windows keeps a similar process cookie).</summary>
+    internal uint PointerCookie { get; } = (uint)(System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, int.MaxValue) |  0x10001);
+
+    /// <summary>Serialises the lock-free list (SList) operations, which Windows performs with interlocked instructions on guest memory.</summary>
+    internal object SListGate { get; } = new();
 
     /// <summary>Sets the last error and returns <paramref name="result"/> (FALSE/NULL by default).</summary>
     public uint Fail(uint error, uint result = 0) { LastError = error; return result; }
@@ -445,5 +468,6 @@ public sealed class Win32Context : IDisposable
         foreach (var v in handles.Values) (v as IDisposable)?.Dispose();
         foreach (var d in Interlocked.Exchange(ref disposables, []).Reverse()) d.Dispose();
         lastError.Dispose();
+        highResult.Dispose();
     }
 }

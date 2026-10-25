@@ -14,7 +14,9 @@ internal sealed class ProcessState(Win32Context ctx)
     private readonly Dictionary<uint, Win32Module> byHandle = [];
     private readonly Dictionary<uint, IWin32Allocation> environmentBlocks = [];
     private readonly List<IWin32Allocation> permanent = [];
-    private uint commandLineA;
+    private uint commandLineA, commandLineW;
+    private readonly Dictionary<string, string> environment = new(ctx.Options.Environment, StringComparer.OrdinalIgnoreCase);
+    private string currentDirectory = "\\";
     private uint unhandledFilter;
     private uint nextSystemHandle = 0x7C000000;
     public Func<string, string, uint?>? ExportStubAddress { get; set; }
@@ -61,6 +63,7 @@ internal sealed class ProcessState(Win32Context ctx)
 
     public Win32Module? Find(string name) { lock (gate) return modules.GetValueOrDefault(Win32Registry.NormalizeDll(name)); }
     public Win32Module? Find(uint handle) { lock (gate) return byHandle.GetValueOrDefault(handle); }
+    public IReadOnlyList<Win32Module> GuestModules() { lock (gate) return [.. modules.Values.Where(m => !IsSystem(m))]; }
     public bool IsSystem(Win32Module m) => m.Path.StartsWith("C:\\WINDOWS\\system32\\", StringComparison.Ordinal) && m.Exports.Count == 0;
 
     public uint CommandLineA(IWin32Memory mem)
@@ -74,12 +77,42 @@ internal sealed class ProcessState(Win32Context ctx)
         }
     }
 
+    public uint CommandLineW(IWin32Memory mem)
+    {
+        lock (gate)
+        {
+            if (commandLineW != 0) return commandLineW;
+            var bytes = Nls.ToUtf16(ctx.Options.CommandLine + "\0");
+            var a = mem.Allocate(bytes.Length); a.Write(mem, bytes); permanent.Add(a);
+            return commandLineW = a.Address;
+        }
+    }
+
+    /// <summary>The process environment: <see cref="Win32Options.Environment"/> at start, then what SetEnvironmentVariable changed. Names compare case-insensitively like Windows.</summary>
+    public string? GetEnvironmentVariable(string name) { lock (gate) return environment.GetValueOrDefault(name); }
+
+    /// <summary>Sets (value non-null) or deletes (null) a variable. Returns false when deleting a variable that does not exist.</summary>
+    public bool SetEnvironmentVariable(string name, string? value)
+    {
+        lock (gate)
+        {
+            if (value is null) return environment.Remove(name);
+            environment[name] = value;
+            return true;
+        }
+    }
+
+    /// <summary>The current directory as a rooted path without drive ("\" is the root of the sandbox; no trailing separator otherwise). The drive is always C:.</summary>
+    public string CurrentDirectory { get { lock (gate) return currentDirectory; } set { lock (gate) currentDirectory = value; } }
+
     public uint NewEnvironmentBlock(IWin32Memory mem, bool wide)
     {
+        KeyValuePair<string, string>[] vars;
+        lock (gate) vars = [.. environment];
         var text = new StringBuilder();
-        foreach (var (k, v) in ctx.Options.Environment.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase)) text.Append(k).Append('=').Append(v).Append('\0');
+        foreach (var (k, v) in vars.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase)) text.Append(k).Append('=').Append(v).Append('\0');
         text.Append('\0');
-        if (ctx.Options.Environment.Count == 0) text.Append('\0');
+        if (vars.Length == 0) text.Append('\0');
         var bytes = wide ? Nls.ToUtf16(text.ToString()) : Nls.EncodeChars(ctx.Options.AnsiCodePage, text.ToString(), (byte)'?', false, out _, out _);
         var a = mem.Allocate(bytes.Length); a.Write(mem, bytes);
         lock (gate) environmentBlocks[a.Address] = a;
@@ -162,11 +195,28 @@ public sealed class ProcessService : Win32Service
 
     private static uint ModuleFileName(Win32Call c)
     {
-        string? path;
-        if (c[0] == 0 || c[0] == c.Ctx.Options.MainModuleBase) path = c.Ctx.Options.MainModulePath;
-        else path = c.Ctx.Process.Find(c[0])?.Path;
+        var path = ModulePath(c, c[0]);
         if (path is null) return c.Ctx.Fail(Win32Error.ModNotFound);
         return CopyString(c, path, c[1], c[2]);
+    }
+
+    /// <summary>Path of the main module (handle NULL or the main base) or of a registered module; null when the handle is unknown.</summary>
+    internal static string? ModulePath(Win32Call c, uint module) =>
+        module == 0 || module == c.Ctx.Options.MainModuleBase ? c.Ctx.Options.MainModulePath
+            : c.Ctx.Process.Find(module)?.Path ?? c.Ctx.Options.GuestLibraries?.Find(module)?.WindowsPath;
+
+    /// <summary>GetModuleFileNameW/GetCurrentDirectoryW style copy: the text is truncated to fit, always NUL-terminated, and a truncation sets ERROR_INSUFFICIENT_BUFFER and returns <paramref name="size"/>.</summary>
+    internal static uint CopyWide(Win32Call c, string text, uint buffer, uint size)
+    {
+        if (size == 0 || buffer == 0) return c.Ctx.Fail(Win32Error.InsufficientBuffer);
+        if (text.Length < size)
+        {
+            c.Mem.Write(buffer, Nls.ToUtf16(text + "\0"));
+            return (uint)text.Length;
+        }
+        c.Mem.Write(buffer, Nls.ToUtf16(text[..((int)size - 1)] + "\0"));
+        c.Ctx.LastError = Win32Error.InsufficientBuffer;
+        return size;
     }
 
     private static uint CopyString(Win32Call c, string text, uint buffer, uint size)
@@ -218,10 +268,9 @@ public sealed class ProcessService : Win32Service
         Std(K, "GetEnvironmentVariableA", 3, c =>
         {
             var name = c.Mem.ReadAnsiString(c[0], 32767);
-            var env = c.Ctx.Options.Environment;
-            var key = env.Keys.FirstOrDefault(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase));
-            if (key is null) return c.Ctx.Fail(Win32Error.EnvVarNotFound);
-            var bytes = Nls.EncodeChars(c.Ctx.Options.AnsiCodePage, env[key], (byte)'?', false, out _, out _);
+            var value = c.Ctx.Process.GetEnvironmentVariable(name);
+            if (value is null) return c.Ctx.Fail(Win32Error.EnvVarNotFound);
+            var bytes = Nls.EncodeChars(c.Ctx.Options.AnsiCodePage, value, (byte)'?', false, out _, out _);
             if (c[2] <= bytes.Length) return (uint)bytes.Length + 1; // too small: required size including the terminator
             c.Mem.Write(c[1], [.. bytes, (byte)0]);
             c.Ctx.LastError = Win32Error.Success;
@@ -229,35 +278,10 @@ public sealed class ProcessService : Win32Service
         });
         Std(K, "GetStartupInfoA", 1, c => { var si = new byte[68]; si[0] = 68; c.Mem.Write(c[0], si); return 0; });
         Std(K, "GetModuleFileNameA", 3, ModuleFileName);
-        Std(K, "GetModuleHandleA", 1, c =>
-        {
-            if (c[0] == 0) return c.Ctx.Options.MainModuleBase;
-            var module = c.Ctx.Process.Find(c.Mem.ReadAnsiString(c[0], 260));
-            return module?.Handle ?? c.Ctx.Fail(Win32Error.ModNotFound);
-        });
-        Std(K, "LoadLibraryA", 1, c =>
-        {
-            var name = c.Mem.ReadAnsiString(c[0], 260);
-            if (name.Length == 0) return c.Ctx.Fail(Win32Error.InvalidParameter);
-            return c.Ctx.Process.Find(name)?.Handle ?? c.Ctx.Fail(Win32Error.ModNotFound);
-        });
-        Std(K, "FreeLibrary", 1, c => c.Ctx.Process.Find(c[0]) is null ? c.Ctx.Fail(Win32Error.InvalidHandle) : 1u);
-        Std(K, "GetProcAddress", 2, c =>
-        {
-            var module = c.Ctx.Process.Find(c[0]);
-            if (module is null) return c.Ctx.Fail(Win32Error.ModNotFound);
-            var export = c[1] < 0x10000 ? "#" + c[1] : c.Mem.ReadAnsiString(c[1], 1024);
-            if (module.Exports.TryGetValue(export, out var address)) return address;
-            if (c.Ctx.Process.IsSystem(module) && c[1] >= 0x10000 && c.Ctx.Process.ExportStubAddress?.Invoke(module.Name, export) is { } stub) return stub;
-            if (c.Ctx.Process.IsSystem(module) && c[1] >= 0x10000 && c.Ctx.ApiLookup?.Invoke(module.Name, export) is { } api)
-            {
-                // An emulated export becomes a guest-callable function pointer: a dynamic stub of the running module bound to the same handler as the import.
-                var guestModule = GuestModule.Current;
-                if (guestModule is not null && guestModule.StubCapacity > 0) return c.Ctx.Process.StubFor(guestModule, api);
-                c.Ctx.Options.DebugOutput?.Invoke($"GetProcAddress({module.Name}!{export}): the function exists but this module was translated without a dynamic stub pool, so it has no callable address (re-translate with DynamicStubs > 0).");
-            }
-            return c.Ctx.Fail(Win32Error.ProcNotFound);
-        });
+        Std(K, "GetModuleHandleA", 1, c => LibraryApi.ModuleHandle(c, c[0] == 0 ? null : c.Mem.ReadAnsiString(c[0], 260)));
+        Std(K, "LoadLibraryA", 1, c => LibraryApi.Load(c, c.Mem.ReadAnsiString(c[0], 260)));
+        Std(K, "FreeLibrary", 1, LibraryApi.Free);
+        Std(K, "GetProcAddress", 2, LibraryApi.ProcAddress);
         Std(K, "SetUnhandledExceptionFilter", 1, c => c.Ctx.Process.ExchangeUnhandledFilter(c[0]));
         Std(K, "IsBadReadPtr", 2, c => c[1] == 0 ? 0u : c.Mem.IsMapped(c[0], c[1]) ? 0u : 1u);
         Std(K, "IsBadWritePtr", 2, c => c[1] == 0 ? 0u : c.Mem.IsMapped(c[0], c[1]) ? 0u : 1u);

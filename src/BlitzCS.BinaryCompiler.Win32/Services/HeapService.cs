@@ -1,3 +1,4 @@
+using BlitzCS.BinaryCompiler.Runtime;
 namespace BlitzCS.BinaryCompiler.Win32;
 
 /// <summary>
@@ -288,7 +289,7 @@ public sealed class HeapService : Win32Service
     protected override void Define()
     {
         const string K = "KERNEL32.dll";
-        Std(K, "GetProcessHeap", 0, c => c.Ctx.Heaps.Process(c.Mem).Handle);
+        Std(K, "GetProcessHeap", 0, c => { var h = c.Ctx.Heaps.Process(c.Mem).Handle; GuestModule.Current?.SetProcessHeap(h); return h; });
         Std(K, "HeapCreate", 3, c =>
         {
             if ((c[0] & ~(NoSerialize | GenerateExceptions | CreateEnableExecute)) != 0) return c.Ctx.Fail(Win32Error.InvalidParameter);

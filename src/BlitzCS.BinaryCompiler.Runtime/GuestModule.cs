@@ -57,7 +57,8 @@ public sealed unsafe partial class GuestModule : IDisposable
     private readonly List<GuestStack> allStacks = [];
     private readonly Stack<GuestStack> idleStacks = new();
     private readonly Dictionary<GuestBuffer, (nint Map, nuint Length)> buffers = [];
-    private uint entryRva;
+    private uint entryRva, imageEntryRva;
+    private bool imageIsDll;
     private GuestImport[] boundImports = [];
     private nint guestMap, hostMap;
     private nuint guestMapLength, hostMapLength;
@@ -68,6 +69,25 @@ public sealed unsafe partial class GuestModule : IDisposable
         this.artifact = artifact;
         this.options = options;
         Memory = new GuestMemory(this);
+    }
+
+
+    /// <summary>Disassembles the guest instruction at <paramref name="va"/> for a trap message; "an instruction" when the bytes are not readable.</summary>
+    private unsafe string DescribeGuestInstruction(uint va)
+    {
+        try
+        {
+            var bytes = new byte[15];
+            for (var k = 0; k < 15; k++) bytes[k] = *(byte*)(nuint)(va + (uint)k);
+            var decoder = Iced.Intel.Decoder.Create(32, bytes, va);
+            var ins = decoder.Decode();
+            if (ins.IsInvalid) return "an instruction";
+            var fmt = new Iced.Intel.NasmFormatter();
+            var output = new Iced.Intel.StringOutput();
+            fmt.Format(ins, output);
+            return "'" + output.ToStringAndReset() + "'";
+        }
+        catch (Exception) { return "an instruction"; }
     }
 
     public GuestMemory Memory { get; }
@@ -226,6 +246,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         InitializeStubPool();
         PlatformMemory.Current.Protect(hostMap, (nuint)artifact.CodeSize, MemoryProtection.ReadExecute);
 
+        imageEntryRva = image.EntryPointRva; imageIsDll = image.IsDll;
         // 4. TLS callbacks (DLL_PROCESS_ATTACH), then DllMain(hinst, DLL_PROCESS_ATTACH, 0)
         if (options.RunEntryPoint && tlsCallbacks.Length > 0)
         {
@@ -411,6 +432,8 @@ public sealed unsafe partial class GuestModule : IDisposable
                 if (trapKind != 0)
                 {
                     var trapAddress = *(ulong*)(callContext + 24);
+                    if (trapKind == 4) throw new GuestFastFailException(*(uint*)(callContext + 8), (uint)trapAddress);
+                    if (trapKind == 5) throw new GuestTrapException($"Guest executed {DescribeGuestInstruction((uint)trapAddress)} at 0x{trapAddress:X8}, a segment-register or far-pointer load whose new value is not the current flat selector (the guest runs in a flat model; this is a named deferred fault, not a translation error).");
                     throw new GuestTrapException(trapKind == 1
                         ? $"Guest control flow reached untranslated code at 0x{trapAddress:X8} (indirect target not discovered at build time)."
                         : trapKind == 3

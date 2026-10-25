@@ -75,6 +75,7 @@ public sealed class World : IDisposable
     public uint Crt(string name, params uint[] args) => R.Call(Mem, C, name, args);
     public uint LastError => Kernel("GetLastError");
 
+    public Win32Context Ctx() => R.Context;
     public uint Buf(int size) => Mem.Allocate(size).Address;
 
     public uint Str(string latin1)

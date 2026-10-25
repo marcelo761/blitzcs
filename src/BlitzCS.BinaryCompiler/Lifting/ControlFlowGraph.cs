@@ -98,6 +98,8 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
         Drain();
         if (image.Relocations.Count == 0) DiscoverImmediateRoots();
 
+        if (dataAfterCall > 0)
+            diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "CFG_DATA_AFTER_CALL", $"{dataAfterCall} call(s) are followed directly by bytes that decode as data (address tables or handler data placed after a call that does not return); the fall-through was not translated."));
         return new ControlFlowGraph
         {
             Instructions = insts, Leaders = leaders, FunctionEntries = entries, Undecodable = undecodable,
@@ -164,7 +166,7 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
             diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "CFG_IMMEDIATE_ROOTS", $"The image has no relocation table; {seen.Count - rejectedAsData} code address(es) held as instruction immediates were treated as potential function pointers ({rejectedAsData} more did not look like function starts and were ignored)."));
     }
 
-    private int rejectedAsData;
+    private int rejectedAsData, dataAfterCall;
 
     /// <summary>
     /// True when the bytes right before <paramref name="t"/> are padding (int3, nop) or end with an instruction after which control cannot fall through
@@ -217,6 +219,33 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
         return true;
     }
 
+    /// <summary>Number of instructions inspected by <see cref="LooksLikeDataRun"/>.</summary>
+    internal const int DataRunProbe = 16;
+
+    /// <summary>
+    /// True when the bytes at <paramref name="rva"/> decode, within the first <see cref="DataRunProbe"/> instructions and before any unconditional terminator,
+    /// as something compiled user-mode code does not contain (arpl, bound, in/out, lds/les, push/pop es, the aaa family, an undecodable byte, a run of
+    /// <c>add [eax],al</c>). That is how an address table or a pad of exception-handler data placed right after a call to a function that never returns
+    /// (or after a speculative root) looks to a linear sweep. Real code reaches a ret or a jmp first, or decodes cleanly, and is unaffected.
+    /// </summary>
+    internal bool LooksLikeDataRun(uint rva)
+    {
+        var end = ExecEnd(rva);
+        if (end == 0 || rva >= mapped.Length) return false;
+        var decoder = Iced.Intel.Decoder.Create(32, new ByteArrayCodeReader(mapped, (int)rva, (int)Math.Min(end - rva, 256u)), image.ImageBase + rva);
+        var zeroAdds = 0;
+        for (var n = 0; n < DataRunProbe; n++)
+        {
+            var ins = decoder.Decode();
+            if (ins.IsInvalid || IsUserModeNonsense(ins.Mnemonic) || ins.Mnemonic is Mnemonic.Lds or Mnemonic.Les or Mnemonic.Int1
+                || (ins.Mnemonic is Mnemonic.Push or Mnemonic.Pop && ins.Op0Kind == OpKind.Register && ins.Op0Register == Register.ES)) return true;
+            zeroAdds = ins.Code == Code.Add_rm8_r8 && ins.Length == 2 && mapped[ins.IP - image.ImageBase] == 0 ? zeroAdds + 1 : 0;
+            if (zeroAdds >= 3) return true;
+            if (ins.FlowControl is FlowControl.Return or FlowControl.UnconditionalBranch or FlowControl.IndirectBranch or FlowControl.Interrupt or FlowControl.Exception) return false;
+        }
+        return false;
+    }
+
     private void EnqueueRoot(uint rva, string what)
     {
         if (IsExec(rva)) { Enqueue(rva, true); return; }
@@ -261,6 +290,12 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
         while (true)
         {
             if (insts.ContainsKey(rva) || undecodable.ContainsKey(rva)) return;
+            if (speculative && IsExec(rva) && LooksLikeDataRun(rva))
+            {
+                undecodable[rva] = "data in code";
+                rejectedAsData++;
+                return;
+            }
             if (!IsExec(rva))
             {
                 if (!speculative) diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Warning, "CFG_TARGET_NOT_EXECUTABLE", $"Control flow reaches RVA 0x{rva:X}, which is not in an executable section.", rva));
@@ -295,8 +330,11 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
                     leaders.Add(next); rva = next; continue;
                 case FlowControl.Call:
                     AddTarget(ins, true);
+                    // A call that never returns (a throw helper) can be followed directly by data; do not sweep it as code.
+                    if (IsExec(next) && !insts.ContainsKey(next) && LooksLikeDataRun(next)) { dataAfterCall++; return; }
                     leaders.Add(next); rva = next; continue;
                 case FlowControl.IndirectCall:
+                    if (IsExec(next) && !insts.ContainsKey(next) && LooksLikeDataRun(next)) { dataAfterCall++; return; }
                     leaders.Add(next); rva = next; continue;
                 case FlowControl.Return:
                 case FlowControl.Interrupt:

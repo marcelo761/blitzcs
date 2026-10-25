@@ -211,7 +211,7 @@ Each item is reusable beyond Blitz3D (any MSVC-built PE32). Counts are from sect
 
 | rank | mechanism | evidence (exact counts) | unblocks |
 |---|---|---|---|
-| 1 | **Lower reads of segment registers** (`mov r/m16, sreg`, `push sreg`): store the flat-model selectors (the values a WoW64 process sees: `cs=0x23`, `ss=ds=es=gs=0x2B`, `fs=0x53`) and keep `pop sreg`/`mov sreg, r` as named faults | 115 + 10 + 1 reachable sites, 6/6 images, 5 CRT functions per image; 421 more speculative | with rank 2: ide.exe, linker.dll, runtime.dll become error-free by this survey's counts |
+| 1 | **Lower reads of segment registers** (`mov r/m16, sreg`, `push sreg`): store the flat-model selectors (the values expected for a WoW64 process on windows-x64 (`cs=0x23`, `ss=ds=es=gs=0x2B`, `fs=0x53`; documented values, NOT validated against real Windows hardware: the PE32 oracle under Wine reads `fs=0x63`, `gs=0x6B`, Wine's own GDT); linux-sysv reads `fs=gs=0`, as the ELF32 oracle does) and keep `pop sreg`/`mov sreg, r` as named faults | 115 + 10 + 1 reachable sites, 6/6 images, 5 CRT functions per image; 421 more speculative | with rank 2: ide.exe, linker.dll, runtime.dll become error-free by this survey's counts |
 | 2 | **`int 29h` as a named fail-fast trap** (ECX = failure code), distinct from the generic trap kind | 25 reachable, 6/6 images; 11 speculative | same |
 | 3 | **A virtual CPU model for `cpuid`/`xgetbv`/`IsProcessorFeaturePresent`** (no AVX/AVX2/OSXSAVE, SSE2 baseline, stable vendor/family) and a policy for VEX in code that is dormant under that model (a deferred run-time trap reported as a Warning, not a load-blocking Error) | 20 reachable VEX sites in 3 images (Blitz3D.exe 8, blitzcc.exe 8, debugger.dll 4); 85 speculative; cpuid is host-passthrough today, so detection would pick AVX2 on a modern host | Blitz3D.exe, debugger.dll; also removes a host-dependent result |
 | 4 | **Data-in-code**: do not let a fall-through sweep or imprecise root turn address tables in `.text` into reachable code (stop at unconditional terminators; reject runs that decode as `arpl/bound/lds/les/in/out/push es`) | blitzcc.exe: 3 regions, 17 blocking `BC_UNSUPPORTED_INSTRUCTION` + 1 `BC_SEGMENT_OVERRIDE`; 747 speculative warnings overall, 134 of them ring-0 opcodes | blitzcc.exe |
@@ -234,3 +234,52 @@ blitzcc.exe (kernel32 only; 35 absent functions), followed by linker.dll (33). N
 2. **`docs/binary-abi-coverage.md` is stale on static TLS** ("Unsupported ... Refused at translation/load" vs `TLS_HANDLED`; the three SDK images with a TLS directory translate without `BC_TLS_UNSUPPORTED`). Not edited (owned by another agent).
 3. **`cpuid` is host passthrough**, which makes the CRT feature detection, and therefore the executed code path, depend on the host CPU. Not a crash by itself, but a reproducibility hazard; rank 3.
 4. **Survey tool memory**: translating and building the CFG for the 2 MB images peaks at about 1.5 GB RSS (two passes per image, both keep full instruction maps). Fine for a survey, relevant if the same CFG is ever built twice in production.
+
+## Run log: blitzcc.exe under BCSBRE (S2)
+
+Mechanisms added: `tools/BcRun`, `GuestModule.RunExecutable` (EXE entry path, `IGuestProcessExit`), PEB ProcessParameters/Ldr/OS fields (`docs/binary-teb-contract.md`), and the
+kernel32 start-up/wide set (`docs/binary-win32.md`). The image was extracted into a fresh directory from `Blitz3D-V1.118.zip` and never executed directly; every run below is the
+translated guest. Translation used `--allow-errors` (S1's removal of the reachable unsupported-instruction Errors was not yet in): 0 traps fired on the start-up path
+(the Errors are `cli`, `bound`, `arpl`, segment-register push/pop, `in/out`, `int1`, `insb` in data-in-code regions that are never executed).
+
+Observed runs (SDK root as sandbox, `--env blitzpath=C:\`; reported OS 6.0.6002 from the image's declared 6.0):
+
+| target | args | stdout | exit code |
+|---|---|---|---|
+| linux-x64 (native, base 0x10000000) | none | `Can't find blitzpath environment variable` (without the env var) | 0xFFFFFFFF (255) |
+| linux-x64 | none, `-h` | `Unable to open linker.dll` | 0xFFFFFFFF (255 as a process status) |
+| linux-x64 | `+h` | `Usage error` | 255 |
+| windows-x64 (win-x64 BcRun under Wine, Proton 11.0, base 0x50000000) | none, `-h` | `Unable to open linker.dll` | 255 |
+
+The CRT start-up ran to completion, the program reached its own `main`, read `getenv("blitzpath")`, parsed its arguments and ended through ExitProcess.
+
+**Remaining blocker (exact):** the usage text ("Usage: blitzcc [-h|-q|+q|-c|-d|-k|+k|-v|-o exefile] [sourcefile.bb]", string at file offset 0x5D9E8) is printed only after blitzcc has loaded
+`<blitzpath>/bin/linker.dll` and `runtime.dll` and called their exports (`linkerGetLinker`, ...). The trace ends `KERNEL32.dll!LoadLibraryExW` (wide path of `C:\bin\linker.dll`) -> `GetLastError` ->
+`GetModuleHandleExW` -> `ExitProcess(-1)`. This needs **guest DLL loading from LoadLibrary**: translate the DLL, load it as a second `GuestModule` with its own resolver, register it in the
+module table with its export addresses, make those addresses callable from the EXE (bridge stubs, as `GuestModuleSet` does for static imports), and share memory visibility between the modules. The
+other unbound imports of the image, `RaiseException` and `RtlUnwind`, were not called on this path.
+
+### Guest DLL loading (S3)
+
+Mechanism: `GuestLibraryLoader` (docs/binary-win32.md, "Guest DLLs"): LoadLibrary of `C:\bin\linker.dll` / `C:\bin\runtime.dll` translates them on first use (cached with `--cache-dir`), loads them into the same
+`GuestModuleSet` as blitzcc.exe, runs DllMain and returns the guest base as HMODULE; GetProcAddress returns a stub of the EXE's dynamic pool that forwards to the export.
+
+Observed (SDK root as sandbox, `--env blitzpath=C:\`, `--allow-errors`; the EXE still reports 8 translation Errors here: `cli`, `arpl`, a gs-prefixed `jae` and others in data-in-code regions; linker.dll and
+runtime.dll translate with 0 Errors), `--verbose` log:
+
+```
+BcRun: loaded guest DLL C:\bin\linker.dll at 0x100A0000
+BcRun: GetProcAddress(linker!linkerGetLinker) -> stub 0x10081580 (cdecl; inferred from the export's ret instructions)
+BcRun: loaded guest DLL C:\bin\runtime.dll at 0x100F0000
+BcRun: GetProcAddress(runtime!runtimeGetRuntime) -> stub 0x10081590 (cdecl; inferred from the export's ret instructions)
+BcRun: GuestTrapException: Guest control flow reached untranslated code at 0x100A41D0 (indirect target not discovered at build time).
+```
+
+stdout: empty (0 bytes); BcRun exit code 125 (the run failed, not the guest). linux-x64: 4.3 s cold, 1.6 s with the translation cache. windows-x64 (win-x64 BcRun under Wine, Proton 11.0): the same log with
+bases 0x50000000 (EXE), 0x500A0000, 0x500F0000 and the same outcome. The usage text is not reached (blitzcc calls the linker object before it prints), so no source file could be compiled and no output file exists.
+
+**Next blocker (exact):** both exports return C++ interface objects (`Linker*`, `Runtime*`). blitzcc calls a virtual method through the vtable, whose slot holds a linker.dll code address
+(vtable slot at linker RVA 0x2139c -> RVA 0x41D0, a `mov eax, 0x2045e; ret`). The EXE's dispatch table only covers the EXE image, so the indirect call lands in the trap routine. The cross-module
+function pointer is the limit already documented in docs/binary-multimodule.md. A fix belongs in the code generator/runtime: a dispatch-miss fallback that recognises an address inside a peer module and
+forwards the call there through a bridge (thiscall: ECX must be forwarded and the pop count inferred from the callee's `ret N`, which `ExportReturnScanner` already does for exports). Then runtime.dll
+start-up (imports DINPUT8, DDRAW, d3dxof, GDI32, SHELL32 are not provided) and the user32/gdi32 contracts follow.

@@ -169,10 +169,7 @@ public sealed class TranslatorStructureTests
         yield return ["int", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.@int(0x2E))];
         yield return ["in", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.@in(al, dx))];
         yield return ["hlt", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.hlt())];
-        yield return ["vaddps", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.vaddps(xmm0, xmm1, xmm2))];
         yield return ["pushfw", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.db(0x66, 0x9C))];
-        yield return ["push ds", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.push(ds))];
-        yield return ["mov ds", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.mov(ds, ax))];
         yield return ["jmp far", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.db(0xEA, 0x34, 0x12, 0, 0, 0x10, 0))];
         yield return ["16-bit addressing", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.mov(ax, __word_ptr[bx + si]))];
     }

@@ -48,6 +48,8 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         new User32BasicService(),
         new MsvcrtRuntimeService(),
         new Kernel32ExtraService(),
+        new Kernel32StartupService(),
+        new Kernel32WideService(),
         new WinmmService(),
         new DirectSoundService(),
         new WinsockCoreService(),

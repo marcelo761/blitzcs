@@ -159,3 +159,51 @@ and the cdecl MSVCRT functions through its IAT. Win32 semantics cannot be observ
 from the documentation rather than compared with native execution. Tests that analyse real binaries read the directory from
 `BLITZCS_REAL_PE32_DIR` and do nothing when it is unset; no binary is copied into the repository. Guest-loading tests belong to the xunit
 collection `GuestRuntime`.
+
+
+## Running an EXE (BcRun) and the start-up set
+
+`tools/BcRun` (`dotnet run --project tools/BcRun -- <exe> [--target windows-x64|linux-x64] [--base 0x..] [--allow-errors] [--env N=V] [--sandbox DIR] [--cache-dir DIR] [--no-guest-dlls] [--verbose] [--trace] -- <args>`)
+reads the PE32 EXE, picks a base with `ModuleBaseAllocator` for the host (windows-x64 needs >= 0x20000000; the artifact only runs on its own OS, so a windows-x64 run is a
+win-x64 publish of BcRun under Wine), translates (`--allow-errors` lets unsupported sites become named traps), builds the Win32 environment (command line `"C:\name.exe" args`,
+`MainModuleBase` = the loaded base, OS version = the image's declared version through `Win32ProcessInfo.VersionForImage`, stdio = BcRun's own, `C:\` = the sandbox directory, default the EXE's directory),
+loads the module and calls `RunExecutable`. The exit code of BcRun is the guest's (125 = the run itself failed). The host environment is never inherited (`--env`).
+
+New services (Kernel32.Startup, Kernel32.Wide; the class summaries are the contract): GetStartupInfoW, GetCommandLineW, GetModuleFileNameW, GetModuleHandleW/ExW/ExA, LoadLibraryW/ExW/ExA,
+GetSystemTimeAsFileTime, GetTickCount64, IsDebuggerPresent, IsProcessorFeaturePresent (CPUID of the host; PF_FASTFAIL_AVAILABLE false), UnhandledExceptionFilter (EXCEPTION_CONTINUE_SEARCH),
+Encode/DecodePointer, the SList family, Fls*, HeapSetInformation, InitializeCriticalSectionEx, CreateFileW, FindFirstFileExW/FindNextFileW, GetFileSizeEx, SetFilePointerEx,
+GetConsoleMode/CP/OutputCP, WriteConsoleA/W, ReadConsoleW (a console only when `Win32Options.Std*IsConsole`; redirected handles fail with ERROR_INVALID_HANDLE like Windows),
+Get/SetCurrentDirectoryA/W (relative file names resolve against it), GetFullPathNameA/W, Get/SetEnvironmentVariableW/A (the environment is mutable per process), GetUserDefaultLCID, IsValidLocale,
+EnumSystemLocalesW, GetLocaleInfoW (subset; other LCTYPEs raise `Win32UsageException`), CompareStringW (code-unit order, NORM_IGNORECASE/SORT_STRINGSORT only), LCMapStringEx, IsValidCodePage.
+The virtual machine has exactly one locale, en-US. Deliberately absent: RaiseException and RtlUnwind (no structured-exception dispatcher; they fault by name).
+
+## Guest DLLs (LoadLibrary of a DLL in the sandbox)
+
+`GuestLibraryLoader` (set in `Win32Options.GuestLibraries`; BcRun creates one unless `--no-guest-dlls`) makes `LoadLibraryA/W/ExA/ExW`, `GetModuleHandleA/W/ExA/ExW`, `GetModuleFileNameA/W`,
+`GetProcAddress` and `FreeLibrary` work for guest DLLs. Emulated DLLs (kernel32, user32, ...) and host-registered modules keep their old behaviour and are looked up first.
+
+* **Lookup.** A name with a directory is resolved as written through the file sandbox (`C:\bin\linker.dll`, case-insensitive, drive letter mapped); a bare name is searched in the
+  directory of the main module, the sandbox root and the current directory; `.dll` is appended when there is no extension. Missing: `NULL` + `ERROR_MOD_NOT_FOUND` (126). Not a
+  translatable PE32 DLL (garbage, an EXE, translation Errors without `--allow-errors`): `ERROR_BAD_EXE_FORMAT` (193). `LOAD_LIBRARY_AS_DATAFILE`, `DONT_RESOLVE_DLL_REFERENCES` and the
+  image-resource flags: `ERROR_NOT_SUPPORTED`.
+* **Loading.** The DLL is translated on its first load (`TranslationCache` when `--cache-dir` is set: the second run is a cache hit), at a base chosen by `ModuleBaseAllocator` that avoids every
+  module already loaded (`windows-x64`: >= 0x20000000; rebased through `PeImage.Rebase`), added to the SAME `GuestModuleSet` as the EXE with its own `Win32ImportResolver`/`Win32Context`
+  (own heap, handles, TLS), then `DllMain(DLL_PROCESS_ATTACH)` runs. `FALSE` or a fault: `NULL` + `ERROR_DLL_INIT_FAILED` (1114) and the module is removed again. DLLs the DLL imports and that
+  are found in the sandbox are loaded first (reference counted); imports that are neither emulated nor in the sandbox stay unbound and fault by name when called.
+  The set serialises Add/LoadAll/Unload with one lock; loading only adds new modules at new bases and links the memories of the peers (copy-on-write arrays), so running guest code is not disturbed.
+* **HMODULE** = the module's guest base. Repeated loads return the same HMODULE and count references; `GetModuleHandleEx` without flags adds one, `PIN` keeps the module for the process,
+  `UNCHANGED_REFCOUNT` adds none. `FreeLibrary` decrements; at zero the dynamic stubs handed out for it are released and `DLL_PROCESS_DETACH` + unload run. A module another loaded module still
+  imports from stays loaded (diagnosed). `GetModuleFileName(hmod)` returns `C:\<path inside the sandbox>`.
+* **GetProcAddress** on a guest module returns an address in the dynamic stub pool of the CALLING module (BcRun translates with `DynamicStubs` when the image imports LoadLibrary*/GetProcAddress;
+  a DLL that imports them gets `GuestLibraryOptions.DynamicStubsForLoaders` stubs). The stub forwards to the export through `GuestExportBridge` (the `ModuleLinker` bridge: cdecl window copy,
+  callee-pop count, EDX and ST0 forwarded). The same export asked twice returns the same stub. Forwarded exports resolve through the set (or to an implemented API); a data export returns its address.
+* **The calling convention is inferred from the callee, never guessed.** `ExportReturnScanner` walks the lifted CFG from the export (direct and conditional jumps, jump tables, fall-through; callees
+  are not followed) and collects every `ret`/`ret N`: all plain => cdecl (pop 0); all `ret N` with the same N => stdcall/thiscall-style with pop N (N multiple of 4). Mixed returns, no
+  return found (an export that is a bare `jmp [iat]` thunk), register-indirect jumps or undecoded bytes => the `_name@N`/`_name` decoration is used when it is present and consistent, else the call
+  fails with `NULL` + `ERROR_PROC_NOT_FOUND` and a diagnostic `GetProcAddress: cannot determine the calling convention of lib!name (returns: ...)` in `GuestLibraryLoader.Diagnostics`
+  (`BcRunResult.Diagnostics`, `Win32Options.DebugOutput`, `--verbose`). A decoration that contradicts the code is also a named failure. The verdict is cached per export. `this` (ECX) of thiscall
+  exports is NOT forwarded by the bridge.
+* **Per-module Win32 state.** Each module has its own context: heap, handles (files, events), TLS, FLS, environment snapshot and current directory are not shared between the EXE and a DLL
+  (a HANDLE or a heap block from one module is meaningless in another). The module table, the sandbox and `Win32Options` are shared. A pointer to guest memory of any module is valid in all of them.
+* **Known limit (next blocker for blitzcc.exe):** a function pointer or C++ vtable that crosses a module boundary (the EXE calls a virtual method of an object a DLL returned) traps in the caller,
+  whose dispatch table only knows its own code (docs/binary-multimodule.md, Limits).

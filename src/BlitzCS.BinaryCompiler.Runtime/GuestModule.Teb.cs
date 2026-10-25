@@ -12,7 +12,12 @@ public sealed unsafe partial class GuestModule
 {
     internal const uint TebExceptionList = 0x00, TebStackBase = 0x04, TebStackLimit = 0x08, TebSelf = 0x18, TebProcessId = 0x20, TebThreadId = 0x24,
         TebTlsPointer = 0x2C, TebPeb = 0x30, TebLastError = 0x34, TebTlsSlots = 0xE10, TebTlsSlotCount = 64;
-    internal const uint PebBeingDebugged = 0x02, PebImageBase = 0x08;
+    internal const uint PebBeingDebugged = 0x02, PebImageBase = 0x08, PebLdr = 0x0C, PebProcessParameters = 0x10, PebProcessHeap = 0x18,
+        PebNumberOfProcessors = 0x64, PebNtGlobalFlag = 0x68, PebOsMajor = 0xA4, PebOsMinor = 0xA8, PebOsBuild = 0xAC, PebOsCsdVersion = 0xAE, PebOsPlatformId = 0xB0;
+    // RTL_USER_PROCESS_PARAMETERS (32-bit): offsets of the fields that are filled.
+    internal const uint ParamsMaximumLength = 0x00, ParamsLength = 0x04, ParamsFlags = 0x08, ParamsStdInput = 0x18, ParamsStdOutput = 0x1C, ParamsStdError = 0x20,
+        ParamsCurrentDirectory = 0x24, ParamsDllPath = 0x30, ParamsImagePathName = 0x38, ParamsCommandLine = 0x40, ParamsEnvironment = 0x48, ParamsSize = 0x290;
+    private const uint RtlUserProcParamsNormalized = 1;
     private const uint DllProcessDetach = 0, DllProcessAttach = 1, DllThreadAttach = 2, DllThreadDetach = 3;
 
     /// <summary>Owner of one thread's TEB and TLS mappings. The finalizer frees them if the thread dies without the module being disposed first.</summary>
@@ -26,8 +31,8 @@ public sealed unsafe partial class GuestModule
 
     // Addresses only: a strong reference to the block would keep it from being finalized when its thread dies.
     private readonly Dictionary<nint, (nuint Length, nint TlsMap, nuint TlsLength)> tebRegistry = [];
-    private nint pebMap;
-    private nuint pebLength;
+    private nint pebMap, processBlockMap;
+    private nuint pebLength, processBlockLength;
     private PeTls? tlsDirectory;
     private uint[] tlsCallbacks = [];
     private bool tlsProcessAttached;
@@ -50,6 +55,71 @@ public sealed unsafe partial class GuestModule
         *(uint*)(map + (nint)PebImageBase) = artifact.GuestImageBase;
         Memory.Add(new GuestRegion((ulong)map, (ulong)map + length, null));
         tlsDirectory = image.Tls;
+        BuildProcessBlock(options.Process ?? GuestProcessInfo.Default);
+    }
+
+    /// <summary>
+    /// Fills the modelled PEB fields (docs/binary-teb-contract.md): Ldr (a PEB_LDR_DATA with three empty circular lists), ProcessParameters (a 32-bit
+    /// RTL_USER_PROCESS_PARAMETERS with ImagePathName, CommandLine, CurrentDirectory, DllPath and the wide environment block), NtGlobalFlag 0, ProcessHeap 0
+    /// (until <see cref="SetProcessHeap"/>), NumberOfProcessors and the OS version fields. Every other PEB byte stays zero: that is a documented limit, not a model.
+    /// </summary>
+    private void BuildProcessBlock(GuestProcessInfo info)
+    {
+        static byte[] Wide(string s) => System.Text.Encoding.Unicode.GetBytes(s);
+        var env = new List<byte>();
+        foreach (var e in info.Environment) { env.AddRange(Wide(e)); env.AddRange(new byte[2]); }
+        env.AddRange(new byte[info.Environment.Count == 0 ? 4 : 2]);
+        var strings = new[] { Wide(info.ImagePath), Wide(info.CommandLine), Wide(info.CurrentDirectory), Wide("") };
+        nuint total = 0x40 /* Ldr */ + ParamsSize + (nuint)env.Count + 8;
+        foreach (var w in strings) total += (nuint)w.Length + 2 + 2;
+        var (map, length) = AllocateLow(total, "process parameters");
+        processBlockMap = map; processBlockLength = length;
+        var baseAddr = (uint)map;
+        var at = 0u;
+        uint Take(uint n) { var r = baseAddr + at; at += (n + 3) & ~3u; return r; }
+
+        // PEB_LDR_DATA: Length 0x30, Initialized, three empty LIST_ENTRY (Flink = Blink = the head itself).
+        var ldr = Take(0x30);
+        *(uint*)(ldr + 0x00) = 0x30; *(uint*)(ldr + 0x04) = 1;
+        foreach (var head in new uint[] { 0x0C, 0x14, 0x1C }) { *(uint*)(ldr + head) = ldr + head; *(uint*)(ldr + head + 4) = ldr + head; }
+
+        var envAddr = Take((uint)env.Count);
+        env.ToArray().CopyTo(new Span<byte>((void*)envAddr, env.Count));
+        uint PutString(byte[] w) { var a = Take((uint)w.Length + 2); w.CopyTo(new Span<byte>((void*)a, w.Length)); return a; }
+        var parameters = Take(ParamsSize);
+        void Unicode(uint offset, byte[] w)
+        {
+            var a = PutString(w);
+            *(ushort*)(parameters + offset) = (ushort)w.Length; *(ushort*)(parameters + offset + 2) = (ushort)(w.Length + 2); *(uint*)(parameters + offset + 4) = a;
+        }
+        *(uint*)(parameters + ParamsMaximumLength) = ParamsSize; *(uint*)(parameters + ParamsLength) = ParamsSize;
+        *(uint*)(parameters + ParamsFlags) = RtlUserProcParamsNormalized;
+        *(uint*)(parameters + ParamsStdInput) = info.StandardInput; *(uint*)(parameters + ParamsStdOutput) = info.StandardOutput; *(uint*)(parameters + ParamsStdError) = info.StandardError;
+        Unicode(ParamsCurrentDirectory, strings[2]);
+        Unicode(ParamsDllPath, strings[3]);
+        Unicode(ParamsImagePathName, strings[0]);
+        Unicode(ParamsCommandLine, strings[1]);
+        *(uint*)(parameters + ParamsEnvironment) = envAddr;
+        Memory.Add(new GuestRegion((ulong)map, (ulong)map + length, null));
+
+        var peb = pebMap;
+        *(uint*)(peb + (nint)PebLdr) = ldr;
+        *(uint*)(peb + (nint)PebProcessParameters) = parameters;
+        *(uint*)(peb + (nint)PebProcessHeap) = 0;
+        *(uint*)(peb + (nint)PebNumberOfProcessors) = (uint)Environment.ProcessorCount;
+        *(uint*)(peb + (nint)PebNtGlobalFlag) = 0;
+        *(uint*)(peb + (nint)PebOsMajor) = info.OsMajor; *(uint*)(peb + (nint)PebOsMinor) = info.OsMinor;
+        *(ushort*)(peb + (nint)PebOsBuild) = info.OsBuild; *(ushort*)(peb + (nint)PebOsCsdVersion) = info.OsServicePack;
+        *(uint*)(peb + (nint)PebOsPlatformId) = 2; // VER_PLATFORM_WIN32_NT
+    }
+
+    /// <summary>
+    /// Publishes the process heap handle in PEB+0x18 (ProcessHeap). The Win32 component calls it when it creates the default process heap, so a CRT reading the PEB
+    /// and GetProcessHeap agree. The PEB reads 0 until then. Ignored for a disposed module.
+    /// </summary>
+    public void SetProcessHeap(uint handle)
+    {
+        if (pebMap != 0) *(uint*)(pebMap + (nint)PebProcessHeap) = handle;
     }
 
     private static (nint Map, nuint Length) AllocateLow(nuint bytes, string what)
@@ -150,6 +220,7 @@ public sealed unsafe partial class GuestModule
             PlatformMemory.Current.Free(e.TlsMap, e.TlsLength);
         }
         PlatformMemory.Current.Free(pebMap, pebLength);
-        pebMap = 0;
+        if (processBlockMap != 0) PlatformMemory.Current.Free(processBlockMap, processBlockLength);
+        pebMap = 0; processBlockMap = 0;
     }
 }

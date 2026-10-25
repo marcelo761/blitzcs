@@ -25,6 +25,34 @@ The translated code addresses it through a callee-saved host register that is pa
 
 PEB (one per module, 4 KiB): +0x02 BeingDebugged = 0, +0x08 ImageBaseAddress = image base, +0x18 ProcessHeap = 0 (no heap is
 modelled here; an image that uses it gets whatever the Win32 component provides), +0xA4 OSMajorVersion/+0xA8 OSMinorVersion/+0xAC OSBuildNumber are
-left to the Win32 component and are otherwise unsupported. Only +0x02 and +0x08 are modelled by the core.
+left to the Win32 component and are otherwise unsupported. (Superseded: see "PEB fields (EXE start-up)" below for the fields now modelled.)
 
 `GS:` stays unsupported (it is the x64 TEB register).
+
+
+## PEB fields (EXE start-up)
+
+The PEB page is still plain guest memory, so only the fields below carry data; **everything else reads 0 and a read of an unmodelled field cannot fault**
+(a protection fault has page granularity, the modelled fields share the page with the rest, so interception is not possible). The fields a VS2015+ CRT and the usual
+probes read are modelled:
+
+| Offset | Field | Value |
+|---|---|---|
+| +0x02 | BeingDebugged | 0 |
+| +0x08 | ImageBaseAddress | the translated base |
+| +0x0C | Ldr | a PEB_LDR_DATA (Length 0x30, Initialized 1) whose three LIST_ENTRY heads (+0x0C, +0x14, +0x1C) are empty and circular (Flink = Blink = the head): code walking the module list finds no module instead of faulting |
+| +0x10 | ProcessParameters | a 32-bit RTL_USER_PROCESS_PARAMETERS (0x290 bytes): Flags (+0x08) = RTL_USER_PROC_PARAMS_NORMALIZED, CurrentDirectory (+0x24), DllPath (+0x30), ImagePathName (+0x38), CommandLine (+0x40) as UNICODE_STRING32 pointing to guest wide strings, Environment (+0x48) = the wide environment block; standard handles (+0x18..0x20) are 0 |
+| +0x18 | ProcessHeap | 0 until the Win32 component creates the default heap; `GetProcessHeap` then publishes the handle (`GuestModule.SetProcessHeap`) so the PEB and the API agree |
+| +0x64 | NumberOfProcessors | host logical processor count |
+| +0x68 | NtGlobalFlag | 0 |
+| +0xA4/+0xA8/+0xAC/+0xAE/+0xB0 | OSMajorVersion, OSMinorVersion, OSBuildNumber (WORD), OSCSDVersion (WORD), OSPlatformId (2) | from `GuestModuleOptions.Process` (`Win32ProcessInfo.From(win32Options)`), i.e. the same values `GetVersionEx` reports |
+
+Documented as **not modelled** (zero): InheritedAddressSpace, Mutant, SubSystemData, FastPebLock, ProcessHeaps/NumberOfHeaps, TlsBitmap and TlsExpansionBitmap, ApiSetMap,
+ImageSubsystem*, the standard handles in ProcessParameters, the `CurrentDirectories` array, WindowTitle/DesktopInfo/ShellInfo strings. The Win32 policy for the OS version of a
+program is `Win32ProcessInfo.VersionForImage` (the version the image declares, never below 5.1.2600 SP3).
+
+## Running an EXE
+
+`GuestModule.RunExecutable()` calls the entry point (stdcall, no arguments) on a fresh guest thread context and returns a `GuestExecutableResult`: the code of
+an `IGuestProcessExit` found in the inner chain of the `GuestImportException` (the Win32 component's `Win32ExitProcessException`: ExitProcess/TerminateProcess(self)), or EAX
+when the entry point returns. Any other failure (trap, unbound import, memory fault) propagates. DLL behaviour is unchanged: `DllMain` still runs at load.

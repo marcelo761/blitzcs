@@ -245,14 +245,10 @@ public sealed class TebTests
     }
 
     [Fact]
-    public void SegmentRegisterOperandsAndGsAreExplicitErrors()
+    public void GsOverrideAndFsStringOpsAreExplicitErrors()
     {
         var cases = new (string Name, byte[] Bytes, string Code)[]
         {
-            ("mov eax, fs", [0x8C, 0xE0], "BC_UNSUPPORTED_INSTRUCTION"),
-            ("mov fs, eax", [0x8E, 0xE0], "BC_UNSUPPORTED_INSTRUCTION"),
-            ("push fs", [0x0F, 0xA0], "BC_UNSUPPORTED_INSTRUCTION"),
-            ("pop fs", [0x0F, 0xA1], "BC_UNSUPPORTED_INSTRUCTION"),
             ("gs:[0]", [0x65, 0x8B, 0x05, 0, 0, 0, 0], "BC_SEGMENT_OVERRIDE"),
             ("fs: movsb", [0x64, 0xA4], "BC_SEGMENT_OVERRIDE"),
         };

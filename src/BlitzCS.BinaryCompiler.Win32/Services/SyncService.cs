@@ -96,7 +96,7 @@ public sealed class SyncService : Win32Service
         c.Mem.WriteUInt32(address + 12, cs.Depth == 0 ? 0 : c.Ctx.CurrentThreadId);
     }
 
-    private static uint Init(Win32Call c, uint address)
+    internal static uint Init(Win32Call c, uint address)
     {
         if (address == 0) throw new Win32UsageException("InitializeCriticalSection(NULL).");
         c.Mem.Write(address, new byte[24]);

@@ -171,7 +171,7 @@ public sealed class StringService : Win32Service
         }
     }
 
-    private static uint LcMapW(Win32Call c)
+    internal static uint LcMapW(Win32Call c)
     {
         uint flags = c[1], src = c[2], dst = c[4];
         var cch = (int)c[3]; var cchDst = (int)c[5];
