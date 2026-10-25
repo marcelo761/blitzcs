@@ -44,12 +44,313 @@
       ]
     },
     {
+      "name": "SystemProperty",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacySystem",
+      "method": "SystemProperty",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "String"
+    },
+    {
+      "name": "DebugLog",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyDiagnostics",
+      "method": "DebugLog",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "CreateBank",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "CreateBank"
+    },
+    {
+      "name": "FreeBank",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "FreeBank"
+    },
+    {
+      "name": "BankSize",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "BankSize"
+    },
+    {
+      "name": "ResizeBank",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "ResizeBank"
+    },
+    {
+      "name": "CopyBank",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "CopyBank"
+    },
+    {
+      "name": "PeekByte",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PeekByte"
+    },
+    {
+      "name": "PeekShort",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PeekShort"
+    },
+    {
+      "name": "PeekInt",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PeekInt"
+    },
+    {
+      "name": "PeekFloat",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PeekFloat"
+    },
+    {
+      "name": "PokeByte",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PokeByte"
+    },
+    {
+      "name": "PokeShort",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PokeShort"
+    },
+    {
+      "name": "PokeInt",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PokeInt"
+    },
+    {
+      "name": "PokeFloat",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Float"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PokeFloat"
+    },
+    {
+      "name": "String",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "String",
+      "parameters": [
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Left",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Left",
+      "parameters": [
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Right",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Right",
+      "parameters": [
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Replace",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Replace",
+      "parameters": [
+        "String",
+        "String",
+        "String"
+      ]
+    },
+    {
+      "name": "Instr",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Instr",
+      "parameters": [
+        "String",
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Mid",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Mid",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Upper",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Upper",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "Lower",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Lower",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "Trim",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Trim",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "LSet",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "LSet",
+      "parameters": [
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "RSet",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "RSet",
+      "parameters": [
+        "String",
+        "Integer"
+      ]
+    },
+    {
       "name": "Chr",
       "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
       "type": "Blitz3DCS.Runtime.LegacyStrings",
       "method": "Chr",
       "parameters": [
         "Integer"
+      ]
+    },
+    {
+      "name": "Asc",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Asc",
+      "parameters": [
+        "String"
       ]
     },
     {
@@ -62,14 +363,36 @@
       ]
     },
     {
-      "name": "SystemProperty",
+      "name": "Hex",
       "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
-      "type": "Blitz3DCS.Runtime.LegacySystem",
-      "method": "SystemProperty",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Hex",
       "parameters": [
-        "String"
-      ],
-      "returnType": "String"
+        "Integer"
+      ]
+    },
+    {
+      "name": "Bin",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Bin",
+      "parameters": [
+        "Integer"
+      ]
+    },
+    {
+      "name": "CurrentDate",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "CurrentDate",
+      "parameters": []
+    },
+    {
+      "name": "CurrentTime",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "CurrentTime",
+      "parameters": []
     }
   ]
 }

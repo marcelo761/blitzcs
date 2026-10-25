@@ -1,0 +1,33 @@
+{
+  "fresh_original_runs_by_this_command": 0,
+  "original_capture": "docs/evidence/m17-original.json",
+  "fixtures": [
+    {
+      "name": "windowed3d-argument",
+      "source": "tests/Compatibility/fixtures/m17/windowed3d-argument.bb",
+      "source_sha256": "8ddc17e38552d6ea17dcd0d752fb381750b94eb4567c823397e961f4cf6fbdd5",
+      "status": "match",
+      "reason": null,
+      "scope": "phase and exit success class; stdout for successful execution; compile diagnostic cause checked separately"
+    },
+    {
+      "name": "debuglog-expression",
+      "source": "tests/Compatibility/fixtures/m17/debuglog-expression.bb",
+      "source_sha256": "1146a53be010557184413b48560ff37073451cefe20e354bc56ff664198714eb",
+      "status": "match",
+      "reason": null,
+      "scope": "phase and exit success class; stdout for successful execution; compile diagnostic cause checked separately"
+    },
+    {
+      "name": "debuglog-release",
+      "source": "tests/Compatibility/fixtures/m17/debuglog-release.bb",
+      "source_sha256": "2a3b80a1f43ae95f796a1fc934e62b9a6700555b9bde7ff12d875872a6f9e65c",
+      "status": "match",
+      "reason": null,
+      "scope": "phase and exit success class; stdout for successful execution; compile diagnostic cause checked separately"
+    }
+  ],
+  "match": 3,
+  "mismatch": 0,
+  "graphics_lifecycle_comparison": "pending: no managed graphics backend"
+}

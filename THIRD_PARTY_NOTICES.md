@@ -11,6 +11,7 @@ BlitzCS was created and is led by Marcelo Buratti de Freitas Filho. That attribu
 | Microsoft.CodeAnalysis.Analyzers | 3.11.0 | MIT; Microsoft Corporation |
 | Microsoft.NET.Test.Sdk, Microsoft.CodeCoverage, Microsoft.TestPlatform.ObjectModel, Microsoft.TestPlatform.TestHost | 17.14.1 | MIT; Microsoft Corporation |
 | Newtonsoft.Json (test dependency) | 13.0.3 | MIT; James Newton-King |
+| Iced (x86 decoder/encoder; BlitzCS.BinaryCompiler) | 1.21.0 | MIT; the Iced contributors ([license copy](licenses/iced-MIT.txt)); [source](https://github.com/icedland/iced) |
 | xunit, xunit.assert, xunit.core, xunit.extensibility.core, xunit.extensibility.execution | 2.9.3 | Apache-2.0; .NET Foundation and contributors |
 | xunit.abstractions | 2.0.3 | Apache-2.0; upstream license URL in package metadata |
 | xunit.analyzers | 1.18.0 | Apache-2.0; .NET Foundation and contributors |

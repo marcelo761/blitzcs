@@ -1,0 +1,131 @@
+using System;
+using System.Collections.Concurrent;
+using System.Threading;
+using BlitzCS.LegacyRuntime;
+using BlitzCS.NativeInterop.ManagedBinding;
+
+// Run in an isolated process so a regressed lock order cannot hang the test runner.
+internal static class Program
+{
+    private static readonly ConcurrentQueue<Exception> Errors = new();
+
+    public static int Main(string[] args)
+    {
+        try
+        {
+            if (args[0] == "race") RaceWritersAndClose();
+            else CloseFromBankBorrow(args[0] == "pointer");
+            Require(LegacyMemoryBindings.CloseNativeMemory() == 0, "Library was not closed.");
+            Require(LegacyBanks.OpenBankCount == 0, "Bank was not released.");
+            Console.WriteLine("bank-close-complete");
+            return 0;
+        }
+        catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+    }
+
+    private static void CloseFromBankBorrow(bool pointer)
+    {
+        var bank = LegacyBanks.CreateBank(16);
+        Require(LegacyMemoryBindings.WriteNativeRect(bank) == 1, "Warm-up native write failed.");
+        using var borrowed = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var writerStarted = new ManualResetEventSlim();
+        var closed = -1;
+        var written = -1;
+        int InsideBorrow()
+        {
+            borrowed.Set();
+            Require(release.Wait(TimeSpan.FromSeconds(10)), "Controller did not release bank callback.");
+            closed = LegacyMemoryBindings.CloseNativeMemory();
+            return 0;
+        }
+        var holder = Start(() =>
+        {
+            if (pointer) LegacyBanks.WithPointer(bank, 0, 16, (_, _) => InsideBorrow(), alignment: 4);
+            else LegacyBanks.WithBytes(bank, 0, 16, _ => InsideBorrow());
+        });
+        Require(borrowed.Wait(TimeSpan.FromSeconds(5)), "Bank callback did not enter.");
+        var writer = Start(() =>
+        {
+            writerStarted.Set();
+            written = LegacyMemoryBindings.WriteNativeRect(bank);
+        });
+        try
+        {
+            Require(writerStarted.Wait(TimeSpan.FromSeconds(5)), "Writer did not start.");
+            // The callback owns the bank store. This writer has no event waits: wait state
+            // here establishes actual lock contention, rather than relying on a sleep.
+            Require(SpinWait.SpinUntil(() => (writer.ThreadState & ThreadState.WaitSleepJoin) != 0 || !writer.IsAlive,
+                TimeSpan.FromSeconds(5)), "Writer did not contend on the bank store.");
+            Require(writer.IsAlive, "Writer returned before the bank borrow ended.");
+        }
+        finally { release.Set(); }
+        Require(holder.Join(5000), "CloseNativeMemory deadlocked with a writer waiting for the bank store.");
+        Require(writer.Join(5000), "Writer did not finish after the bank borrow ended.");
+        ThrowWorkerErrors();
+        Require(closed == 1 && written == 1, "Close/reload/write did not succeed.");
+        CheckRectangle(bank);
+        Require(LegacyMemoryBindings.CloseNativeMemory() == 1, "Reloaded library did not close.");
+        Require(LegacyMemoryBindings.WriteNativeRect(bank) == 1, "Reinitialization failed.");
+        CheckRectangle(bank);
+        Require(LegacyMemoryBindings.CloseNativeMemory() == 1, "Reinitialized library did not close.");
+        LegacyBanks.FreeBank(bank);
+    }
+
+    private static void RaceWritersAndClose()
+    {
+        var first = LegacyBanks.CreateBank(16);
+        var second = LegacyBanks.CreateBank(16);
+        using var start = new ManualResetEventSlim();
+        Thread Writer(int bank) => Start(() =>
+        {
+            Require(start.Wait(TimeSpan.FromSeconds(5)), "Race did not start.");
+            for (var i = 0; i < 200; i++)
+                Require(LegacyMemoryBindings.WriteNativeRect(bank) == 1, "Concurrent native write failed.");
+        });
+        var a = Writer(first);
+        var b = Writer(second);
+        var closer = Start(() =>
+        {
+            Require(start.Wait(TimeSpan.FromSeconds(5)), "Race did not start.");
+            for (var i = 0; i < 200; i++)
+            {
+                var result = LegacyMemoryBindings.CloseNativeMemory();
+                Require(result is 0 or 1, "Unexpected close result.");
+            }
+        });
+        start.Set();
+        Require(a.Join(10000) && b.Join(10000) && closer.Join(10000), "Concurrent write/close did not complete.");
+        ThrowWorkerErrors();
+        CheckRectangle(first);
+        CheckRectangle(second);
+        LegacyMemoryBindings.CloseNativeMemory();
+        LegacyBanks.FreeBank(first);
+        LegacyBanks.FreeBank(second);
+    }
+
+    private static void CheckRectangle(int bank)
+    {
+        Require(LegacyBanks.PeekInt(bank, 0) == 0x01020304 && LegacyBanks.PeekInt(bank, 4) == -2 &&
+                LegacyBanks.PeekInt(bank, 8) == 300 && LegacyBanks.PeekInt(bank, 12) == -400,
+                "Native RECT bytes were corrupted.");
+    }
+
+    private static Thread Start(Action action)
+    {
+        var thread = new Thread(() => { try { action(); } catch (Exception error) { Errors.Enqueue(error); } })
+            { IsBackground = true };
+        thread.Start();
+        return thread;
+    }
+
+    private static void ThrowWorkerErrors()
+    {
+        if (Errors.TryDequeue(out var error)) throw new InvalidOperationException("Worker failed.", error);
+    }
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

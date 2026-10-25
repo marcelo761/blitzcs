@@ -1,0 +1,367 @@
+{
+  "functions": [
+    {
+      "name": "ZlibWapi_CompressBound",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "CompressBound",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_Compress2",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "Compress2",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "name": "ZlibWapi_UnCompress",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnCompress",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "name": "ZlibWapi_Adler32",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "Adler32",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        1
+      ]
+    },
+    {
+      "name": "ZlibWapi_Crc32",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "Crc32",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        1
+      ]
+    },
+    {
+      "name": "ZlibWapi_UnzOpen",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzOpen",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_UnzClose",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzClose",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_UnzGetGlobalInfo",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzGetGlobalInfo",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        1
+      ]
+    },
+    {
+      "name": "ZlibWapi_UnzGetGlobalComment",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzGetGlobalComment",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        1
+      ]
+    },
+    {
+      "name": "ZlibWapi_UnzLocateFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzLocateFile",
+      "parameters": [
+        "Integer",
+        "String",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_UnzGoToFirstFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzGoToFirstFile",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_UnzGoToNextFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzGoToNextFile",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_UnzGetCurrentFileInfo",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzGetCurrentFileInfo",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        1,
+        2,
+        4,
+        6
+      ]
+    },
+    {
+      "name": "ZlibWapi_UnzOpenCurrentFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzOpenCurrentFile",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_UnzOpenCurrentFilePassword",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzOpenCurrentFilePassword",
+      "parameters": [
+        "Integer",
+        "String"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_UnzReadCurrentFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzReadCurrentFile",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        1
+      ]
+    },
+    {
+      "name": "ZlibWapi_UnzCloseCurrentFile",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "UnzCloseCurrentFile",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_ZipOpen",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "ZipOpen",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_ZipClose",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "ZipClose",
+      "parameters": [
+        "Integer",
+        "String"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    },
+    {
+      "name": "ZlibWapi_ZipOpenNewFileInZip",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "ZipOpenNewFileInZip",
+      "parameters": [
+        "Integer",
+        "String",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "String",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        2,
+        3,
+        5
+      ]
+    },
+    {
+      "name": "ZlibWapi_ZipOpenNewFileInZip3",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "ZipOpenNewFileInZip3",
+      "parameters": [
+        "Integer",
+        "String",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "String",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "String",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        2,
+        3,
+        5
+      ]
+    },
+    {
+      "name": "ZlibWapi_ZipWriteFileInZip",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "ZipWriteFileInZip",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": [
+        1
+      ]
+    },
+    {
+      "name": "ZlibWapi_ZipCloseFileInZip",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeZip",
+      "method": "ZipCloseFileInZip",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "legacyAdapter": true,
+      "objectAdapterParameters": []
+    }
+  ]
+}

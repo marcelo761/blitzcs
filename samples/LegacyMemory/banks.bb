@@ -1,0 +1,51 @@
+Local empty=CreateBank()
+Print "default-size="+BankSize(empty)
+Local zero=CreateBank(0)
+Print "zero-size="+BankSize(zero)
+Local b=CreateBank(16)
+Print "size="+BankSize(b)
+Print "zero-init="+PeekInt(b,0)+","+PeekInt(b,12)
+PokeByte b,0,-1
+PokeByte b,1,258
+Print "byte-wrap="+PeekByte(b,0)+","+PeekByte(b,1)
+PokeShort b,1,-2
+Print "short-unsigned="+PeekShort(b,1)
+Print "short-little-endian="+PeekByte(b,1)+","+PeekByte(b,2)
+PokeShort b,1,65537
+Print "short-wrap="+PeekShort(b,1)
+PokeInt b,1,$89abcdef
+Print "int-signed="+PeekInt(b,1)
+Print "int-little-endian="+PeekByte(b,1)+","+PeekByte(b,2)+","+PeekByte(b,3)+","+PeekByte(b,4)
+PokeFloat b,3,1.5
+Print "float-roundtrip="+(PeekFloat(b,3)=1.5)
+Print "float-bits="+PeekInt(b,3)
+PokeInt b,0,123456
+ResizeBank b,8
+Print "shrink="+BankSize(b)+","+PeekInt(b,0)
+ResizeBank b,16
+Print "regrow-in-capacity-zero="+PeekInt(b,8)+","+PeekInt(b,12)
+ResizeBank b,64
+Print "reallocate-preserve="+BankSize(b)+","+PeekInt(b,0)
+; Reallocation tail is intentionally not inspected: native source leaves it uninitialized.
+Local c=CreateBank(8)
+For i=0 To 7
+ PokeByte c,i,i+1
+Next
+CopyBank c,0,c,2,6
+Print "overlap-forward="+PeekByte(c,0)+","+PeekByte(c,1)+","+PeekByte(c,2)+","+PeekByte(c,3)+","+PeekByte(c,6)+","+PeekByte(c,7)
+CopyBank c,2,c,0,6
+Print "overlap-backward="+PeekByte(c,0)+","+PeekByte(c,1)+","+PeekByte(c,4)+","+PeekByte(c,5)
+Local d=CreateBank(8)
+CopyBank c,0,d,1,6
+Print "cross-copy="+PeekByte(d,0)+","+PeekByte(d,1)+","+PeekByte(d,6)+","+PeekByte(d,7)
+CopyBank c,0,d,0,0
+Print "zero-copy="+PeekByte(d,0)
+FreeBank empty
+FreeBank zero
+FreeBank b
+FreeBank c
+FreeBank d
+FreeBank d
+FreeBank 0
+FreeBank 123
+Print "free-invalid-noop=1"

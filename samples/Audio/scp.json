@@ -44,24 +44,6 @@
       ]
     },
     {
-      "name": "Chr",
-      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
-      "type": "Blitz3DCS.Runtime.LegacyStrings",
-      "method": "Chr",
-      "parameters": [
-        "Integer"
-      ]
-    },
-    {
-      "name": "Len",
-      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
-      "type": "Blitz3DCS.Runtime.LegacyStrings",
-      "method": "Len",
-      "parameters": [
-        "String"
-      ]
-    },
-    {
       "name": "FSOUND_Init",
       "assembly": "../../src/Blitz3DCS.Audio/bin/Release/net10.0/Blitz3DCS.Audio.dll",
       "type": "Blitz3DCS.Audio.FSOUND",
@@ -477,6 +459,999 @@
         "String"
       ],
       "returnType": "String"
+    },
+    {
+      "name": "DebugLog",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyDiagnostics",
+      "method": "DebugLog",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "Windowed3D",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "CountGfxModes3D",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "api_SetWindowLong",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "api_SetWindowPos",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "GfxModeWidth",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "GfxModeHeight",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "BackBuffer",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "SetBuffer",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "MilliSecs",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "SeedRnd",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "AppTitle",
+      "returnType": "Void",
+      "parameters": [
+        "String",
+        "String"
+      ],
+      "defaults": [
+        ""
+      ]
+    },
+    {
+      "name": "GraphicsWidth",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "GraphicsHeight",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "ImageWidth",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "ImageHeight",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "LoadAnimImage",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "MaskImage",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "CreateImage",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        1
+      ]
+    },
+    {
+      "name": "Collisions",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "ResizeImage",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "RotateImage",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "HandleImage",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "FlushKeys",
+      "returnType": "Void",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "FlushMouse",
+      "returnType": "Void",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "Cls",
+      "returnType": "Void",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "Delay",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "MouseHit",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "MouseDown",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "Rand",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        1
+      ]
+    },
+    {
+      "name": "EntityX",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ]
+    },
+    {
+      "name": "Rnd",
+      "returnType": "Float",
+      "parameters": [
+        "Float",
+        "Float"
+      ],
+      "defaults": [
+        0.0
+      ]
+    },
+    {
+      "name": "EntityZ",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ]
+    },
+    {
+      "name": "PositionEntity",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float",
+        "Float",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ]
+    },
+    {
+      "name": "CameraFogRange",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "CameraFogColor",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float",
+        "Float"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "CameraFogMode",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "CameraRange",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "CameraClsColor",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float",
+        "Float"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "AmbientLight",
+      "returnType": "Void",
+      "parameters": [
+        "Float",
+        "Float",
+        "Float"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "EntityY",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ]
+    },
+    {
+      "name": "UpdateWorld",
+      "returnType": "Void",
+      "parameters": [
+        "Float"
+      ],
+      "defaults": [
+        1.0
+      ]
+    },
+    {
+      "name": "Sin",
+      "returnType": "Float",
+      "parameters": [
+        "Float"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "EntityAlpha",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "ShowEntity",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "HideEntity",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "EntityColor",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float",
+        "Float",
+        "Float"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "KeyHit",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "MouseXSpeed",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "MouseYSpeed",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "MouseZSpeed",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "Color",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "TextureBuffer",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ]
+    },
+    {
+      "name": "ClsColor",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "CopyRect",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "EntityBlend",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "EntityFX",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "Flip",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [
+        1
+      ]
+    },
+    {
+      "name": "LoadImage",
+      "returnType": "Integer",
+      "parameters": [
+        "String"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "EntityDistance",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "DeltaYaw",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": []
+    },
+    {
+      "name": "LoadMesh",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ]
+    },
+    {
+      "name": "LoadAnimMesh",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ]
+    },
+    {
+      "name": "LoadTexture",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer"
+      ],
+      "defaults": [
+        1
+      ]
+    },
+    {
+      "name": "LoadBrush",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer",
+        "Float",
+        "Float"
+      ],
+      "defaults": [
+        1,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "LoadFont",
+      "returnType": "Integer",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [
+        12,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "api_GetDesktopWindow",
+      "returnType": "Integer",
+      "parameters": [],
+      "defaults": []
+    },
+    {
+      "name": "CreateBank",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [
+        0
+      ],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "CreateBank"
+    },
+    {
+      "name": "FreeBank",
+      "returnType": "Void",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "FreeBank"
+    },
+    {
+      "name": "BankSize",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "BankSize"
+    },
+    {
+      "name": "ResizeBank",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "ResizeBank"
+    },
+    {
+      "name": "CopyBank",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "CopyBank"
+    },
+    {
+      "name": "PeekByte",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PeekByte"
+    },
+    {
+      "name": "PeekShort",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PeekShort"
+    },
+    {
+      "name": "PeekInt",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PeekInt"
+    },
+    {
+      "name": "PeekFloat",
+      "returnType": "Float",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PeekFloat"
+    },
+    {
+      "name": "PokeByte",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PokeByte"
+    },
+    {
+      "name": "PokeShort",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PokeShort"
+    },
+    {
+      "name": "PokeInt",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PokeInt"
+    },
+    {
+      "name": "PokeFloat",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Float"
+      ],
+      "defaults": [],
+      "assembly": "../../src/BlitzCS.LegacyRuntime/bin/Release/net10.0/BlitzCS.LegacyRuntime.dll",
+      "type": "BlitzCS.LegacyRuntime.LegacyBanks",
+      "method": "PokeFloat"
+    },
+    {
+      "name": "api_GetClientRect",
+      "returnType": "Integer",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "defaults": [],
+      "nativeContract": {
+        "library": "user32.dll",
+        "entryPoint": "GetClientRect",
+        "callingConvention": "Winapi (stdcall on x86)",
+        "platform": "Windows",
+        "status": "declaration_only; requires a real HWND host and an explicit bank adapter",
+        "parameters": [
+          {
+            "index": 0,
+            "managedRepresentation": "opaque OS window handle token",
+            "nativeRepresentation": "pointer-sized HWND"
+          },
+          {
+            "index": 1,
+            "managedRepresentation": "checked bank token",
+            "nativeRepresentation": "RECT*",
+            "minimumBytes": 16,
+            "alignment": 4,
+            "direction": "out",
+            "lifetime": "synchronous borrow only"
+          }
+        ]
+      }
+    },
+    {
+      "name": "String",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "String",
+      "parameters": [
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Left",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Left",
+      "parameters": [
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Right",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Right",
+      "parameters": [
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Replace",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Replace",
+      "parameters": [
+        "String",
+        "String",
+        "String"
+      ]
+    },
+    {
+      "name": "Instr",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Instr",
+      "parameters": [
+        "String",
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Mid",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Mid",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Upper",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Upper",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "Lower",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Lower",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "Trim",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Trim",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "LSet",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "LSet",
+      "parameters": [
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "RSet",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "RSet",
+      "parameters": [
+        "String",
+        "Integer"
+      ]
+    },
+    {
+      "name": "Chr",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Chr",
+      "parameters": [
+        "Integer"
+      ]
+    },
+    {
+      "name": "Asc",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Asc",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "Len",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Len",
+      "parameters": [
+        "String"
+      ]
+    },
+    {
+      "name": "Hex",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Hex",
+      "parameters": [
+        "Integer"
+      ]
+    },
+    {
+      "name": "Bin",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "Bin",
+      "parameters": [
+        "Integer"
+      ]
+    },
+    {
+      "name": "CurrentDate",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "CurrentDate",
+      "parameters": []
+    },
+    {
+      "name": "CurrentTime",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacyStrings",
+      "method": "CurrentTime",
+      "parameters": []
     }
   ]
 }

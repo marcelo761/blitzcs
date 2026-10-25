@@ -30,17 +30,24 @@ public static class BasicCompiler
         return Array.AsReadOnly(analysis.UnboundExternalCalls.ToArray());
     }
 
-    public static string Compile(string source, string sourcePath, ExternalFunctionRegistry? externals)
+    public static string Compile(string source, string sourcePath, ExternalFunctionRegistry? externals) =>
+        Compile(source, sourcePath, externals, out _);
+
+    /// <summary>Compiles BASIC and reports the main source and every resolved Include input, including empty files.</summary>
+    public static string Compile(string source, string sourcePath, ExternalFunctionRegistry? externals,
+        out IReadOnlyList<string> sourcePaths)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         var tokens = new Lexer(source, sourcePath).Tokenize();
-        var syntax = new Parser(tokens, sourcePath, new IncludeResolver(sourcePath)).Parse();
+        var includes = new IncludeResolver(sourcePath);
+        var syntax = new Parser(tokens, sourcePath, includes).Parse();
         var analysis = new SemanticAnalysis(sourcePath, externals);
         var program = analysis.Analyze(syntax);
         if (analysis.UnboundExternalCalls.FirstOrDefault() is { } unbound)
             throw new BasicDiagnosticException(unbound.SourcePath, unbound.Line, unbound.Column,
-                $"External function '{unbound.Name}' has a declared signature but no implementation.");
+                unbound.MissingImplementationMessage);
+        sourcePaths = Array.AsReadOnly(new[] { Path.GetFullPath(sourcePath) }.Concat(includes.SourcePaths).ToArray());
         return CSharpEmitter.Emit(program, sourcePath);
     }
 }

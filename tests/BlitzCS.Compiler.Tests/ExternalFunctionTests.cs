@@ -56,7 +56,7 @@ public sealed class ExternalFunctionTests
     {
         Assert.Throws<ArgumentException>(() => new ExternalFunction("doubleabs", typeof(Math).GetMethod(nameof(Math.Abs), [typeof(double)])!));
         Assert.Throws<ArgumentException>(() => new ExternalFunction("tostring", typeof(object).GetMethod(nameof(ToString))!));
-        Assert.Throws<ArgumentException>(() => new ExternalFunction("write", typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])!));
+        Assert.Throws<ArgumentException>(() => new ExternalFunction("isletter", typeof(char).GetMethod(nameof(char.IsLetter), [typeof(char)])!));
     }
 
     [Fact]

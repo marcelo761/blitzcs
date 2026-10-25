@@ -299,7 +299,13 @@ internal sealed class Parser(IReadOnlyList<Token> tokens, string sourcePath, Inc
                         if (Keyword is not "before" and not "after") throw Error(Current, "Expected Before or After.");
                         var before = Take().Text == "before";
                         statements.Add(new Insert(inserted, ParseExpression(), before, first.Position)); break;
-                    case "print": statements.Add(new Print(ParseExpression(), first.Position)); break;
+                    case "print":
+                    {
+                        var printValue = Current.Kind is TokenKind.Eof or TokenKind.Separator || Keyword is "else" or "elseif" or "endif"
+                            ? new Literal(string.Empty, first.Position)
+                            : ParseExpression();
+                        statements.Add(new Print(printValue, first.Position)); break;
+                    }
                     case "data":
                         if (!topLevel) throw Error(first, "Data can only appear in the main program.");
                         var dataValues = new List<Expression>();
@@ -649,6 +655,7 @@ internal sealed class Parser(IReadOnlyList<Token> tokens, string sourcePath, Inc
                 if (token.Text == "null") { left = new ObjectOperation("null", null, null, token.Position); break; }
                 if (token.Text is "new" or "first" or "last") { left = new ObjectOperation(token.Text, ParseName().Text, null, token.Position); break; }
                 if (token.Text is "before" or "after") { left = new ObjectOperation(token.Text, null, ParseExpression(7), token.Position); break; }
+                if (token.Text == "pi") { left = new Literal(MathF.PI, token.Position); break; }
                 if (token.Text is "true" or "false") { left = new Literal(token.Text == "true" ? 1 : 0, token.Position); break; }
                 RequireVariable(token);
                 token = WithSuffix(token);

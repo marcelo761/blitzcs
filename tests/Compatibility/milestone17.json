@@ -1,0 +1,21 @@
+{
+  "description": "Three bounded language/diagnostic cases captured from genuine Blitz3D V1.118 under Proton; this does not compare a managed graphics implementation.",
+  "fixtures": [
+    {
+      "name": "m17-windowed3d-argument",
+      "source": "fixtures/m17/windowed3d-argument.bb",
+      "expected_phase": "compile_error"
+    },
+    {
+      "name": "m17-debuglog-expression",
+      "source": "fixtures/m17/debuglog-expression.bb",
+      "expected_phase": "compile_error"
+    },
+    {
+      "name": "m17-debuglog-release",
+      "source": "fixtures/m17/debuglog-release.bb",
+      "expected_phase": "run",
+      "expected_stdout": "before-debuglog\nafter-debuglog\n"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "fresh_original_runs_by_this_command": 0,
+  "match": 1,
+  "mismatch": 0,
+  "source_sha256": "fe579b9746abff072df1154138a604d7f8b35bdea8fd6be37ad92c050002ca04",
+  "status": "match",
+  "reason": null,
+  "scope": "valid bank operations; phase, stdout and exit success class only"
+}

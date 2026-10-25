@@ -169,7 +169,7 @@ internal static class CSharpEmitter
         IrVectorAccess access => access.Type == ValueType.String ? $"({EmitVectorAccess(access)} ?? \"\")" : EmitVectorAccess(access),
         IrField field => field.Type == ValueType.String ? $"({EmitField(field)} ?? \"\")" : EmitField(field),
         IrInteger integer => integer.Value.ToString(CultureInfo.InvariantCulture),
-        IrFloat floating => floating.Value.ToString("R", CultureInfo.InvariantCulture) + "f",
+        IrFloat floating => FloatLiteral.Emit(floating.Value),
         IrString text => Quote(text.Value),
         IrConvert conversion => EmitConversion(conversion),
         IrArrayAccess access => access.Type == ValueType.String ? $"({EmitArrayAccess(access)} ?? \"\")" : EmitArrayAccess(access),

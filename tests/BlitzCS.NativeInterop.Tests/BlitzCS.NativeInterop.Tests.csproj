@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><IsPackable>false</IsPackable><IsTestProject>true</IsTestProject></PropertyGroup>
   <ItemGroup>
+    <None Update="Fixtures/BankCloseConcurrency.cs.txt" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" PrivateAssets="all" />
@@ -15,5 +16,6 @@
   <Target Name="BuildNativeInteropFixture" BeforeTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
     <MakeDir Directories="$(OutDir)native" />
     <Exec Command="cc -std=c11 -Wall -Wextra -Werror -fPIC -shared &quot;$(MSBuildProjectDirectory)/native/demo.c&quot; -o &quot;$(OutDir)native/libblitzcs_native_demo.so&quot;" />
+    <Exec Command="cc -std=c11 -Wall -Wextra -Werror -fPIC -shared &quot;$(MSBuildProjectDirectory)/native/buffer.c&quot; -o &quot;$(OutDir)native/libblitzcs_native_buffer.so&quot;" />
   </Target>
 </Project>

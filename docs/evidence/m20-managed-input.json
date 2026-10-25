@@ -1,0 +1,131 @@
+{
+  "runtime": "BlitzCS managed input with real SDL X11 window",
+  "fixture_sha256": "560d0f38e926f1066e3ce6bf8e4c25733778199fb0d01474b2e8e4df9279ba15",
+  "events": [
+    [
+      "windowfocus",
+      "--sync",
+      "2097199"
+    ],
+    [
+      "mousemove",
+      "--window",
+      "2097199",
+      "73",
+      "91"
+    ],
+    [
+      "mousedown",
+      "1"
+    ],
+    [
+      "mouseup",
+      "1",
+      "click",
+      "--repeat",
+      "3",
+      "--delay",
+      "80",
+      "1"
+    ],
+    [
+      "keydown",
+      "a"
+    ],
+    [
+      "keyup",
+      "a",
+      "key",
+      "--repeat",
+      "3",
+      "--delay",
+      "80",
+      "a"
+    ],
+    [
+      "key",
+      "--delay",
+      "50",
+      "Home",
+      "End",
+      "Insert",
+      "Delete",
+      "Prior",
+      "Next",
+      "Up",
+      "Down",
+      "Right",
+      "Left"
+    ],
+    [
+      "key",
+      "a",
+      "keydown",
+      "Shift_L"
+    ],
+    [
+      "key",
+      "a",
+      "keyup",
+      "Shift_L"
+    ],
+    [
+      "keydown",
+      "a"
+    ],
+    [
+      "windowfocus",
+      "--sync",
+      "0x39f"
+    ],
+    [
+      "windowfocus",
+      "--sync",
+      "2097199",
+      "keyup",
+      "a"
+    ],
+    [
+      "key",
+      "F1"
+    ],
+    [
+      "key",
+      "b"
+    ],
+    [
+      "click",
+      "--repeat",
+      "2",
+      "--delay",
+      "80",
+      "4"
+    ]
+  ],
+  "observations": {
+    "warp": "37,53,0,0,0,0",
+    "motion": "73,91,36,38,0,0",
+    "mouse-held": "1,1,0,1,0,0",
+    "mouse-three": "0,3,0,1,1,1,0",
+    "key-held": "1,1,0,1,0,0",
+    "key-three": "0,3,0,97,97,97,0",
+    "arrows": "1,2,3,4,5,6,28,29,30,31",
+    "modifier-held": "65,0,1",
+    "modifier-released": "97,0",
+    "repeat-held": "1,1,97,0",
+    "focus-lost": "0,73,91",
+    "focus-gained": "0,0,73,91",
+    "wait-key": "98",
+    "wheel": "2,2,0,2",
+    "done": "complete"
+  },
+  "reference_sha256": "4191eaa35440d078723d6ce6ea1b1ed0fa68801762246f2fc4df27fc546fcb96",
+  "managed_fixture_sha256": "7ed5dc4dbd18e86b251bbd15c4941ab460741684f99a127210dff92fbc8ab1f6",
+  "exit_code": 0,
+  "mismatches": {
+    "focus-lost": {
+      "expected": "1,73,91",
+      "actual": "0,73,91"
+    }
+  }
+}

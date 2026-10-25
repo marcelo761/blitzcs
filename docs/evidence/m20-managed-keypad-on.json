@@ -1,0 +1,217 @@
+{
+  "runtime": "BlitzCS managed input with real SDL X11 window",
+  "fixture_sha256": "560d0f38e926f1066e3ce6bf8e4c25733778199fb0d01474b2e8e4df9279ba15",
+  "events": [
+    [
+      "windowfocus",
+      "--sync",
+      "2097199"
+    ],
+    [
+      "key",
+      "Num_Lock"
+    ],
+    [
+      "mousemove",
+      "--window",
+      "2097199",
+      "73",
+      "91"
+    ],
+    [
+      "mousedown",
+      "1"
+    ],
+    [
+      "mouseup",
+      "1",
+      "click",
+      "--repeat",
+      "3",
+      "--delay",
+      "80",
+      "1"
+    ],
+    [
+      "keydown",
+      "a"
+    ],
+    [
+      "keyup",
+      "a",
+      "key",
+      "--repeat",
+      "3",
+      "--delay",
+      "80",
+      "a"
+    ],
+    [
+      "key",
+      "--delay",
+      "50",
+      "Home",
+      "End",
+      "Insert",
+      "Delete",
+      "Prior",
+      "Next",
+      "Up",
+      "Down",
+      "Right",
+      "Left"
+    ],
+    [
+      "key",
+      "KP_Enter"
+    ],
+    [
+      "key",
+      "KP_Divide"
+    ],
+    [
+      "key",
+      "KP_Multiply"
+    ],
+    [
+      "key",
+      "KP_Add"
+    ],
+    [
+      "key",
+      "KP_Subtract"
+    ],
+    [
+      "key",
+      "KP_1"
+    ],
+    [
+      "key",
+      "KP_2"
+    ],
+    [
+      "key",
+      "KP_3"
+    ],
+    [
+      "key",
+      "KP_4"
+    ],
+    [
+      "key",
+      "KP_5"
+    ],
+    [
+      "key",
+      "KP_6"
+    ],
+    [
+      "key",
+      "KP_7"
+    ],
+    [
+      "key",
+      "KP_8"
+    ],
+    [
+      "key",
+      "KP_9"
+    ],
+    [
+      "key",
+      "KP_0"
+    ],
+    [
+      "key",
+      "KP_Decimal"
+    ],
+    [
+      "key",
+      "a",
+      "keydown",
+      "Shift_L"
+    ],
+    [
+      "key",
+      "a",
+      "keyup",
+      "Shift_L"
+    ],
+    [
+      "keydown",
+      "a"
+    ],
+    [
+      "windowfocus",
+      "--sync",
+      "0x39f"
+    ],
+    [
+      "windowfocus",
+      "--sync",
+      "2097199",
+      "keyup",
+      "a"
+    ],
+    [
+      "key",
+      "F1"
+    ],
+    [
+      "key",
+      "b"
+    ],
+    [
+      "click",
+      "--repeat",
+      "2",
+      "--delay",
+      "80",
+      "4"
+    ]
+  ],
+  "observations": {
+    "warp": "37,53,0,0,0,0",
+    "motion": "73,91,36,38,0,0",
+    "mouse-held": "1,1,0,1,0,0",
+    "mouse-three": "0,3,0,1,1,1,0",
+    "key-held": "1,1,0,1,0,0",
+    "key-three": "0,3,0,97,97,97,0",
+    "arrows": "1,2,3,4,5,6,28,29,30,31",
+    "KP_Enter": "1,13,0,0,0,0,0,0,0",
+    "KP_Divide": "1,0,47,0,0,0,0,0,0",
+    "KP_Multiply": "1,0,0,0,0,0,0,0,0",
+    "KP_Add": "1,0,43,0,0,0,0,0,0",
+    "KP_Subtract": "1,0,45,0,0,0,0,0,0",
+    "KP_1": "1,0,0,0,0,0,0,0,0",
+    "KP_2": "1,0,0,0,0,0,0,0,0",
+    "KP_3": "1,0,0,0,0,0,0,0,0",
+    "KP_4": "1,0,0,0,0,0,0,0,0",
+    "KP_5": "1,0,0,0,0,0,0,0,0",
+    "KP_6": "1,0,0,0,0,0,0,0,0",
+    "KP_7": "1,0,0,0,0,0,0,0,0",
+    "KP_8": "1,0,0,0,0,0,0,0,0",
+    "KP_9": "1,0,0,0,0,0,0,0,0",
+    "KP_0": "1,0,0,0,0,0,0,0,0",
+    "KP_Decimal": "1,0,0,0,0,0,0,0,0",
+    "modifier-held": "65,0,1",
+    "modifier-released": "97,0",
+    "repeat-held": "1,1,97,0",
+    "focus-lost": "0,73,91",
+    "focus-gained": "0,0,73,91",
+    "wait-key": "98",
+    "wheel": "2,2,0,2",
+    "done": "complete"
+  },
+  "reference_sha256": "fac292abecfcd52e73ab57653ffd2ff34cd846d2001c17f53a87f83dbfcb5e7b",
+  "managed_fixture_sha256": "373c626b15ce5c97da4bdfb36e9d9485db99589b99fe9f99364b85bf6a773e66",
+  "keyboard_led_mask_before": "00000000",
+  "keyboard_led_mask_after": "00000002",
+  "exit_code": 0,
+  "mismatches": {
+    "focus-lost": {
+      "expected": "1,73,91",
+      "actual": "0,73,91"
+    }
+  }
+}

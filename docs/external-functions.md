@@ -16,8 +16,9 @@ DotNetEmitter.Emit(generated, outputPath, "BlitzProgram", registry.ReferencePath
 
 Métodos registrados precisam ser estáticos públicos, em tipos públicos não
 genéricos de assemblies em disco. Argumentos e retornos aceitam Int32, Single,
-String. Defaults CLR constantes desses tipos são copiados à chamada durante a
-compilação; null String vira string vazia. Sem Void, Boolean, Double, objetos,
+String; comandos podem retornar Void, somente em chamadas como instruções.
+Defaults CLR constantes desses tipos são copiados à chamada durante a
+compilação; null String vira string vazia. Sem Boolean, Double, objetos,
 vetores, arrays, ref/out, params ou métodos genéricos nesta fatia.
 
 Cada nome BASIC é único e case-insensitive, começa por letra e usa letras ASCII,
@@ -102,3 +103,11 @@ independente do núcleo. O fechamento gerenciado de publicação não inclui DLL
 nativas, assets ou cargas dinâmicas sem referência em metadados. As referências
 adicionais descobertas pelo emissor também não ampliam automaticamente a superfície
 de símbolos `CS::` do probe semântico, que usa as referências explícitas do registro.
+
+## Perfis de API e provedores
+
+O campo opcional `profiles` compõe catálogos de declarações e bindings usando o
+mesmo `--externals`. Os contratos podem identificar o provedor necessário sem
+fornecer implementação; builds continuam rejeitando chamadas sem binding.
+Veja [perfis de API](api-profiles.md) para o esquema, defaults, resolução de
+caminhos e a distinção entre registros históricos `rtSym` e exports PE.

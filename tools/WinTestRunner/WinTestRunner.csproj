@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Minimal in-process xunit v2 runner, published win-x64 self-contained and run under Wine by scripts/wine/run-tests.sh. Not part of BlitzCS.slnx. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>WinTestRunner</AssemblyName>
+    <RootNamespace>BlitzCS.WinTestRunner</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.runner.utility" Version="2.9.3" />
+    <!-- AssemblyRunner loads xunit.execution.dotnet by name through the default context, so the runner must reference it itself. -->
+    <PackageReference Include="xunit.extensibility.execution" Version="2.9.3" />
+  </ItemGroup>
+</Project>

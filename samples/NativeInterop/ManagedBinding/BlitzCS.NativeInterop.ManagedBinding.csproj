@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../../../src/BlitzCS.NativeInterop/BlitzCS.NativeInterop.csproj" />
+    <ProjectReference Include="../../../src/BlitzCS.LegacyRuntime/BlitzCS.LegacyRuntime.csproj" />
   </ItemGroup>
 </Project>

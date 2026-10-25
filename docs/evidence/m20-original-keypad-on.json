@@ -1,0 +1,216 @@
+{
+  "runtime": "original Blitz3D 1.118 Win32 under Wine/Proton",
+  "fixture_sha256": "560d0f38e926f1066e3ce6bf8e4c25733778199fb0d01474b2e8e4df9279ba15",
+  "events": [
+    [
+      "windowfocus",
+      "--sync",
+      "14680065"
+    ],
+    [
+      "key",
+      "Num_Lock"
+    ],
+    [
+      "mousemove",
+      "--window",
+      "14680065",
+      "73",
+      "91"
+    ],
+    [
+      "mousedown",
+      "1"
+    ],
+    [
+      "mouseup",
+      "1",
+      "click",
+      "--repeat",
+      "3",
+      "--delay",
+      "80",
+      "1"
+    ],
+    [
+      "keydown",
+      "a"
+    ],
+    [
+      "keyup",
+      "a",
+      "key",
+      "--repeat",
+      "3",
+      "--delay",
+      "80",
+      "a"
+    ],
+    [
+      "key",
+      "--delay",
+      "50",
+      "Home",
+      "End",
+      "Insert",
+      "Delete",
+      "Prior",
+      "Next",
+      "Up",
+      "Down",
+      "Right",
+      "Left"
+    ],
+    [
+      "key",
+      "KP_Enter"
+    ],
+    [
+      "key",
+      "KP_Divide"
+    ],
+    [
+      "key",
+      "KP_Multiply"
+    ],
+    [
+      "key",
+      "KP_Add"
+    ],
+    [
+      "key",
+      "KP_Subtract"
+    ],
+    [
+      "key",
+      "KP_1"
+    ],
+    [
+      "key",
+      "KP_2"
+    ],
+    [
+      "key",
+      "KP_3"
+    ],
+    [
+      "key",
+      "KP_4"
+    ],
+    [
+      "key",
+      "KP_5"
+    ],
+    [
+      "key",
+      "KP_6"
+    ],
+    [
+      "key",
+      "KP_7"
+    ],
+    [
+      "key",
+      "KP_8"
+    ],
+    [
+      "key",
+      "KP_9"
+    ],
+    [
+      "key",
+      "KP_0"
+    ],
+    [
+      "key",
+      "KP_Decimal"
+    ],
+    [
+      "key",
+      "a",
+      "keydown",
+      "Shift_L"
+    ],
+    [
+      "key",
+      "a",
+      "keyup",
+      "Shift_L"
+    ],
+    [
+      "keydown",
+      "a"
+    ],
+    [
+      "windowfocus",
+      "--sync",
+      "0x39f"
+    ],
+    [
+      "windowfocus",
+      "--sync",
+      "14680065",
+      "keyup",
+      "a"
+    ],
+    [
+      "key",
+      "F1"
+    ],
+    [
+      "key",
+      "b"
+    ],
+    [
+      "click",
+      "--repeat",
+      "2",
+      "--delay",
+      "80",
+      "4"
+    ]
+  ],
+  "observations": {
+    "warp": "37,53,0,0,0,0",
+    "motion": "73,91,36,38,0,0",
+    "mouse-held": "1,1,0,1,0,0",
+    "mouse-three": "0,3,0,1,1,1,0",
+    "key-held": "1,1,0,1,0,0",
+    "key-three": "0,3,0,97,97,97,0",
+    "arrows": "1,2,3,4,5,6,28,29,30,31",
+    "KP_Enter": "1,13,0,0,0,0,0,0,0",
+    "KP_Divide": "1,0,47,0,0,0,0,0,0",
+    "KP_Multiply": "1,0,0,0,0,0,0,0,0",
+    "KP_Add": "1,0,43,0,0,0,0,0,0",
+    "KP_Subtract": "1,0,45,0,0,0,0,0,0",
+    "KP_1": "1,0,0,0,0,0,0,0,0",
+    "KP_2": "1,0,0,0,0,0,0,0,0",
+    "KP_3": "1,0,0,0,0,0,0,0,0",
+    "KP_4": "1,0,0,0,0,0,0,0,0",
+    "KP_5": "1,0,0,0,0,0,0,0,0",
+    "KP_6": "1,0,0,0,0,0,0,0,0",
+    "KP_7": "1,0,0,0,0,0,0,0,0",
+    "KP_8": "1,0,0,0,0,0,0,0,0",
+    "KP_9": "1,0,0,0,0,0,0,0,0",
+    "KP_0": "1,0,0,0,0,0,0,0,0",
+    "KP_Decimal": "1,0,0,0,0,0,0,0,0",
+    "modifier-held": "65,0,1",
+    "modifier-released": "97,0",
+    "repeat-held": "1,1,97,0",
+    "focus-lost": "1,73,91",
+    "focus-gained": "0,0,73,91",
+    "wait-key": "98",
+    "wheel": "2,2,0,2",
+    "done": "complete"
+  },
+  "sdk_sha256": {
+    "blitzcc.exe": "bb9ec2c0f8311f82a76b424bdf03cf1d736911d2083d2a575d6b7ad0311f063a",
+    "runtime.dll": "ba120a4a0f15f2ac48e1e86f6465137bd480d0b4a288cae2534a6fe0ecad1a4e",
+    "linker.dll": "2608b431226d170269e4ec9bc9c6215980f392f80199bc644a7001a44c378752"
+  },
+  "executed_fixture_sha256": "6a138e26e7b9a0f6613800a0d37d537ea17e95719b798d3998969c0d4069cec3",
+  "keyboard_led_mask_before": "00000000",
+  "keyboard_led_mask_after": "00000002",
+  "exit_code": 0,
+  "mismatches": {}
+}

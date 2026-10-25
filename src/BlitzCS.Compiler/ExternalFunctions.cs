@@ -3,24 +3,67 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace BlitzCS.Compiler;
 
-public enum ExternalValueType { Integer, Float, String }
-public sealed record UnboundExternalCall(string Name, string SourcePath, int Line, int Column);
+public enum ExternalValueType { Integer, Float, String, Void }
+public sealed record UnboundExternalCall(string Name, string SourcePath, int Line, int Column)
+{
+    public ExternalApiContract? Contract { get; init; }
+    public string? BindingFailure { get; init; }
+    public string MissingImplementationMessage => $"External function '{Name}' has a declared signature but no implementation." +
+        (BindingFailure is { } failure ? " " + failure : "") +
+        (Contract is { } contract
+            ? $" Required runtime provider '{contract.Provider}' (profile '{contract.Profile ?? "unspecified"}', resolution '{contract.Resolution}', symbol '{contract.Symbol}'). Supply a matching managed or binary binding through --externals; declaration validation does not establish runtime support."
+            : "");
+}
 
 /// <summary>A callable BASIC signature independent of any executable implementation.</summary>
-/// <remarks>Signature-only declarations require every parameter. Optional defaults come from bound .NET method metadata.</remarks>
+/// <remarks>Void is permitted only as a return type for external commands.
+/// Defaults apply to trailing parameters and must be Int32, finite Single or String constants
+/// matching the declared types exactly. When defaults are omitted, bound .NET optional metadata is used.
+/// An explicitly supplied list, including an empty list, replaces that metadata for BASIC callers.
+/// Emitted calls always pass every argument; defaults do not change the bound method signature.</remarks>
 public sealed class ExternalFunctionSignature
 {
     public string Name { get; }
+    public ExternalApiContract? Contract { get; init; }
+    public string? BindingFailure { get; init; }
+    public bool AllowsApplicationImplementation { get; init; }
+    /// <summary>Historical data-pointer slots accept bank handles or BASIC objects during contract validation; no native conversion is implied.</summary>
+    public IReadOnlyList<int> DataPointerParameters { get; init; } = Array.Empty<int>();
     public ExternalValueType ReturnType { get; }
     public IReadOnlyList<ExternalValueType> ParameterTypes { get; }
 
+    /// <summary>An immutable snapshot of the explicitly declared trailing optional defaults.</summary>
+    public IReadOnlyList<object> DefaultValues { get; }
+    internal bool HasDeclaredDefaults { get; }
+
     public ExternalFunctionSignature(string name, ExternalValueType returnType, IEnumerable<ExternalValueType> parameterTypes)
+        : this(name, returnType, parameterTypes, null) { }
+
+    public ExternalFunctionSignature(string name, ExternalValueType returnType, IEnumerable<ExternalValueType> parameterTypes,
+        IEnumerable<object>? defaultValues)
     {
         ArgumentNullException.ThrowIfNull(parameterTypes);
         ExternalFunction.ValidateName(name);
         if (!Enum.IsDefined(returnType)) throw new ArgumentOutOfRangeException(nameof(returnType));
         var parameters = parameterTypes.ToArray();
-        if (parameters.Any(type => !Enum.IsDefined(type))) throw new ArgumentOutOfRangeException(nameof(parameterTypes));
+        if (parameters.Any(type => !Enum.IsDefined(type) || type == ExternalValueType.Void)) throw new ArgumentOutOfRangeException(nameof(parameterTypes));
+        var defaults = defaultValues?.ToArray() ?? [];
+        if (defaults.Length > parameters.Length)
+            throw new ArgumentException("External defaults cannot exceed the parameter count.", nameof(defaultValues));
+        for (var i = 0; i < defaults.Length; i++)
+        {
+            var valid = parameters[parameters.Length - defaults.Length + i] switch
+            {
+                ExternalValueType.Integer => defaults[i] is int,
+                ExternalValueType.Float => defaults[i] is float value && float.IsFinite(value),
+                ExternalValueType.String => defaults[i] is string,
+                _ => false
+            };
+            if (!valid)
+                throw new ArgumentException("External defaults must be finite primitive constants matching the trailing parameter types exactly.", nameof(defaultValues));
+        }
+        HasDeclaredDefaults = defaultValues is not null;
+        DefaultValues = Array.AsReadOnly(defaults);
         Name = name.ToLowerInvariant();
         ReturnType = returnType;
         ParameterTypes = Array.AsReadOnly(parameters);
@@ -32,12 +75,19 @@ public sealed class ExternalFunction
 {
     public string Name { get; }
     public MethodInfo Method { get; }
+    public IReadOnlyList<int> ObjectAdapterParameters { get; }
     internal string Target { get; }
     internal ValueType Result { get; }
     internal IReadOnlyList<(ValueType Type, IrExpression? Default)> Parameters { get; }
     public ExternalFunctionSignature Signature { get; }
 
-    public ExternalFunction(string name, MethodInfo method)
+    public ExternalFunction(string name, MethodInfo method) : this(name, method, false) { }
+
+    /// <summary>Optionally discard an actual Int32 result for a historical Void command. No result is fabricated.</summary>
+    public ExternalFunction(string name, MethodInfo method, bool discardIntegerReturn) : this(name, method, discardIntegerReturn, null) { }
+
+    /// <summary>Explicitly expose selected System.Object adapter slots as historical Integer data pointers.</summary>
+    public ExternalFunction(string name, MethodInfo method, bool discardIntegerReturn, IEnumerable<int>? objectAdapterParameters)
     {
         ArgumentNullException.ThrowIfNull(method);
         ValidateName(name);
@@ -45,13 +95,19 @@ public sealed class ExternalFunction
             method.DeclaringType is not { IsVisible: true } owner || owner.IsGenericType || owner.FullName is null ||
             string.IsNullOrEmpty(owner.Assembly.Location))
             throw new ArgumentException("External methods must be public static methods on a visible non-generic type in a file-backed assembly.", nameof(method));
-        Result = Map(method.ReturnType);
+        if (discardIntegerReturn && method.ReturnType != typeof(int)) throw new ArgumentException("Only an actual Int32 result can be discarded.",nameof(method));
+        Result = discardIntegerReturn || method.ReturnType == typeof(void) ? ValueType.Void : Map(method.ReturnType);
+        var declaredParameters = method.GetParameters();
+        var objectSlots = objectAdapterParameters?.ToArray() ?? [];
+        if (objectSlots.Distinct().Count() != objectSlots.Length || objectSlots.Any(index => index < 0 || index >= declaredParameters.Length || declaredParameters[index].ParameterType != typeof(object)))
+            throw new ArgumentException("Object adapter indices must uniquely identify actual System.Object parameters.", nameof(objectAdapterParameters));
+        ObjectAdapterParameters = Array.AsReadOnly(objectSlots);
         var parameters = new List<(ValueType, IrExpression?)>();
-        foreach (var parameter in method.GetParameters())
+        foreach (var parameter in declaredParameters)
         {
             if (parameter.IsOut || parameter.ParameterType.IsByRef || parameter.GetCustomAttribute<ParamArrayAttribute>() is not null)
                 throw new ArgumentException("External parameters cannot use ref, out or params.", nameof(method));
-            var type = Map(parameter.ParameterType);
+            var type = objectSlots.Contains(parameter.Position) ? ValueType.Integer : Map(parameter.ParameterType);
             IrExpression? value = null;
             if (parameter.IsOptional)
                 value = parameter.DefaultValue switch
@@ -78,12 +134,13 @@ public sealed class ExternalFunction
             throw new ArgumentException("External BASIC names require a letter followed by letters, digits or underscores.", nameof(name));
     }
 
-    private static ExternalValueType ToExternal(ValueType type) => type == ValueType.Integer ? ExternalValueType.Integer
+    private static ExternalValueType ToExternal(ValueType type) => type == ValueType.Void ? ExternalValueType.Void
+        : type == ValueType.Integer ? ExternalValueType.Integer
         : type == ValueType.Float ? ExternalValueType.Float : ExternalValueType.String;
     internal static ValueType ToInternal(ExternalValueType type) => type switch
     {
         ExternalValueType.Integer => ValueType.Integer, ExternalValueType.Float => ValueType.Float,
-        ExternalValueType.String => ValueType.String, _ => throw new ArgumentOutOfRangeException(nameof(type))
+        ExternalValueType.String => ValueType.String, ExternalValueType.Void => ValueType.Void, _ => throw new ArgumentOutOfRangeException(nameof(type))
     };
 
     private static string Escape(string identifier)
@@ -155,6 +212,8 @@ public sealed class ExternalFunctionRegistry
     }
     private static bool SameSignature(ExternalFunctionSignature left, ExternalFunctionSignature right) =>
         left.ReturnType == right.ReturnType && left.ParameterTypes.SequenceEqual(right.ParameterTypes);
+    internal bool ConflictsWithApplicationFunction(string name) => symbols.TryGetValue(Primitive.Name(name), out var signature)
+        && !(signature.AllowsApplicationImplementation && !bindings.ContainsKey(Primitive.Name(name)));
     internal bool Contains(string name) => symbols.ContainsKey(Primitive.Name(name));
     internal bool TryGetSignature(string name, out ExternalFunctionSignature signature) => symbols.TryGetValue(Primitive.Name(name), out signature!);
     internal bool TryGetBinding(string name, out ExternalFunction function) => bindings.TryGetValue(Primitive.Name(name), out function!);

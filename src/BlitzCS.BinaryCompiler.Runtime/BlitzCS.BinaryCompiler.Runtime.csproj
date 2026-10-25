@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>BlitzCS.BinaryCompiler.Runtime</AssemblyName>
+    <RootNamespace>BlitzCS.BinaryCompiler.Runtime</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../BlitzCS.BinaryCompiler/BlitzCS.BinaryCompiler.csproj" />
+  </ItemGroup>
+</Project>

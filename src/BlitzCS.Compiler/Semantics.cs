@@ -2,7 +2,7 @@ namespace BlitzCS.Compiler;
 
 internal readonly record struct ValueType(string Name, bool IsObject = false, int VectorLength = 0, bool ObjectElements = false)
 {
-    internal static readonly ValueType Integer = new("Integer"), Float = new("Float"), String = new("String"), Null = new("Null", true);
+    internal static readonly ValueType Integer = new("Integer"), Float = new("Float"), String = new("String"), Void = new("Void"), Null = new("Null", true);
     internal static ValueType Object(string name) => new(name, true);
     internal bool IsVector => VectorLength > 0;
     internal ValueType ElementType => new(Name, ObjectElements);
@@ -145,7 +145,7 @@ internal sealed partial class SemanticAnalysis(string sourcePath, ExternalFuncti
             }
         }
         foreach (var function in statements.OfType<Function>())
-            if (constants.ContainsKey(Primitive.Name(function.Name)) || externals?.Contains(function.Name) == true || !functions.TryAdd(Primitive.Name(function.Name), function)) throw Error(function.Position, $"Duplicate function '{function.Name}'.");
+            if (constants.ContainsKey(Primitive.Name(function.Name)) || externals?.ConflictsWithApplicationFunction(function.Name) == true || !functions.TryAdd(Primitive.Name(function.Name), function)) throw Error(function.Position, $"Duplicate function '{function.Name}'.");
         foreach (var function in functions.Values)
         {
             var defaults = new IrExpression?[function.Parameters.Count];
@@ -316,7 +316,7 @@ internal sealed partial class SemanticAnalysis(string sourcePath, ExternalFuncti
                     break;
                 case Return ret: output.Add(new IrReturn(ret.Value is null ? Default(returnType) : Convert(Bind(ret.Value), returnType, ret.Position), ret.Position)); break;
                 case CSharp { IsModule: false } code: output.Add(new IrCSharp(code.Code, code.Position)); break;
-                case CallStatement call: output.Add(new IrCallStatement((IrCall)Bind(call.Value), call.Position)); break;
+                case CallStatement call: output.Add(new IrCallStatement((IrCall)Bind(call.Value, allowVoid: true), call.Position)); break;
                 case End end: output.Add(new IrEnd(end.Position)); break;
                 case If conditional:
                     var condition = Condition(conditional.Condition);
@@ -421,7 +421,15 @@ internal sealed partial class SemanticAnalysis(string sourcePath, ExternalFuncti
     }
     private static IrExpression Default(ValueType type) => type.IsObject ? new IrObjectOperation("null", type, null, "") : type == ValueType.String ? new IrString("") : type == ValueType.Float ? new IrFloat(0) : new IrInteger(0);
 
-    private IrExpression Bind(Expression expression)
+    private IrExpression Bind(Expression expression, bool allowVoid = false)
+    {
+        var value = BindExpression(expression);
+        if (!allowVoid && value.Type == ValueType.Void)
+            throw Error(expression.Position, "Void external commands cannot be used as scalar values.");
+        return value;
+    }
+
+    private IrExpression BindExpression(Expression expression)
     {
         switch (expression)
         {
@@ -460,7 +468,7 @@ internal sealed partial class SemanticAnalysis(string sourcePath, ExternalFuncti
                 return Slot(variable.Name, variable.Position);
             case ArrayAccess access: return BindArray(access);
             case Call call:
-                var arguments = call.Arguments.Select(Bind).ToArray();
+                var arguments = call.Arguments.Select(argument => Bind(argument)).ToArray();
                 if (call.IsCSharp)
                 {
                     if (bindingConstant) throw Error(call.Position, "Const initializer cannot call C# methods.");

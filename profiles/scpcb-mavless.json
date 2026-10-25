@@ -1,0 +1,154 @@
+{
+  "metadata": {
+    "runtimeSHA256": "ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d",
+    "version": 66644,
+    "descriptorEncoding": "Actual runtime registration text; no C++ source-string unescaping.",
+    "description": "Advisory declarations only; native ABI and executable implementations are not inferred.",
+    "excludedDescriptors": [
+      "End",
+      "Print$string=\"\"",
+      "_bbAbs",
+      "_bbArrayBoundsEx",
+      "_bbCStrToStr",
+      "_bbCStrType",
+      "_bbDebugEnter",
+      "_bbDebugLeave",
+      "_bbDebugStmt",
+      "_bbDimArray",
+      "_bbFAbs",
+      "_bbFMod",
+      "_bbFPow",
+      "_bbFSgn",
+      "_bbFieldPtrAdd",
+      "_bbFltType",
+      "_bbIntType",
+      "_bbLoadLibs",
+      "_bbMod",
+      "_bbNullObjEx",
+      "_bbObjCompare",
+      "_bbObjDelete",
+      "_bbObjDeleteEach",
+      "_bbObjEachFirst",
+      "_bbObjEachFirst2",
+      "_bbObjEachNext",
+      "_bbObjEachNext2",
+      "_bbObjFirst",
+      "_bbObjFromHandle",
+      "_bbObjInsAfter",
+      "_bbObjInsBefore",
+      "_bbObjLast",
+      "_bbObjLoad",
+      "_bbObjNew",
+      "_bbObjNext",
+      "_bbObjPrev",
+      "_bbObjRelease",
+      "_bbObjStore",
+      "_bbObjToHandle",
+      "_bbObjToStr",
+      "_bbReadFloat",
+      "_bbReadInt",
+      "_bbReadStr",
+      "_bbRestore",
+      "_bbSgn",
+      "_bbStrCompare",
+      "_bbStrConcat",
+      "_bbStrConst",
+      "_bbStrFromFloat",
+      "_bbStrFromInt",
+      "_bbStrLoad",
+      "_bbStrRelease",
+      "_bbStrStore",
+      "_bbStrToCStr",
+      "_bbStrToFloat",
+      "_bbStrToInt",
+      "_bbStrType",
+      "_bbUndimArray",
+      "_bbVecAlloc",
+      "_bbVecBoundsEx",
+      "_bbVecFree"
+    ]
+  },
+  "profiles": [
+    "blitz3d.json"
+  ],
+  "functions": [
+    {
+      "name": "ErrorLog",
+      "returnType": "String",
+      "parameters": [],
+      "defaults": [],
+      "contract": {
+        "provider": "scpcb.mavless-runtime",
+        "resolution": "runtime-registration",
+        "symbol": "$ErrorLog",
+        "callingConvention": null,
+        "source": "sha256:ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d!registration:ErrorLog"
+      }
+    },
+    {
+      "name": "TextureBumpEnvMat",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Float"
+      ],
+      "defaults": [],
+      "contract": {
+        "provider": "scpcb.mavless-runtime",
+        "resolution": "runtime-registration",
+        "symbol": "TextureBumpEnvMat%texture%x%y#envmat",
+        "callingConvention": null,
+        "source": "sha256:ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d!registration:TextureBumpEnvMat"
+      }
+    },
+    {
+      "name": "TextureBumpEnvOffset",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "defaults": [],
+      "contract": {
+        "provider": "scpcb.mavless-runtime",
+        "resolution": "runtime-registration",
+        "symbol": "TextureBumpEnvOffset%texture#envoffset",
+        "callingConvention": null,
+        "source": "sha256:ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d!registration:TextureBumpEnvOffset"
+      }
+    },
+    {
+      "name": "TextureBumpEnvScale",
+      "returnType": "Void",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "defaults": [],
+      "contract": {
+        "provider": "scpcb.mavless-runtime",
+        "resolution": "runtime-registration",
+        "symbol": "TextureBumpEnvScale%texture#envmat",
+        "callingConvention": null,
+        "source": "sha256:ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d!registration:TextureBumpEnvScale"
+      }
+    },
+    {
+      "name": "TextureLodBias",
+      "returnType": "Void",
+      "parameters": [
+        "Float"
+      ],
+      "defaults": [],
+      "contract": {
+        "provider": "scpcb.mavless-runtime",
+        "resolution": "runtime-registration",
+        "symbol": "TextureLodBias#bias",
+        "callingConvention": null,
+        "source": "sha256:ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d!registration:TextureLodBias"
+      }
+    }
+  ]
+}

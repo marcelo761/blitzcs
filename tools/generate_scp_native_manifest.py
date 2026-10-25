@@ -177,7 +177,7 @@ def parse_application_declarations(source_dir: Path) -> tuple[list[dict[str, obj
                 if arg:
                     args.append({"name": arg.group(1), "type": "pointer" if arg.group(3) else suffix_type(arg.group(2))})
             external.append({
-                "name": name, "return_type": suffix_type(result_suffix), "arguments": args,
+                "name": name, "return_type": MARKER_TYPES.get(result_suffix, "void"), "arguments": args,
                 "target": target, "file": path.relative_to(source_dir).as_posix(), "line": line_number,
                 "raw_signature": line.strip(),
             })

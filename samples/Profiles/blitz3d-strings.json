@@ -1,0 +1,6 @@
+{
+  "profiles": [
+    "../../profiles/blitz3d.json",
+    "../LegacyStrings/runtime.json"
+  ]
+}

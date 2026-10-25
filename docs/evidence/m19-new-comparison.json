@@ -1,0 +1,54 @@
+{
+  "fresh_original_runs_by_this_command": 0,
+  "deterministic_capture_matches": true,
+  "source_sha256": "6c327d9f44665e999e796ecff69b6c7516ea51ce4cc421ec15d1b8d060130a2b",
+  "strict_match": 1,
+  "known_termination_divergence": 6,
+  "phase_diagnostic_agreement": 6,
+  "unexpected_mismatch": 0,
+  "fixtures": [
+    {
+      "name": "strings",
+      "source_sha256": "6c327d9f44665e999e796ecff69b6c7516ea51ce4cc421ec15d1b8d060130a2b",
+      "status": "match",
+      "reason": null
+    },
+    {
+      "name": "left-negative",
+      "source_sha256": "42d1e32e0c6c4947ed468c88ed8b5b8220a1f427117937bb51b6fa8d3e3e532e",
+      "status": "known_termination_divergence",
+      "reason": "phase and diagnostic agree; original exits 0 after dialog, managed runtime exits nonzero"
+    },
+    {
+      "name": "right-negative",
+      "source_sha256": "a36569621f9f0b997ea6a1249f5f5f65438cc69e61ac9b4e95df1c52f1fd5f1b",
+      "status": "known_termination_divergence",
+      "reason": "phase and diagnostic agree; original exits 0 after dialog, managed runtime exits nonzero"
+    },
+    {
+      "name": "lset-negative",
+      "source_sha256": "1b42eff401e1cbb080676371cdee9d7a26cca45f86d25a2ffbbb19eafd31e6a4",
+      "status": "known_termination_divergence",
+      "reason": "phase and diagnostic agree; original exits 0 after dialog, managed runtime exits nonzero"
+    },
+    {
+      "name": "rset-negative",
+      "source_sha256": "3a7bf4e36caa2a5b275a2917baa8d24d5d5757cb4f462f4a155d54c25be03125",
+      "status": "known_termination_divergence",
+      "reason": "phase and diagnostic agree; original exits 0 after dialog, managed runtime exits nonzero"
+    },
+    {
+      "name": "mid-zero",
+      "source_sha256": "69d6d0a31d14819d31a009b7a3f7d087e2aabc3360c2357155f5375ac85e95cb",
+      "status": "known_termination_divergence",
+      "reason": "phase and diagnostic agree; original exits 0 after dialog, managed runtime exits nonzero"
+    },
+    {
+      "name": "instr-zero",
+      "source_sha256": "92a6b6af11366003bf4f84469c52da3723a038e725d800f587c55c193c933c8c",
+      "status": "known_termination_divergence",
+      "reason": "phase and diagnostic agree; original exits 0 after dialog, managed runtime exits nonzero"
+    }
+  ],
+  "scope": "One deterministic program and six errors. Termination divergences are explicitly excluded from strict matches."
+}

@@ -202,6 +202,8 @@ def classify_result(phase: str, diagnostic: str | None,
         return "syntactic"
     if "unable to open include file" in message or "include file" in message and "not found" in message:
         return "external_missing"
+    if "has a declared signature but no implementation" in message:
+        return "external_missing"
     unknown = UNKNOWN_SYMBOL.search(message)
     if unknown:
         symbol = unknown.group(1).casefold()

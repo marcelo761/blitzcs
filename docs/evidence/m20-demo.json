@@ -1,0 +1,9 @@
+{
+  "backend": "SDL3 X11 on owned Xvfb display",
+  "native_events": "XTest via xdotool, a, left click, mouse move, Escape",
+  "exit_code": 0,
+  "stdout": "Focus the window, type, click, move the mouse, or turn the wheel.\nEscape or the window close button exits. Output appears in this console.\nevent=1 key=97 button=0 x=100 y=120 z=0 dx=-220 dy=-120 dz=0\nevent=2 key=0 button=1 x=100 y=120 z=0 dx=0 dy=0 dz=0\nInput event batches: 2\n",
+  "stderr": "",
+  "assembly_emitted": true,
+  "rendering": false
+}

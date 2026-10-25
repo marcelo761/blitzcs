@@ -86,3 +86,64 @@ if dotnet artifacts/system-property-unsupported.dll > artifacts/system-property-
 fi
 rg -q 'PlatformNotSupportedException.*AppHWND' artifacts/system-property-unsupported.stderr
 rg -q 'system-property-unsupported.bb:line 1' artifacts/system-property-unsupported.stderr
+mkdir -p artifacts/m17
+# M17: typed graphics contracts are declarations, not executable engine bindings.
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- check-semantics samples/LegacyGraphics/declared-only.bb --externals samples/LegacyGraphics/contracts.json
+if dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/LegacyGraphics/declared-only.bb -o artifacts/m17/graphics-unbound.dll --externals samples/LegacyGraphics/contracts.json > artifacts/m17/graphics-unbound.stdout 2> artifacts/m17/graphics-unbound.stderr; then
+  echo "Graphics declarations unexpectedly emitted an assembly without a runtime" >&2
+  exit 1
+fi
+rg -q 'declared-only.bb\(3,7\).*no implementation' artifacts/m17/graphics-unbound.stderr
+test ! -f artifacts/m17/graphics-unbound.dll
+# DebugLog is a real void command, with an explicitly attached diagnostic sink.
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/Native/debug-log.bb -o artifacts/m17/debug-log.dll --externals samples/Native/blitz3dcs.json
+dotnet artifacts/m17/debug-log.dll > artifacts/m17/debug-log.stdout 2> artifacts/m17/debug-log.stderr
+python3 - <<'PY'
+from pathlib import Path
+assert Path('artifacts/m17/debug-log.stdout').read_text().splitlines() == ['2']
+assert Path('artifacts/m17/debug-log.stderr').read_text().splitlines() == ['from C#', '[from BASIC]']
+PY
+python3 tools/differential.py --manifest tests/Compatibility/milestone17.json --externals samples/Audio/scp.json --report artifacts/m17/local-differential.json
+python3 tools/compare_m17_evidence.py
+# M18: real banks, owned C RECT ABI, transitive publication and bidirectional C#.
+mkdir -p artifacts/m18
+python3 tools/differential.py --manifest tests/Compatibility/milestone18.json --externals samples/LegacyMemory/banks.json --report artifacts/m18/local-differential.json
+python3 tools/compare_m18_evidence.py
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/LegacyMemory/hybrid-native.bb -o artifacts/m18/hybrid/main.dll --externals samples/LegacyMemory/native.json
+dotnet artifacts/m18/hybrid/main.dll > artifacts/m18/hybrid.stdout
+python3 - <<'PY'
+from pathlib import Path
+assert Path('artifacts/m18/hybrid.stdout').read_text().splitlines() == [
+    '42', '1', '16909060', '-2', '300', '-400', '64', '1', '0']
+PY
+# A typed bank adapter declaration is not an executable Windows API.
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- check-semantics samples/LegacyMemory/win32-declared-only.bb --externals samples/LegacyMemory/win32-contract.json
+if dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/LegacyMemory/win32-declared-only.bb -o artifacts/m18/win32-unbound.dll --externals samples/LegacyMemory/win32-contract.json > artifacts/m18/win32-unbound.stdout 2> artifacts/m18/win32-unbound.stderr; then
+  echo "Win32 declaration unexpectedly emitted an assembly without an adapter" >&2
+  exit 1
+fi
+rg -q 'win32-declared-only.bb\(3,1\).*no implementation' artifacts/m18/win32-unbound.stderr
+test ! -f artifacts/m18/win32-unbound.dll
+# Invalid full-width writes fail with original BASIC source location.
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/LegacyMemory/bounds-error.bb -o artifacts/m18/bounds.dll --externals samples/LegacyMemory/banks.json
+if dotnet artifacts/m18/bounds.dll > artifacts/m18/bounds.stdout 2> artifacts/m18/bounds.stderr; then
+  echo "Out-of-bounds bank write unexpectedly succeeded" >&2
+  exit 1
+fi
+rg -q 'ArgumentOutOfRangeException' artifacts/m18/bounds.stderr
+rg -q 'bounds-error.bb:line 2' artifacts/m18/bounds.stderr
+# M19: a complete scalar string family, with explicit native error-exit differences.
+mkdir -p artifacts/m19
+python3 tools/differential.py --manifest tests/Compatibility/milestone19.json --externals samples/LegacyStrings/runtime.json --report artifacts/m19/local-differential.json
+python3 tools/compare_m19_evidence.py
+dotnet run --project src/BlitzCS.CLI --configuration Release --no-build -- build samples/LegacyStrings/Hybrid/main.bb -o artifacts/m19/hybrid/main.dll --externals samples/LegacyStrings/runtime.json
+dotnet artifacts/m19/hybrid/main.dll > artifacts/m19/hybrid.stdout
+python3 - <<'PY'
+import json
+from pathlib import Path
+assert Path('artifacts/m19/hybrid.stdout').read_text().splitlines() == [
+    'door', 'Door', '  0000002A', 'a\\b\\c', 'x  :  x', '===']
+for row in json.loads(Path('artifacts/m19/local-differential.json').read_text())['fixtures']:
+    if row['name'] != 'm19-strings':
+        assert Path(row['source']).name + ':line 1' in row['actual']['stderr']
+PY

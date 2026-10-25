@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><IsPackable>false</IsPackable><IsTestProject>true</IsTestProject><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" PrivateAssets="all" />
+    <ProjectReference Include="../../src/BlitzCS.CLI/BlitzCS.CLI.csproj" />
+    <ProjectReference Include="../../src/BlitzCS.BinaryCompiler/BlitzCS.BinaryCompiler.csproj" />
+    <ProjectReference Include="../../src/BlitzCS.BinaryCompiler.Runtime/BlitzCS.BinaryCompiler.Runtime.csproj" />
+    <ProjectReference Include="../../src/BlitzCS.BinaryCompiler.Win32/BlitzCS.BinaryCompiler.Win32.csproj" />
+    <ProjectReference Include="../../src/BlitzCS.BinaryCompiler.Unpack/BlitzCS.BinaryCompiler.Unpack.csproj" />
+    <!-- Test fixture builders are shared by file, not by project reference. -->
+    <Compile Include="../BlitzCS.BinaryCompiler.Tests/Support/PeFixtureBuilder.cs" Link="Shared/PeFixtureBuilder.cs" />
+    <Compile Include="../BlitzCS.BinaryCompiler.Tests/Support/TranslatorHarness.cs" Link="Shared/TranslatorHarness.cs" />
+    <Compile Include="../BlitzCS.BinaryCompiler.Tests/Support/GeneratedProgramRunner.cs" Link="Shared/GeneratedProgramRunner.cs" />
+    <Compile Include="../BlitzCS.BinaryCompiler.Tests/Support/Asm32.cs" Link="Shared/Asm32.cs" />
+    <Compile Include="../BlitzCS.BinaryCompiler.Unpack.Tests/SyntheticPacker.cs" Link="Shared/SyntheticPacker.cs" />
+    <Compile Include="../Shared/RealLibraryAttributes.cs" Link="Shared/RealLibraryAttributes.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,78 @@
+{
+  "baseline_commit": "60761ea49882ed95999b68ae9e383cbdd71bcd63",
+  "builds": {
+    "Release": {
+      "passed_tests": 710,
+      "failed": 0,
+      "skipped": 0,
+      "warnings": 0,
+      "errors": 0,
+      "log_sha256": "6446ec182895c134400e3486f4c9b82db671a312df57583a2242ecb51655f559"
+    },
+    "Debug": {
+      "passed_tests": 710,
+      "failed": 0,
+      "skipped": 0,
+      "warnings": 0,
+      "errors": 0,
+      "log_sha256": "a0dabf4c9531b307613b34a4d13394cf205a3c2aed401aec48e7e0ffda2018de"
+    }
+  },
+  "python_tests": 59,
+  "python_log_sha256": "1510c83eddbb1e6156c61e435a39be67a207f4a80778d67d77f1b073986ae78c",
+  "local_fixtures": 90,
+  "previous_differential": {
+    "match": 85,
+    "known_divergence": 1,
+    "adapter_error": 0,
+    "fresh_original_runs": 0
+  },
+  "m17_comparisons_preserved": {
+    "match": 3,
+    "mismatch": 0
+  },
+  "new_differential": {
+    "match": 1,
+    "mismatch": 0,
+    "scope": "one owned valid bank program captured genuinely under Proton x86; exact stdout and exit success class"
+  },
+  "integrated": {
+    "checks": {
+      "check-syntax": {
+        "exit_code": 0,
+        "stdout": "Syntax validated; semantics, external binding and assembly emission were not checked.\n",
+        "stderr": ""
+      },
+      "check-semantics": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "fullscreen_window_fix.bb(84,2): Unknown BASIC function or external symbol 'movemouse'.\n"
+      },
+      "build": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "fullscreen_window_fix.bb(84,2): Unknown BASIC function or external symbol 'movemouse'.\n"
+      }
+    },
+    "assembly_emitted": false,
+    "game_executed": false
+  },
+  "sources_unchanged": true,
+  "isolated_compiled_files": 3,
+  "isolated_total": 30,
+  "native_example_stdout": [
+    "42",
+    "1",
+    "16909060",
+    "-2",
+    "300",
+    "-400",
+    "64",
+    "1",
+    "0"
+  ],
+  "bank_stress_operations": 100000,
+  "output_safety": "canonical input preflight including resolved empty/comment-only includes, staged replacement for hardlinks, semantic-progress samefile protection and timeout preservation",
+  "full_release_pipeline_passed": true,
+  "executable_win32_host": false
+}

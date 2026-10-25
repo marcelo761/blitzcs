@@ -1,0 +1,11 @@
+{
+  "description": "Owned bank probe compared with genuine Blitz3D V1.118 Win32 capture. One program, not independent claims for each printed line.",
+  "fixtures": [
+    {
+      "name": "m18-banks",
+      "source": "../../samples/LegacyMemory/banks.bb",
+      "expected_phase": "run",
+      "expected_stdout": "default-size=0\nzero-size=0\nsize=16\nzero-init=0,0\nbyte-wrap=255,2\nshort-unsigned=65534\nshort-little-endian=254,255\nshort-wrap=1\nint-signed=-1985229329\nint-little-endian=239,205,171,137\nfloat-roundtrip=1\nfloat-bits=1069547520\nshrink=8,123456\nregrow-in-capacity-zero=0,0\nreallocate-preserve=64,123456\noverlap-forward=1,2,1,2,5,6\noverlap-backward=1,2,5,6\ncross-copy=0,1,6,0\nzero-copy=0\nfree-invalid-noop=1\n"
+    }
+  ]
+}
