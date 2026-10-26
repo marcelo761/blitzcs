@@ -11,9 +11,9 @@ public static class CliApplication
         var targetAt = Array.IndexOf(args, "--target");
         if (targetAt >= 0)
         {
-            if (targetAt + 1 >= args.Length || BinaryTargets.TryNormalize(args[targetAt + 1]) is null)
+            if (targetAt + 1 >= args.Length || !TargetCapabilities.TryParseTarget(args[targetAt + 1], out _))
             {
-                error.WriteLine("--target expects linux-x64 or windows-x64.");
+                error.WriteLine("--target expects linux-x64 or windows-x64 (or Win32, Linux32, Win64, Linux64).");
                 return 2;
             }
             target = args[targetAt + 1];
@@ -73,9 +73,9 @@ public static class CliApplication
             if (packageBuild)
             {
                 // Application and translated native code must always agree about the runtime target.
-                var applicationTarget = target is null ? BinaryTargets.WindowsX64 : BinaryTargets.Normalize(target);
+                var applicationTarget = target is null ? CompilationTarget.Win64 : TargetCapabilities.ParseTarget(target);
                 using var packageCatalog = args.Length == 4
-                    ? ExternalCatalog.Load(args[3], applicationTarget)
+                    ? ExternalCatalog.Load(args[3], target, isPackageBuild: true)
                     : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
                 var code = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, packageCatalog.Functions, out var inputs);
                 var name = Path.GetFileNameWithoutExtension(sourcePath);
@@ -93,8 +93,14 @@ public static class CliApplication
                 throw new ArgumentException("--assets and --gui require an application package build.");
             var outputPath = Path.GetFullPath(args[3]);
             using var catalog = args.Length == 6
-                ? ExternalCatalog.Load(args[5], target)
+                ? ExternalCatalog.Load(args[5], target, isPackageBuild: false)
                 : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
+            if (target is not null)
+            {
+                var explicitTarget = TargetCapabilities.ParseTarget(target);
+                foreach (var native in catalog.NativeLibraries.Except(catalog.BinaryLibraries ?? []))
+                    TargetCapabilities.ValidateNativeLibrary(native, explicitTarget);
+            }
             var binaries = BinaryTranslationStep.Prepare(catalog, outputPath, error, target);
             var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions, out var sourceInputs);
             DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram",

@@ -16,12 +16,21 @@ internal static class BinaryTranslationStep
     /// <summary>Artifacts are target specific. Precedence: --target, the catalog's binaryTarget, BLITZCS_BINARY_TARGET, then windows-x64 (the primary target).</summary>
     internal static string ResolveTarget(ExternalCatalogResult catalog, string? requested) => ResolveTarget(catalog.BinaryTarget, requested);
 
+    internal static CompilationTarget ResolveCompilationTarget(ExternalCatalogResult catalog, string? requested) =>
+        ResolveCompilationTarget(catalog.BinaryTarget, requested);
+
+    internal static CompilationTarget ResolveCompilationTarget(string? catalogTarget, string? requested)
+    {
+        if (requested is not null) return TargetCapabilities.ParseTarget(requested);
+        if (catalogTarget is not null) return TargetCapabilities.ParseTarget(catalogTarget);
+        var fromEnvironment = Environment.GetEnvironmentVariable(TargetEnvironmentVariable);
+        return string.IsNullOrWhiteSpace(fromEnvironment) ? CompilationTarget.Win64 : TargetCapabilities.ParseTarget(fromEnvironment);
+    }
+
     internal static string ResolveTarget(string? catalogTarget, string? requested)
     {
-        if (requested is not null) return BinaryTargets.Normalize(requested);
-        if (catalogTarget is not null) return catalogTarget;
-        var fromEnvironment = Environment.GetEnvironmentVariable(TargetEnvironmentVariable);
-        return string.IsNullOrWhiteSpace(fromEnvironment) ? BinaryTargets.WindowsX64 : BinaryTargets.Normalize(fromEnvironment);
+        var target = ResolveCompilationTarget(catalogTarget, requested);
+        return target.BinaryCompilerTargetOs() ?? target.CanonicalName();
     }
 
     /// <summary>
@@ -51,21 +60,23 @@ internal static class BinaryTranslationStep
     /// base from <see cref="ModuleBaseAllocator"/> (a single library keeps its preferred base on Linux; for windows-x64 every library is placed in the Windows image window) and the cache key includes it.
     /// Unprovided imports are reported to <paramref name="warnings"/> (or fail the build for libraries with <c>"unboundImports": "error"</c>).
     /// </summary>
-    internal static PreparedBinaries Prepare(ExternalCatalogResult catalog, string outputPath, TextWriter? warnings = null, string? target = null)
+    internal static PreparedBinaries Prepare(ExternalCatalogResult catalog, string outputPath, TextWriter? warnings = null, string? target = null, bool isPackageBuild = false)
     {
         var pending = new List<PendingBinary>();
         if (catalog.BinaryLibraries is not { Count: > 0 } libraries) return new(pending);
-        var targetOs = ResolveTarget(catalog, target);
+        var compilationTarget = ResolveCompilationTarget(catalog, target);
         var specs = catalog.LibrarySpecs ?? [.. libraries.Select(path => new BinaryLibrarySpec(path))];
+        foreach (var spec in specs)
+            TargetCapabilities.ValidateLegacyBinaryForRecompilation(spec.Path, compilationTarget, isPackageBuild);
+        var targetOs = compilationTarget.BinaryCompilerTargetOs()!;
         var profile = catalog.BinaryProfile is null ? OptimizationProfile.Release
             : Enum.TryParse<OptimizationProfile>(catalog.BinaryProfile, ignoreCase: true, out var parsed) ? parsed
             : throw new ArgumentException($"Unknown binaryProfile '{catalog.BinaryProfile}'; expected Debug, Release or ReleasePgo.");
         var cacheDirectory = BinaryCache.Directory();
         var outputDirectory = Path.GetDirectoryName(outputPath)!;
-        foreach (var spec in specs)
-            if (!BinaryBuild.IsPe32X86(spec.Path))
-                throw new ArgumentException($"Binary library '{spec.Path}' is not a PE32 x86 image.");
         var images = specs.Select(spec => PeReader.Read(File.ReadAllBytes(spec.EffectivePath))).ToArray();
+        for (var i = 0; i < specs.Count; i++)
+            TargetCapabilities.ValidateTargetImportCapabilities(specs[i].FileName, images[i], compilationTarget);
         // windows-x64 rebases every library (a single one too) into the Windows image window; on Linux a single library keeps its preferred base.
         var bases = specs.Count > 1 || ModuleBaseAllocator.IsWindowsTarget(targetOs) ? ModuleBaseAllocator.Allocate([.. specs.Select((spec, i) => (spec.FileName, images[i]))], null, targetOs) : null;
         var artifacts = new TranslationArtifact[specs.Count];

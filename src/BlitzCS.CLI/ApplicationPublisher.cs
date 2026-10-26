@@ -9,27 +9,20 @@ internal static class ApplicationPublisher
 {
     internal static void Build(string generated, string destination, string name,
         string target, ExternalCatalogResult catalog, IEnumerable<string> inputs, TextWriter output,
+        TextWriter error, string? assets, bool graphical) =>
+        Build(generated, destination, name, TargetCapabilities.ParseTarget(target), catalog, inputs, output, error, assets, graphical);
+
+    internal static void Build(string generated, string destination, string name,
+        CompilationTarget target, ExternalCatalogResult catalog, IEnumerable<string> inputs, TextWriter output,
         TextWriter error, string? assets, bool graphical)
     {
-        var windows = target == "windows-x64";
+        var windows = target.IsWindows();
         var externalFiles = catalog.Functions.ReferencePaths.Concat(catalog.NativeLibraries).Distinct().ToArray();
         if (windows && externalFiles.GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
             throw new ArgumentException("Windows dependencies must have distinct filenames regardless of case.");
-        var header = new byte[20];
         foreach (var native in catalog.NativeLibraries.Except(catalog.BinaryLibraries ?? []))
         {
-            using var stream = File.OpenRead(native);
-            if (windows)
-            {
-                using var pe = new PEReader(stream);
-                if (pe.PEHeaders.CoffHeader.Machine != Machine.Amd64 || pe.PEHeaders.PEHeader?.Magic != PEMagic.PE32Plus)
-                    throw new ArgumentException($"Native library '{Path.GetFileName(native)}' is not Windows x64. Declare legacy PE32 libraries in binaryLibraries for recompilation.");
-            }
-            else
-            {
-                if (stream.Read(header) != 20 || !header.AsSpan(0, 4).SequenceEqual(new byte[] { 0x7f, 69, 76, 70 }) || header[4] != 2 || header[18] != 62)
-                    throw new ArgumentException($"Native library '{Path.GetFileName(native)}' is not Linux x64.");
-            }
+            TargetCapabilities.ValidateNativeLibrary(native, target);
         }
         var destinationPath = DotNetEmitter.CanonicalPath(destination);
         const string ownershipFile = ".blitzcs-package";
@@ -59,7 +52,7 @@ internal static class ApplicationPublisher
         {
             var stage = Path.Combine(workspace, "input");
             var assemblyPath = Path.Combine(stage, name + ".dll");
-            var binaries = BinaryTranslationStep.Prepare(catalog, assemblyPath, error, target);
+            var binaries = BinaryTranslationStep.Prepare(catalog, assemblyPath, error, target.CanonicalName(), isPackageBuild: true);
             const string startup = """
                 internal static class BlitzStartup
                 {
@@ -118,7 +111,7 @@ internal static class ApplicationPublisher
                 UseShellExecute = false
             };
             foreach (var arg in new[] { "publish", projectPath, "-c", "Release", "-r",
-                         target == "windows-x64" ? "win-x64" : "linux-x64", "--self-contained", "true", "-o", package, "--nologo" })
+                         target.RuntimeIdentifier(), "--self-contained", "true", "-o", package, "--nologo" })
                 start.ArgumentList.Add(arg);
             using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the .NET SDK publisher.");
             var stdout = process.StandardOutput.ReadToEndAsync();
@@ -173,7 +166,7 @@ internal static class ApplicationPublisher
                 if (replacing) Directory.Delete(backup, true);
             }
             finally { if (Directory.Exists(stagedDestination)) Directory.Delete(stagedDestination, true); }
-            output.WriteLine(Path.Combine(destinationPath, name + (target == "windows-x64" ? ".exe" : "")));
+            output.WriteLine(Path.Combine(destinationPath, name + (windows ? ".exe" : "")));
         }
         finally { Directory.Delete(workspace, recursive: true); }
     }
