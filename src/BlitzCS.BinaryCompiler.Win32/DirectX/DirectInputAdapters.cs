@@ -13,18 +13,27 @@ namespace BlitzCS.BinaryCompiler.Win32.DirectX;
 /// </summary>
 public static unsafe class DirectInputAdapters
 {
+    public static readonly Guid IidDirectInput7A = new("9A4CB684-236D-11D3-8E9D-00C04F6844AE");
+    public static readonly Guid IidDirectInputDevice7A = new("57D7C6BC-2356-11D3-8E9D-00C04F6844AE");
     public static readonly Guid IidDirectInput8A = new("BF798030-483A-4DA2-AA99-5D64ED369700");
     public static readonly Guid IidDirectInputDevice8A = new("54D41080-DC15-4833-A41B-748F73A38179");
     public const int GuestDataFormat = 24, HostDataFormat = 32, GuestObjectFormat = 16, HostObjectFormat = 24, GuestObjectData = 20, HostObjectData = 24, ObjectDataDx3 = 16;
 
-    private static GuestComInterface? input, device;
+    private static GuestComInterface? input7, input8, device7, device8;
     public static GuestComInterface? Table(Guid iid) =>
-        iid == IidDirectInput8A ? input ??= Input() :
-        iid == IidDirectInputDevice8A ? device ??= Device() :
+        iid == IidDirectInput7A ? input7 ??= Input7() :
+        iid == IidDirectInput8A ? input8 ??= Input8() :
+        iid == IidDirectInputDevice7A ? device7 ??= Device(IidDirectInputDevice7A, "IDirectInputDevice7A", isV8: false) :
+        iid == IidDirectInputDevice8A ? device8 ??= Device(IidDirectInputDevice8A, "IDirectInputDevice8A", isV8: true) :
         null;
 
     private static Func<GuestComObject, HostComInterface> HostOf(Guid iid) => o => ((HostComProxy)o.State!).Host(iid);
     private static ComArg OutObject(Guid iid) => ComArgs.OutInterface((s, native) => HostComRegistry.For(s.Call.Host, DirectXTables.Find).Wrap(native, iid));
+    private static ComArg OutDeviceEx() => ComArgs.OutInterface((s, native) =>
+    {
+        var riid = new Guid(s.Mem.ReadBytes(s.Arg(1), 16));
+        return HostComRegistry.For(s.Call.Host, DirectXTables.Find).Wrap(native, riid);
+    });
 
     /// <summary>A REFGUID that may be a small integer (MAKEDIPROP).</summary>
     private static readonly ComArg GuidOrId = new DelegateComArg((s, v) => v < 0x10000 ? (nint)v : s.Native.Copy(s.Mem.ReadBytes(v, 16)));
@@ -63,12 +72,26 @@ public static unsafe class DirectInputAdapters
         return h;
     }
 
-    // ---- IDirectInput8A ----
+    // ---- IDirectInput7A and IDirectInput8A ----
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private delegate int DevicesCallback(nint instance, nint context);
 
-    private static GuestComInterface Input()
+    private static GuestComInterface Input7()
+    {
+        var i = new GuestComInterface("IDirectInput7A", IidDirectInput7A);
+        var host = HostOf(IidDirectInput7A);
+        i.Add(new HostComMethod("CreateDevice", 3, ComArgs.Guid(optional: false), OutObject(IidDirectInputDevice7A), ComArgs.MustBeNull("pUnkOuter")).ToGuest(host));
+        i.Add(new GuestComMethod("EnumDevices", 4, c => EnumDevices(c, host(c.Object))));
+        i.Add(new HostComMethod("GetDeviceStatus", 5, ComArgs.Guid(optional: false)).ToGuest(host));
+        i.Absent("RunControlPanel", 2, "it opens the host's control panel");
+        i.Absent("Initialize", 2, "an object made by DirectInputCreateEx is already initialised");
+        i.Add(new HostComMethod("FindDevice", 8, ComArgs.Guid(optional: false), ComArgs.AnsiString(optional: false), ComArgs.OutBytes(16)).ToGuest(host));
+        i.Add(new HostComMethod("CreateDeviceEx", 9, ComArgs.Guid(optional: false), ComArgs.Guid(optional: false), OutDeviceEx(), ComArgs.MustBeNull("pUnkOuter")).ToGuest(host));
+        return i;
+    }
+
+    private static GuestComInterface Input8()
     {
         var i = new GuestComInterface("IDirectInput8A", IidDirectInput8A);
         var host = HostOf(IidDirectInput8A);
@@ -107,18 +130,18 @@ public static unsafe class DirectInputAdapters
         {
             var hr = host.Invoke(4, (nint)type, Marshal.GetFunctionPointerForDelegate(native), 0, (nint)flags);
             GC.KeepAlive(native);
-            if (failure is not null) throw new HostCallbackException("An IDirectInput8A::EnumDevices callback failed: " + failure.Message, failure);
+            if (failure is not null) throw new HostCallbackException("An IDirectInput::EnumDevices callback failed: " + failure.Message, failure);
             return hr;
         }
         finally { scratch?.Dispose(); }
     }
 
-    // ---- IDirectInputDevice8A ----
+    // ---- IDirectInputDevice7A and IDirectInputDevice8A ----
 
-    private static GuestComInterface Device()
+    private static GuestComInterface Device(Guid iid, string name, bool isV8)
     {
-        var i = new GuestComInterface("IDirectInputDevice8A", IidDirectInputDevice8A);
-        var host = HostOf(IidDirectInputDevice8A);
+        var i = new GuestComInterface(name, iid);
+        var host = HostOf(iid);
         const string ff = "force feedback has no adapter rows";
         i.Add(new HostComMethod("GetCapabilities", 3, Sized(64)).ToGuest(host));
         i.Absent("EnumObjects", 3, "the object enumeration callback has no adapter row yet");
@@ -139,7 +162,7 @@ public static unsafe class DirectInputAdapters
             using var scope = new NativeScope();
             nint format;
             try { format = DataFormatToHost(c.Mem, scope, c.Arg(0)); }
-            catch (ComArgumentException e) { c.Ctx.Options.DebugOutput?.Invoke("IDirectInputDevice8A::SetDataFormat: " + e.Message); return ComHr.InvalidArg; }
+            catch (ComArgumentException e) { c.Ctx.Options.DebugOutput?.Invoke($"{name}::SetDataFormat: " + e.Message); return ComHr.InvalidArg; }
             var hr = host(c.Object).Invoke(11, format);
             WindowProcBridge.ThrowPendingCallbackFault();
             return hr;
@@ -161,9 +184,12 @@ public static unsafe class DirectInputAdapters
         i.Absent("SendDeviceData", 4, "output device data has no adapter row");
         i.Absent("EnumEffectsInFile", 4, ff);
         i.Absent("WriteEffectToFile", 4, ff);
-        i.Absent("BuildActionMap", 3, "action maps (DIACTIONFORMAT) have no adapter row");
-        i.Absent("SetActionMap", 3, "action maps (DIACTIONFORMAT) have no adapter row");
-        i.Absent("GetImageInfo", 1, "DIDEVICEIMAGEINFOHEADER holds pointers and has no adapter row");
+        if (isV8)
+        {
+            i.Absent("BuildActionMap", 3, "action maps (DIACTIONFORMAT) have no adapter row");
+            i.Absent("SetActionMap", 3, "action maps (DIACTIONFORMAT) have no adapter row");
+            i.Absent("GetImageInfo", 1, "DIDEVICEIMAGEINFOHEADER holds pointers and has no adapter row");
+        }
         return i;
     }
 

@@ -117,7 +117,7 @@ public sealed class HostBridgeLayoutTests
     }
 
     [Fact]
-    public void SurfaceDesc2_moves_the_tail_by_eight_bytes_drops_host_pointers_and_refuses_client_memory()
+    public void SurfaceDesc2_moves_the_tail_by_eight_bytes_drops_host_pointers_and_bridges_client_memory()
     {
         var g = new byte[DdLayouts.GuestSurfaceDesc2];
         for (var i = 0; i < g.Length; i++) g[i] = (byte)(i + 1);
@@ -138,7 +138,9 @@ public sealed class HostBridgeLayoutTests
         Assert.Equal(g.AsSpan(40).ToArray(), back.AsSpan(40).ToArray());
 
         BinaryPrimitives.WriteUInt32LittleEndian(g.AsSpan(4), 0x1807);
-        Assert.Contains("DDSD_LPSURFACE", Assert.Throws<Win32UsageException>(() => DdLayouts.SurfaceDescToHost(g, h)).Message);
+        BinaryPrimitives.WriteUInt32LittleEndian(g.AsSpan(36), 0x12345678);
+        DdLayouts.SurfaceDescToHost(g, h);
+        Assert.Equal(0x12345678L, I64(h, 40));
         BinaryPrimitives.WriteUInt32LittleEndian(g, 108);
         Assert.Throws<ComArgumentException>(() => DdLayouts.SurfaceDescToHost(g, h));
     }

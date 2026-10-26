@@ -24,7 +24,8 @@ public static class WaveOutBackends
     {
         var kind = Resolve(options);
         var diag = options.DebugOutput;
-        WavRecorder? recorder = options.WaveOutRecordPath is { Length: > 0 } path ? new WavRecorder(path, diag) : null;
+        var recordPath = options.WaveOutRecordPath is { Length: > 0 } p ? p : Environment.GetEnvironmentVariable("BLITZCS_AUDIO_RECORD");
+        WavRecorder? recorder = recordPath is { Length: > 0 } ? new WavRecorder(recordPath, diag) : null;
         switch (kind)
         {
             case WaveOutBackendKind.VirtualSink:

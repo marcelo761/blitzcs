@@ -96,7 +96,10 @@ public sealed class BinaryLibrary
 
     private readonly object blitz3dGate = new();
     private bool blitz3dInitialized;
+    private bool blitz3dIsMsvc6;
     private GuestBuffer? blitz3dScratch;
+
+    internal bool IsMsvc6Runtime => blitz3dIsMsvc6;
 
     internal GuestModule EnsureBlitz3dRuntime()
     {
@@ -106,28 +109,61 @@ public sealed class BinaryLibrary
         {
             if (blitz3dInitialized) return mod;
             var baseVa = mod.ImageBase;
-            var runtimePtr = baseVa + 0x106004u;
-            mod.InvokeRva(0x4C80u, "Runtime::startup", GuestReturn.Eax, [baseVa], ecx: runtimePtr);
-            mod.InvokeRva(0x34B0u, "trackmem", GuestReturn.Eax, [1u]);
-            mod.InvokeRva(0xB3054u, "_control87", GuestReturn.Eax, [0x0A001Fu, 0xFFFFFu]);
-            blitz3dScratch = mod.Memory.Allocate(64);
-            var stdStrAddr = blitz3dScratch.Address;
-            var emptyCStrAddr = blitz3dScratch.Address + 32u;
-            mod.InvokeRva(0x1C10u, "std::string::ctor", GuestReturn.Eax, [emptyCStrAddr, 0u], ecx: stdStrAddr);
-            var gxRuntime = mod.InvokeRva(0x519E0u, "gxRuntime::openRuntime", GuestReturn.Eax, [baseVa, stdStrAddr, baseVa + 0x106000u]).Eax;
-            if (gxRuntime == 0)
-                throw new BinaryLibraryException($"Binary library '{Name}': gxRuntime::openRuntime returned NULL.");
-            mod.Memory.WriteUInt32(baseVa + 0x10B0B0u, gxRuntime);
-            mod.Memory.WriteUInt32(baseVa + 0x10BD58u, gxRuntime);
-            mod.Memory.WriteByte(baseVa + 0x10BD54u, 0);
-            ReadOnlySpan<uint> createRvas = [0x8310u, 0x8FD0u, 0x8FE0u, 0xD600u, 0xE970u, 0x160C0u, 0x11340u, 0x17260u, 0x22890u];
-            foreach (var createRva in createRvas)
+            blitz3dIsMsvc6 = mod.Artifact.Exports.Any(e => e.Name == "runtimeGetRuntime" && e.GuestRva == 0x1421u)
+                || !mod.Artifact.AddressMap.Any(m => m.GuestRva == 0x4C80u);
+
+            if (blitz3dIsMsvc6)
             {
-                var ok = mod.InvokeRva(createRva, $"bbruntime_create_0x{createRva:X}", GuestReturn.Eax, []).Eax;
+                var runtimePtr = baseVa + 0xF540Cu;
+                mod.InvokeRva(0x112Cu, "Runtime::startup", GuestReturn.Eax, [baseVa], ecx: runtimePtr);
+                mod.InvokeRva(0x5AD60u, "trackmem", GuestReturn.Eax, [1u]);
+                mod.InvokeRva(0xA31BBu, "_control87", GuestReturn.Eax, [0x0A001Fu, 0xFFFFFu]);
+
+                blitz3dScratch = mod.Memory.Allocate(64);
+                var stdStrAddr = blitz3dScratch.Address;
+                mod.Memory.WriteUInt32(stdStrAddr, 0);
+                mod.Memory.WriteUInt32(stdStrAddr + 4, baseVa + 0xD63E4u);
+                mod.Memory.WriteUInt32(stdStrAddr + 8, 0);
+                mod.Memory.WriteUInt32(stdStrAddr + 12, 0);
+
+                var gxRuntime = mod.InvokeRva(0x3D8F0u, "gxRuntime::openRuntime", GuestReturn.Eax, [baseVa, stdStrAddr, 0u]).Eax;
+                if (gxRuntime == 0)
+                    throw new BinaryLibraryException($"Binary library '{Name}': gxRuntime::openRuntime returned NULL.");
+                mod.Memory.WriteUInt32(baseVa + 0xF5410u, gxRuntime);
+                mod.Memory.WriteUInt32(baseVa + 0xF554Cu, gxRuntime);
+                mod.Memory.WriteByte(baseVa + 0xF5530u, 0);
+
+                var ok = mod.InvokeRva(0x4040u, "bbruntime_create", GuestReturn.Eax, []).Eax;
                 if ((ok & 0xFFu) == 0)
-                    throw new BinaryLibraryException($"Binary library '{Name}': subsystem init at RVA 0x{createRva:X} returned false.");
+                    throw new BinaryLibraryException($"Binary library '{Name}': subsystem init (bbruntime_create) returned false.");
+
+                mod.InvokeRva(0x3E800u, "gxRuntime::idle", GuestReturn.Eax, [], ecx: gxRuntime);
             }
-            mod.InvokeRva(0x511F0u, "gxRuntime::idle", GuestReturn.Eax, [], ecx: gxRuntime);
+            else
+            {
+                var runtimePtr = baseVa + 0x106004u;
+                mod.InvokeRva(0x4C80u, "Runtime::startup", GuestReturn.Eax, [baseVa], ecx: runtimePtr);
+                mod.InvokeRva(0x34B0u, "trackmem", GuestReturn.Eax, [1u]);
+                mod.InvokeRva(0xB3054u, "_control87", GuestReturn.Eax, [0x0A001Fu, 0xFFFFFu]);
+                blitz3dScratch = mod.Memory.Allocate(64);
+                var stdStrAddr = blitz3dScratch.Address;
+                var emptyCStrAddr = blitz3dScratch.Address + 32u;
+                mod.InvokeRva(0x1C10u, "std::string::ctor", GuestReturn.Eax, [emptyCStrAddr, 0u], ecx: stdStrAddr);
+                var gxRuntime = mod.InvokeRva(0x519E0u, "gxRuntime::openRuntime", GuestReturn.Eax, [baseVa, stdStrAddr, baseVa + 0x106000u]).Eax;
+                if (gxRuntime == 0)
+                    throw new BinaryLibraryException($"Binary library '{Name}': gxRuntime::openRuntime returned NULL.");
+                mod.Memory.WriteUInt32(baseVa + 0x10B0B0u, gxRuntime);
+                mod.Memory.WriteUInt32(baseVa + 0x10BD58u, gxRuntime);
+                mod.Memory.WriteByte(baseVa + 0x10BD54u, 0);
+                ReadOnlySpan<uint> createRvas = [0x8310u, 0x8FD0u, 0x8FE0u, 0xD600u, 0xE970u, 0x160C0u, 0x11340u, 0x17260u, 0x22890u];
+                foreach (var createRva in createRvas)
+                {
+                    var ok = mod.InvokeRva(createRva, $"bbruntime_create_0x{createRva:X}", GuestReturn.Eax, []).Eax;
+                    if ((ok & 0xFFu) == 0)
+                        throw new BinaryLibraryException($"Binary library '{Name}': subsystem init at RVA 0x{createRva:X} returned false.");
+                }
+                mod.InvokeRva(0x511F0u, "gxRuntime::idle", GuestReturn.Eax, [], ecx: gxRuntime);
+            }
             blitz3dInitialized = true;
             return mod;
         }
@@ -483,12 +519,23 @@ public sealed class BinaryCommandExport
         if (eax == 0) return "";
         var mod = library.EnsureBlitz3dRuntime();
         var mem = mod.Memory;
-        var size = (int)mem.ReadUInt32(eax + 0x10u);
-        var res = mem.ReadUInt32(eax + 0x14u);
-        var dataPtr = res <= 15u ? eax : mem.ReadUInt32(eax);
-        var text = size > 0 ? BinaryLibrary.Ansi.GetString(mem.ReadBytes(dataPtr, size)) : "";
-        mod.InvokeRva(0x7E50u, "_bbStrRelease", GuestReturn.Eax, [eax]);
-        return text;
+        if (library.IsMsvc6Runtime)
+        {
+            var dataPtr = mem.ReadUInt32(eax + 4u);
+            var size = (int)mem.ReadUInt32(eax + 8u);
+            var text = size > 0 && dataPtr != 0 ? BinaryLibrary.Ansi.GetString(mem.ReadBytes(dataPtr, size)) : "";
+            mod.InvokeRva(0x5360u, "_bbStrRelease", GuestReturn.Eax, [eax]);
+            return text;
+        }
+        else
+        {
+            var size = (int)mem.ReadUInt32(eax + 0x10u);
+            var res = mem.ReadUInt32(eax + 0x14u);
+            var dataPtr = res <= 15u ? eax : mem.ReadUInt32(eax);
+            var text = size > 0 ? BinaryLibrary.Ansi.GetString(mem.ReadBytes(dataPtr, size)) : "";
+            mod.InvokeRva(0x7E50u, "_bbStrRelease", GuestReturn.Eax, [eax]);
+            return text;
+        }
     }
 
     private GuestCallResult Run(GuestReturn kind, ReadOnlySpan<BinaryArgument> arguments)
@@ -520,12 +567,21 @@ public sealed class BinaryCommandExport
                     {
                         buffer.Write(0, bytes);
                     }
-                    var bbStr = mod.InvokeRva(0x7B20u, "_bbStrConst", GuestReturn.Eax, [buffer.Address]).Eax;
+                    var bbStrConstRva = library.IsMsvc6Runtime ? 0x5900u : 0x7B20u;
+                    var bbStr = mod.InvokeRva(bbStrConstRva, "_bbStrConst", GuestReturn.Eax, [buffer.Address]).Eax;
                     if (hasNull && bbStr != 0)
                     {
-                        var res = mod.Memory.ReadUInt32(bbStr + 0x14u);
-                        var dataPtr = res <= 15u ? bbStr : mod.Memory.ReadUInt32(bbStr);
-                        mod.Memory.Write(dataPtr, bytes);
+                        if (library.IsMsvc6Runtime)
+                        {
+                            var dataPtr = mod.Memory.ReadUInt32(bbStr + 4u);
+                            if (dataPtr != 0) mod.Memory.Write(dataPtr, bytes);
+                        }
+                        else
+                        {
+                            var res = mod.Memory.ReadUInt32(bbStr + 0x14u);
+                            var dataPtr = res <= 15u ? bbStr : mod.Memory.ReadUInt32(bbStr);
+                            mod.Memory.Write(dataPtr, bytes);
+                        }
                     }
                     words[i] = bbStr;
                 }

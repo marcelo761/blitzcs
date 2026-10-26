@@ -1,3 +1,4 @@
+using System.Text;
 using BlitzCS.BinaryCompiler.Win32.Com;
 using BlitzCS.BinaryCompiler.Win32.HostBridge;
 
@@ -5,8 +6,8 @@ namespace BlitzCS.BinaryCompiler.Win32;
 
 /// <summary>
 /// GDI32 bridged to the HOST's gdi32.dll (see <see cref="HostUser32Service"/>; registered only on a Windows host). GDI handles are 32-bit significant and sign-extended; TEXTMETRICA, SIZE,
-/// ABC and RECT have identical 32/64-bit layouts and are copied; counted strings are copied with their length argument. Font files (AddFontResourceA/RemoveFontResourceA) are not
-/// bridged: their path would name a file outside the sandbox, so they stay absent.
+/// ABC and RECT have identical 32/64-bit layouts and are copied; counted strings are copied with their length argument. Font files (AddFontResourceA/RemoveFontResourceA) are translated
+/// into the sandbox before passing to the host.
 /// </summary>
 public sealed class HostGdi32Service : Win32Service
 {
@@ -33,5 +34,29 @@ public sealed class HostGdi32Service : Win32Service
         Bridge("GetTextExtentPoint32A", HostResult.Int32, h, HostArgs.CountedAnsi(2), ComArgs.Signed, ComArgs.OutBytes(8));
         Bridge("GetCharABCWidthsA", HostResult.Int32, h, ComArgs.Value, ComArgs.Value, HostArgs.OutArray(a => (int)(a[2] - a[1] + 1), 12));
         Bridge("ExtTextOutA", HostResult.Int32, h, ComArgs.Signed, ComArgs.Signed, ComArgs.Value, ComArgs.InStruct(16, optional: true), HostArgs.CountedAnsi(6), ComArgs.Value, HostArgs.CountedArray(6, 4));
+        Std(G, "AddFontResourceA", 1, AddFontResourceA);
+        Std(G, "RemoveFontResourceA", 1, RemoveFontResourceA);
+    }
+
+    private static uint AddFontResourceA(Win32Call c)
+    {
+        if (c[0] == 0) return c.Ctx.Fail(Win32Error.InvalidParameter);
+        var path = c.Mem.ReadAnsiString(c[0], 1024);
+        var (host, error) = c.Ctx.Files.Translate(path);
+        if (host is null) return c.Ctx.Fail(error);
+        using var scope = new NativeScope();
+        var hostPath = scope.Copy(Encoding.Unicode.GetBytes(host + "\0"));
+        return (uint)HostFunction.CallNative(c.Ctx, HostExports.Get(H, "AddFontResourceW"), [hostPath]);
+    }
+
+    private static uint RemoveFontResourceA(Win32Call c)
+    {
+        if (c[0] == 0) return c.Ctx.Fail(Win32Error.InvalidParameter);
+        var path = c.Mem.ReadAnsiString(c[0], 1024);
+        var (host, error) = c.Ctx.Files.Translate(path);
+        if (host is null) return c.Ctx.Fail(error);
+        using var scope = new NativeScope();
+        var hostPath = scope.Copy(Encoding.Unicode.GetBytes(host + "\0"));
+        return (uint)HostFunction.CallNative(c.Ctx, HostExports.Get(H, "RemoveFontResourceW"), [hostPath]);
     }
 }

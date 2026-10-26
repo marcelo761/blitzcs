@@ -38,14 +38,19 @@ public static class DdLayouts
         h.Slice(48, 84).CopyTo(g[40..]);
     }
 
-    /// <summary>Guest to host. A guest that supplies its own surface memory (DDSD_LPSURFACE) is refused: the host would write to a 32-bit guest address it cannot see as such.</summary>
+    /// <summary>Guest to host. lpSurface is translated to 64-bit when DDSD_LPSURFACE is set.</summary>
     public static void SurfaceDescToHost(ReadOnlySpan<byte> g, Span<byte> h)
     {
         if (BinaryPrimitives.ReadUInt32LittleEndian(g) != GuestSurfaceDesc2) throw new ComArgumentException($"DDSURFACEDESC2.dwSize is {BinaryPrimitives.ReadUInt32LittleEndian(g)}, not {GuestSurfaceDesc2}.");
-        if ((BinaryPrimitives.ReadUInt32LittleEndian(g[4..]) & DdConst.DdsdLpSurface) != 0) throw new Win32UsageException("DDSURFACEDESC2 with DDSD_LPSURFACE (client surface memory) is not bridged.");
         h[..HostSurfaceDesc2].Clear();
         g[..36].CopyTo(h);
         BinaryPrimitives.WriteUInt32LittleEndian(h, HostSurfaceDesc2);
+        var flags = BinaryPrimitives.ReadUInt32LittleEndian(g[4..]);
+        if ((flags & DdConst.DdsdLpSurface) != 0)
+        {
+            var lpSurface = BinaryPrimitives.ReadUInt32LittleEndian(g[36..]);
+            BinaryPrimitives.WriteUInt64LittleEndian(h[40..], lpSurface);
+        }
         g.Slice(40, 84).CopyTo(h[48..]);
     }
 }

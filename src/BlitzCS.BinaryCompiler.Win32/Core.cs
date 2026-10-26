@@ -85,6 +85,7 @@ public sealed class GuestMemoryAdapter(GuestMemory memory, GuestMemory? allocato
     }
 
     public GuestMemory Memory { get; } = memory;
+    public GuestMemory? Allocator { get; } = allocator;
     public byte ReadByte(uint a) => Memory.ReadByte(a);
     public uint ReadUInt32(uint a) => Memory.ReadUInt32(a);
     public void WriteByte(uint a, byte v) => Memory.WriteByte(a, v);
@@ -94,7 +95,7 @@ public sealed class GuestMemoryAdapter(GuestMemory memory, GuestMemory? allocato
     public string ReadAnsiString(uint a, int max = 65536) => Memory.ReadAnsiString(a, max);
     public bool IsMapped(uint a, uint l) => Memory.IsMapped(a, l);
     /// <summary>Allocations come from <paramref name="allocator"/> when given (the process anchor of a shared Win32 state), else from this memory's own module.</summary>
-    public IWin32Allocation Allocate(int size) => new Alloc((allocator ?? Memory).Allocate(size));
+    public IWin32Allocation Allocate(int size) => new Alloc((Allocator ?? Memory).Allocate(size));
     public bool TryQueryPage(uint a, out GuestPageInfo info) => Memory.TryQueryPage(a, out info);
     public ulong NextMappedAddress(uint a) => Memory.NextMappedAddress(a);
     public bool TryProtect(uint a, uint l, MemoryProtection p, uint tag, out string? refusal) => Memory.TryProtect(a, l, p, tag, out refusal);
@@ -523,7 +524,9 @@ public sealed class Win32Context : IDisposable
         lock (bindGate)
         {
             if (memory is null) { memory = mem; memoryOwner = mem; }
-            else if (!ReferenceEquals(memoryOwner, mem) && !ReferenceEquals(memory, mem) && !(mem is GuestMemoryAdapter a && ReferenceEquals(memoryOwner, a.Memory)))
+            else if (!ReferenceEquals(memoryOwner, mem)
+                     && !ReferenceEquals(memory, mem)
+                     && !(mem is GuestMemoryAdapter a && (ReferenceEquals(memoryOwner, a.Memory) || (sharedByModules && (ReferenceEquals(anchor, a.Allocator) || ReferenceEquals(anchor, a.Memory))))))
                 throw new Win32UsageException("This context is already bound to another memory.");
         }
     }

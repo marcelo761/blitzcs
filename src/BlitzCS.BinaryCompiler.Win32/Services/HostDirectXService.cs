@@ -21,6 +21,44 @@ public sealed unsafe class HostDirectXService : Win32Service
         Std(D, "DirectDrawCreateEx", 4, DirectDrawCreateEx);
         Std(D, "DirectDrawEnumerateExA", 3, DirectDrawEnumerateEx);
         Std("DINPUT8.dll", "DirectInput8Create", 5, DirectInput8Create);
+        Std("DINPUT.dll", "DirectInputCreateEx", 5, DirectInputCreateEx);
+        Std("DINPUT.dll", "DirectInputCreateA", 4, DirectInputCreateA);
+    }
+
+    /// <summary>DirectInputCreateEx(hinst, version, riid, ppv, outer): IDirectInput7A and IDirectInput8A.</summary>
+    private static uint DirectInputCreateEx(Win32Call c)
+    {
+        uint version = c[1], iid = c[2], ppv = c[3], outer = c[4];
+        if (ppv == 0 || iid == 0) return ComHr.InvalidArg;
+        c.Mem.WriteUInt32(ppv, 0);
+        if (outer != 0) return 0x80040110;   // CLASS_E_NOAGGREGATION
+        var requested = new Guid(c.Mem.ReadBytes(iid, 16));
+        if (requested != DirectInputAdapters.IidDirectInput7A && requested != DirectInputAdapters.IidDirectInput8A)
+            throw new Win32UsageException($"dinput!DirectInputCreateEx for interface {requested}: only IDirectInput7A and IDirectInput8A have adapter tables.");
+        var module = GuestModule.Current ?? throw new Win32UsageException("dinput!DirectInputCreateEx needs a running guest module (its COM objects live in the guest's memory).");
+        using var scope = new NativeScope();
+        nint di = 0;
+        var hr = (uint)HostFunction.CallNative(c.Ctx, HostExports.Get("dinput.dll", "DirectInputCreateEx"),
+            [c[0] == 0 ? 0 : HostExports.HostInstance, (nint)version, scope.Copy(requested.ToByteArray()), (nint)(&di), 0]);
+        if (!ComHr.Succeeded(hr) || di == 0) return ComHr.Succeeded(hr) ? ComHr.Fail : hr;
+        c.Mem.WriteUInt32(ppv, HostComRegistry.For(GuestComHost.For(c.Ctx, module), DirectXTables.Find).Wrap(di, requested));
+        return ComHr.Ok;
+    }
+
+    /// <summary>DirectInputCreateA(hinst, version, ppv, outer): IDirectInput7A.</summary>
+    private static uint DirectInputCreateA(Win32Call c)
+    {
+        uint version = c[1], ppv = c[2], outer = c[3];
+        if (ppv == 0) return ComHr.InvalidArg;
+        c.Mem.WriteUInt32(ppv, 0);
+        if (outer != 0) return 0x80040110;   // CLASS_E_NOAGGREGATION
+        var module = GuestModule.Current ?? throw new Win32UsageException("dinput!DirectInputCreateA needs a running guest module (its COM objects live in the guest's memory).");
+        nint di = 0;
+        var hr = (uint)HostFunction.CallNative(c.Ctx, HostExports.Get("dinput.dll", "DirectInputCreateA"),
+            [c[0] == 0 ? 0 : HostExports.HostInstance, (nint)version, (nint)(&di), 0]);
+        if (!ComHr.Succeeded(hr) || di == 0) return ComHr.Succeeded(hr) ? ComHr.Fail : hr;
+        c.Mem.WriteUInt32(ppv, HostComRegistry.For(GuestComHost.For(c.Ctx, module), DirectXTables.Find).Wrap(di, DirectInputAdapters.IidDirectInput7A));
+        return ComHr.Ok;
     }
 
     /// <summary>DirectInput8Create(hinst, version, riid, ppv, outer): the guest's HINSTANCE stands for the host's own module (DirectInput only checks it is a module); IDirectInput8A only.</summary>

@@ -361,7 +361,8 @@ internal static class ExternalCatalog
                 var existing = specs.FindIndex(candidate => PathEquals(candidate.Path, spec.Path));
                 if (existing >= 0)
                 {
-                    if (specs[existing].Explicit && spec.Explicit)
+                    var fromBlitzRuntime = blitz3dRuntime is not null && PathEquals(specs[existing].Path, blitz3dRuntime);
+                    if (!fromBlitzRuntime && (specs[existing].Explicit || spec.Explicit))
                         throw new ArgumentException($"External catalog lists binary library '{spec.FileName}' more than once; its options would be ambiguous.");
                     specs[existing] = spec;
                     continue;

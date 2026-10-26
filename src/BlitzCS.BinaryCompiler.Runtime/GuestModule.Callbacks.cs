@@ -43,4 +43,20 @@ public sealed unsafe partial class GuestModule
 
     public GuestCallResult InvokeRva(uint rva, string label, GuestReturn kind, ReadOnlySpan<uint> args, uint ecx = 0, uint edx = 0) =>
         Invoke(ResolveRvaOffset(rva, label), args, kind, ecx, edx);
+
+    public bool HasTranslatedRva(uint rva)
+    {
+        lock (resourceLock)
+        {
+            if (addressMap is null)
+            {
+                addressMap = new Dictionary<uint, uint>(artifact.AddressMap.Count);
+                foreach (var m in artifact.AddressMap) addressMap.TryAdd(m.GuestRva, m.HostOffset);
+                foreach (var e in artifact.Exports) addressMap.TryAdd(e.GuestRva, e.HostOffset);
+            }
+            return addressMap.ContainsKey(rva);
+        }
+    }
+
+    internal TranslationArtifact Artifact => artifact;
 }
