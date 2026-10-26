@@ -1,3 +1,13 @@
+
+
+<p align="center">
+  <img src="blitzcs-wordmark.png" alt="Modern BlitzBasic compiler powered by C# and .NET" width="700">
+</p>
+
+
+
+
+
 # BlitzCS - Same Code. More Performance. More Integrations.
 
 BlitzCS is an experimental, general-purpose BlitzBasic language compiler and interoperability infrastructure for .NET 10. It compiles BASIC and embedded C# into one assembly through Roslyn, with typed calls and shared state in both directions.
