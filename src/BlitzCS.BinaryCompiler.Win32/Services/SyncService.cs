@@ -8,8 +8,10 @@ internal sealed class KernelEvent(bool manualReset, bool signaled)
 {
     private readonly object gate = new();
     private bool signaled = signaled;
+    private bool aborted;
     public void Set() { lock (gate) { signaled = true; Monitor.PulseAll(gate); } }
     public void Reset() { lock (gate) signaled = false; }
+    internal void Abort() { lock (gate) { aborted = true; Monitor.PulseAll(gate); } }
 
     public bool Wait(uint milliseconds)
     {
@@ -18,10 +20,15 @@ internal sealed class KernelEvent(bool manualReset, bool signaled)
         {
             while (!signaled)
             {
+                if (aborted) throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
                 if (milliseconds == 0) return false;
                 if (milliseconds == uint.MaxValue) { Monitor.Wait(gate); continue; }
                 var left = milliseconds - clock.ElapsedMilliseconds;
-                if (left <= 0 || !Monitor.Wait(gate, (int)left)) { if (!signaled) return false; }
+                if (left <= 0 || !Monitor.Wait(gate, (int)left))
+                {
+                    if (aborted) throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
+                    if (!signaled) return false;
+                }
             }
             if (!manualReset) signaled = false;
             return true;
@@ -33,6 +40,8 @@ internal sealed class KernelMutex
 {
     private readonly object gate = new();
     private int owner, count;
+    private bool aborted;
+    internal void Abort() { lock (gate) { aborted = true; Monitor.PulseAll(gate); } }
 
     public bool Acquire(uint milliseconds)
     {
@@ -42,10 +51,15 @@ internal sealed class KernelMutex
         {
             while (count != 0 && owner != me)
             {
+                if (aborted) throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
                 if (milliseconds == 0) return false;
                 if (milliseconds == uint.MaxValue) { Monitor.Wait(gate); continue; }
                 var left = milliseconds - clock.ElapsedMilliseconds;
-                if (left <= 0 || !Monitor.Wait(gate, (int)left)) { if (count != 0 && owner != me) return false; }
+                if (left <= 0 || !Monitor.Wait(gate, (int)left))
+                {
+                    if (aborted) throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
+                    if (count != 0 && owner != me) return false;
+                }
             }
             owner = me; count++;
             return true;
@@ -69,6 +83,23 @@ internal sealed class SyncState
     public readonly System.Collections.Concurrent.ConcurrentDictionary<uint, CriticalSection> CriticalSections = new();
     public readonly Dictionary<string, object> Named = [];
     public readonly SrwState Srw = new();
+
+    internal void ReleaseOwnedCriticalSections()
+    {
+        var me = Environment.CurrentManagedThreadId;
+        foreach (var cs in CriticalSections.Values)
+            if (Volatile.Read(ref cs.Owner) == me)
+            {
+                cs.Owner = 0;
+                for (; cs.Depth > 0; cs.Depth--) Monitor.Exit(cs.Gate);
+            }
+    }
+
+    internal void AbortForProcessExit()
+    {
+        ReleaseOwnedCriticalSections();
+        Srw.Abort();
+    }
 }
 
 /// <summary>
@@ -155,6 +186,7 @@ public sealed class SyncService : Win32Service
         {
             var cs = Get(c, c[0], "EnterCriticalSection");
             Monitor.Enter(cs.Gate);
+            if (c.Ctx.IsExitingOnAnotherThread) { Monitor.Exit(cs.Gate); c.Ctx.ThrowIfPoisoned(); }
             cs.Owner = Environment.CurrentManagedThreadId; cs.Depth++;
             Mirror(c, c[0], cs);
             return 0;

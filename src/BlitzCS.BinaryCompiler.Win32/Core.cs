@@ -406,6 +406,11 @@ public sealed class Win32Context : IDisposable
     internal void AddDisposable(IDisposable d) { lock (disposablesGate) disposables = [.. disposables, d]; }
 
     private Exception? processFault;
+    private int exitingThreadId;
+    private readonly ManualResetEventSlim exitEvent = new(false);
+
+    internal bool IsExiting => Volatile.Read(ref exitingThreadId) != 0;
+    internal bool IsExitingOnAnotherThread => Volatile.Read(ref exitingThreadId) is var t && t != 0 && t != Environment.CurrentManagedThreadId;
 
     /// <summary>
     /// Set when a guest thread terminated abnormally. On Windows an unhandled fault ends the whole process; here the process is the host, so
@@ -415,8 +420,39 @@ public sealed class Win32Context : IDisposable
 
     public void PoisonProcess(Exception cause) => Interlocked.CompareExchange(ref processFault, cause, null);
 
+    /// <summary>
+    /// Stops background host timers and audio streams, releases any critical sections held by the exiting thread, and wakes background guest threads parked in waits so they exit
+    /// <see cref="GuestModule.CallAddress"/> before module detachment runs.
+    /// </summary>
+    public void BeginProcessExit()
+    {
+        Interlocked.CompareExchange(ref exitingThreadId, Environment.CurrentManagedThreadId, 0);
+        exitEvent.Set();
+        WinmmService.StopTimers(this);
+        Sync.AbortForProcessExit();
+        foreach (var v in handles.Values)
+        {
+            switch (v)
+            {
+                case KernelEvent ke: ke.Abort(); break;
+                case KernelMutex km: km.Abort(); break;
+                case KernelThread kt: kt.Done.Abort(); break;
+                case WaveOutStream ws: ws.Dispose(); break;
+            }
+        }
+    }
+
+    internal void Sleep(int milliseconds)
+    {
+        if (milliseconds <= 0) { Thread.Yield(); return; }
+        if (exitEvent.Wait(milliseconds) && IsExitingOnAnotherThread)
+            throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
+    }
+
     internal void ThrowIfPoisoned()
     {
+        if (IsExitingOnAnotherThread)
+            throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
         if (Volatile.Read(ref processFault) is { } f)
             throw new Win32UsageException($"A guest thread terminated abnormally ({f.GetType().Name}: {f.Message}); further Win32 calls are refused because the program state is undefined.");
     }
@@ -511,6 +547,7 @@ public sealed class Win32Context : IDisposable
         Process.Dispose();
         foreach (var v in handles.Values) (v as IDisposable)?.Dispose();
         foreach (var d in Interlocked.Exchange(ref disposables, []).Reverse()) d.Dispose();
+        exitEvent.Dispose();
         lastError.Dispose();
         highResult.Dispose();
     }

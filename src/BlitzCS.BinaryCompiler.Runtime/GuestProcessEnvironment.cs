@@ -175,6 +175,14 @@ internal sealed unsafe partial class GuestProcessEnvironment : IDisposable
         return Volatile.Read(ref activeThreads) - mine;
     }
 
+    internal void WaitOtherThreadsIdle(int millisecondsTimeout)
+    {
+        if (OtherActiveThreads() <= 0 || millisecondsTimeout == 0) return;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (OtherActiveThreads() > 0 && (millisecondsTimeout == Timeout.Infinite || sw.ElapsedMilliseconds < millisecondsTimeout))
+            Thread.Sleep(1);
+    }
+
     // ---- PEB ----
 
     internal uint PebAddress => (uint)pebMap;

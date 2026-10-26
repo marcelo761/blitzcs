@@ -186,10 +186,22 @@ public sealed class GuestModuleSet : IDisposable
     /// running after <paramref name="graceMilliseconds"/> (and so every module it keeps alive) is left to the operating system instead of blocking the exit. Neither its DllMain detach
     /// nor its host environment (which would unmap memory under the running thread) is touched.
     /// </summary>
-    internal void DisposeAtProcessExit(int graceMilliseconds)
+    public void DisposeAtProcessExit(int graceMilliseconds)
     {
         if (disposed) return;
         disposed = true;
+        foreach (var e in entries)
+            if (e.Host is IGuestProcessExitResolver exit)
+            {
+                try { exit.OnProcessExiting(); }
+                catch (Exception error) when (error is GuestException or InvalidOperationException or ObjectDisposedException) { }
+            }
+        if (host is IGuestProcessExitResolver hostExit)
+        {
+            try { hostExit.OnProcessExiting(); }
+            catch (Exception error) when (error is GuestException or InvalidOperationException or ObjectDisposedException) { }
+        }
+        environment.WaitOtherThreadsIdle(graceMilliseconds);
         var abandoned = new HashSet<Entry>();
         foreach (var e in entries.Where(x => x.Module is not null).OrderByDescending(x => x.LoadOrder).ToList())
         {
@@ -207,6 +219,7 @@ public sealed class GuestModuleSet : IDisposable
                 catch (Exception error) when (error is GuestException or InvalidOperationException or ObjectDisposedException) { }
             }
         entries.Clear();
+        if (abandoned.Count == 0) environment.Dispose();
     }
 
     private bool TryRelease(Entry e, GuestModule module, int graceMilliseconds)

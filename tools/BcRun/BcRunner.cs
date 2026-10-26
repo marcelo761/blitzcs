@@ -119,7 +119,7 @@ public static class BcRunner
         var processInfo = Win32ProcessInfo.From(win32);
         var set = loader?.Set ?? new GuestModuleSet(Win32ImportResolver.SharedFactory(win32));
         loader?.Attach(win32, processInfo, loadImage);
-        using (loader as IDisposable ?? set)
+        try
         {
             GuestModule module;
             try
@@ -150,6 +150,10 @@ public static class BcRunner
                 log($"guest run failed (the process state is disposed next): {e.GetType().Name}: {e.Message}");
                 return Failed($"{e.GetType().Name}: {e.Message}" + (e.InnerException is { } inner ? $" [{inner.GetType().Name}: {inner.Message}]" : ""), errors.Count, unbound);
             }
+        }
+        finally
+        {
+            set.DisposeAtProcessExit(250);
         }
 
         BcRunResult Failed(string why, int translationErrors = 0, IReadOnlyList<string>? unboundImports = null) => new(0, false, why, resolvedBase, translationErrors, unboundImports ?? []);

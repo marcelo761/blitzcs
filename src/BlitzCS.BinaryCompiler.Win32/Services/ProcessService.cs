@@ -242,7 +242,7 @@ public sealed class ProcessService : Win32Service
         Std(K, "GetCurrentThread", 0, _ => 0xFFFFFFFE);
         Std(K, "GetCurrentThreadId", 0, c => c.Ctx.CurrentThreadId);
         Std(K, "GetCurrentProcessId", 0, _ => (uint)Environment.ProcessId);
-        Std(K, "Sleep", 1, c => { if (c[0] == uint.MaxValue) throw new Win32UsageException("Sleep(INFINITE) would block the host forever."); Thread.Sleep((int)Math.Min(c[0], int.MaxValue)); return 0; });
+        Std(K, "Sleep", 1, c => { if (c[0] == uint.MaxValue) throw new Win32UsageException("Sleep(INFINITE) would block the host forever."); c.Ctx.Sleep((int)Math.Min(c[0], int.MaxValue)); return 0; });
         Std(K, "GetTickCount", 0, c => (uint)(Stopwatch.GetElapsedTime(ProcessState.StartTicks).TotalMilliseconds));
         Std(K, "QueryPerformanceCounter", 1, c =>
         {

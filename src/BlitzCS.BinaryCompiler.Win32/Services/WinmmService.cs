@@ -31,8 +31,22 @@ public sealed class WinmmService : Win32Service
         public int CallbackThread;
     }
 
-    private sealed class Timers { public readonly ConcurrentDictionary<uint, Timer> Map = new(); public int Next; }
+    private sealed class Timers : IDisposable
+    {
+        public readonly ConcurrentDictionary<uint, Timer> Map = new();
+        public int Next;
+        public void Dispose()
+        {
+            foreach (var (_, t) in Map)
+            {
+                Map.TryRemove(t.Id, out _);
+                t.Cts.Cancel();
+            }
+        }
+    }
     private static readonly ConditionalWeakTable<Win32Context, Timers> Table = new();
+    private static Timers GetTimers(Win32Context ctx) => Table.GetValue(ctx, c => { var t = new Timers(); c.AddDisposable(t); return t; });
+    internal static void StopTimers(Win32Context ctx) { if (Table.TryGetValue(ctx, out var t)) t.Dispose(); }
 
     private static uint DeviceError(uint id) => id == WaveMapper ? NoDriver : BadDeviceId;
 
@@ -93,7 +107,7 @@ public sealed class WinmmService : Win32Service
         Std(W, "timeSetEvent", 5, SetEvent);
         Std(W, "timeKillEvent", 1, c =>
         {
-            var timers = Table.GetValue(c.Ctx, _ => new Timers());
+            var timers = GetTimers(c.Ctx);
             if (!timers.Map.TryRemove(c[0], out var t)) return InvalParam;
             t.Cts.Cancel();
             if (t.Synchronous) while (t.Running && t.CallbackThread != Environment.CurrentManagedThreadId) Thread.Sleep(1);
@@ -108,7 +122,7 @@ public sealed class WinmmService : Win32Service
         if ((flags & 0x30) != 0) return c.Ctx.Fail(Win32Error.NotSupported);
         if (delay == 0 || proc == 0) return c.Ctx.Fail(Win32Error.InvalidParameter);
         var periodic = (flags & 1) != 0;
-        var timers = Table.GetValue(c.Ctx, _ => new Timers());
+        var timers = GetTimers(c.Ctx);
         var id = (uint)Interlocked.Increment(ref timers.Next);
         var cts = new CancellationTokenSource();
         var timer = new Timer(id, cts) { Synchronous = (flags & 0x100) != 0 };

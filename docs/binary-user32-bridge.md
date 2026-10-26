@@ -62,13 +62,18 @@ for a new IID asks the host: refused = E_NOINTERFACE, accepted = a new face of t
 reference; the guest's last Release releases them all. Slots that are not bridged are `Absent` rows that fault naming `Interface::Method` (never an invented HRESULT).
 
 Tables: IDirectDraw7 (CreateSurface, CreateClipper, EnumDisplayModes with callbacks, GetCaps, GetDeviceIdentifier, SetCooperativeLevel, SetDisplayMode, ...), IDirectDraw (version 1,
-value methods), IDirectDrawSurface7 (Blt, BltFast, Flip, GetAttachedSurface, GetDC/ReleaseDC, Lock/Unlock, color keys, ...), IDirectDrawClipper, IDirect3D7 (EnumDevices,
-EnumZBufferFormats), IDirectInput8A (CreateDevice, EnumDevices), IDirectInputDevice8A (SetDataFormat, SetCooperativeLevel, Acquire, GetDeviceState, GetDeviceData, properties).
-Not bridged (named faults): palettes, overlays, private data, `IDirect3D7::CreateDevice` (IDirect3DDevice7 passes `float` arguments that the Win64 convention puts in XMM
-registers: it needs typed adapters), force feedback, action maps, `d3dxof.dll!DirectXFileCreate`.
+value methods), IDirectDrawSurface7 (Blt, BltFast, Flip, GetAttachedSurface, GetDC/ReleaseDC, Lock/Unlock, color keys, ...), IDirectDrawClipper, IDirect3D7 (EnumDevices, CreateDevice,
+CreateVertexBuffer, EnumZBufferFormats), IDirect3DDevice7 (GetCaps, EnumTextureFormats with callbacks, BeginScene/EndScene, GetDirect3D, SetRenderTarget/GetRenderTarget, Clear with its
+`float dvZ` argument passed in XMM, transforms, viewport, material, lights, render states, state blocks, DrawPrimitive/DrawIndexedPrimitive with vertex count * `FvfStride(fvf)`,
+DrawPrimitiveVB/DrawIndexedPrimitiveVB, ComputeSphereVisibility, textures and stage states, ValidateDevice, Load, clip status and clip planes, GetInfo), IDirect3DVertexBuffer7
+(Lock/Unlock, ProcessVertices, GetVertexBufferDesc, Optimize), IDirectInput8A (CreateDevice, EnumDevices), IDirectInputDevice8A (SetDataFormat, SetCooperativeLevel, Acquire,
+GetDeviceState, GetDeviceData, properties).
+Not bridged (named faults): palettes, overlays, private data, strided draw calls (`DrawPrimitiveStrided`, `DrawIndexedPrimitiveStrided`, `ProcessVerticesStrided`, whose
+`D3DDRAWPRIMITIVESTRIDEDDATA` layout contains 6 pointers), force feedback, action maps, `d3dxof.dll!DirectXFileCreate`.
 
-**Surface Lock**: guest Lock = host Lock (held until the guest unlocks, as on Windows) + a shadow in guest memory with the host's pitch, filled from the locked rows unless
-DDLOCK_WRITEONLY; guest Unlock = rows copied back unless DDLOCK_READONLY + host Unlock. Formats without whole bytes per pixel are refused by name.
+**Surface and Vertex Buffer Lock**: guest Lock = host Lock (held until the guest unlocks, as on Windows) + a shadow in guest memory with the host's pitch (for surfaces) or buffer
+size (`D3DVERTEXBUFFERDESC.dwNumVertices * FvfStride(dwFVF)` for vertex buffers), filled from the locked bytes unless DDLOCK_WRITEONLY; guest Unlock = bytes copied back unless
+DDLOCK_READONLY + host Unlock. Surface formats without whole bytes per pixel are refused by name.
 
 ## Other APIs added with the bridge
 

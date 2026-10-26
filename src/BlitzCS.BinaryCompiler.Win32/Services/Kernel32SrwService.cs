@@ -14,6 +14,8 @@ internal sealed class SrwState
     public readonly object Gate = new();
     public readonly Dictionary<uint, SrwLockState> Locks = [];
     public readonly Dictionary<uint, List<CvWaiter>> Conditions = [];
+    public bool Aborted;
+    internal void Abort() { lock (Gate) { Aborted = true; Monitor.PulseAll(Gate); } }
 }
 
 /// <summary>
@@ -59,6 +61,7 @@ public sealed class Kernel32SrwService : Win32Service
                 throw new Win32UsageException($"AcquireSRWLockExclusive on 0x{address:X8}, which the calling thread already holds exclusively (certain deadlock).");
             while (shared ? s.Writer != 0 : s.Writer != 0 || s.Readers != 0)
             {
+                if (srw.Aborted && c.Ctx.IsExitingOnAnotherThread) c.Ctx.ThrowIfPoisoned();
                 Monitor.Wait(srw.Gate);
                 s = Lock(c, address);
             }
@@ -123,9 +126,14 @@ public sealed class Kernel32SrwService : Win32Service
         {
             while (!waiter.Woken)
             {
+                if (srw.Aborted && c.Ctx.IsExitingOnAnotherThread) c.Ctx.ThrowIfPoisoned();
                 if (milliseconds == Infinite) { Monitor.Wait(srw.Gate); continue; }
                 var left = milliseconds - clock.ElapsedMilliseconds;
-                if (left <= 0 || !Monitor.Wait(srw.Gate, (int)Math.Min(left, int.MaxValue))) { if (!waiter.Woken) break; }
+                if (left <= 0 || !Monitor.Wait(srw.Gate, (int)Math.Min(left, int.MaxValue)))
+                {
+                    if (srw.Aborted && c.Ctx.IsExitingOnAnotherThread) c.Ctx.ThrowIfPoisoned();
+                    if (!waiter.Woken) break;
+                }
             }
             woken = waiter.Woken;
             if (!woken && srw.Conditions.TryGetValue(cv, out var list))

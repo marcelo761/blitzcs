@@ -158,4 +158,78 @@ public sealed class BcRunTests : IDisposable
         Assert.Equal(0u, code);
         Assert.StartsWith("Usage: blitzcc [-h|-q|+q|-c|-d|-k|+k|-v|-o exefile] [sourcefile.bb]", usage);
     }
+
+    /// <summary>
+    /// When a loaded guest DLL (such as Blitz3D's SoLoud runtime with BLITZCS_AUDIO=virtual) starts a background thread blocked in WaitForSingleObject(INFINITE) and a multimedia timer,
+    /// and the main executable then faults while holding a CRITICAL_SECTION, BcRunner.Run must abort the background waits, release held critical sections and return promptly instead of hanging on module teardown.
+    /// </summary>
+    [Fact]
+    public void TrappingExecutableWithBackgroundAudioAndEventThreadsDisposesPromptly()
+    {
+        var b = new PeFixtureBuilder().AsExecutable();
+        var iatInitCs = b.Import("KERNEL32.dll", "InitializeCriticalSection");
+        var iatEnterCs = b.Import("KERNEL32.dll", "EnterCriticalSection");
+        var iatLeaveCs = b.Import("KERNEL32.dll", "LeaveCriticalSection");
+        var iatCreateEvent = b.Import("KERNEL32.dll", "CreateEventA");
+        var iatWait = b.Import("KERNEL32.dll", "WaitForSingleObject");
+        var iatCreateThread = b.Import("KERNEL32.dll", "CreateThread");
+        var iatSleep = b.Import("KERNEL32.dll", "Sleep");
+        var iatTimeSetEvent = b.Import("WINMM.dll", "timeSetEvent");
+        var baseVa = PeFixtureBuilder.ImageBase;
+        var csVa = baseVa + PeFixtureBuilder.DataRva + 0x20;
+        var eventVa = baseVa + PeFixtureBuilder.DataRva + 0x40;
+        var readyVa = baseVa + PeFixtureBuilder.DataRva + 0x44;
+        var code = new List<byte>();
+        void Call(uint iat) { code.AddRange([0xFF, 0x15]); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, baseVa + iat); }
+        void PushVa(uint va) { code.Add(0x68); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, va); }
+
+        // Entry @ 0x00:
+        // InitializeCriticalSection(&cs);
+        PushVa(csVa); Call(iatInitCs);
+        // hEvent = CreateEventA(0, 0, 0, 0);
+        code.AddRange([0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00]); Call(iatCreateEvent);
+        code.Add(0xA3); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, eventVa); // mov [eventVa], eax
+        // timeSetEvent(5, 1, timerProc, 0, 1 /* TIME_PERIODIC */);
+        code.AddRange([0x6A, 0x01, 0x6A, 0x00]);
+        PushVa(baseVa + PeFixtureBuilder.TextRva + 0xC0);
+        code.AddRange([0x6A, 0x01, 0x6A, 0x05]); Call(iatTimeSetEvent);
+        // CreateThread(0, 0, workerProc, 0, 0, 0);
+        code.AddRange([0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00]);
+        PushVa(baseVa + PeFixtureBuilder.TextRva + 0x80);
+        code.AddRange([0x6A, 0x00, 0x6A, 0x00]); Call(iatCreateThread);
+        // Sleep(20) so the worker thread enters WaitForSingleObject(hEvent, INFINITE)
+        code.AddRange([0x6A, 0x14]); Call(iatSleep);
+        // EnterCriticalSection(&cs) and then trap (0xFA = cli, unsupported instruction -> GuestTrapException) while holding the critical section
+        PushVa(csVa); Call(iatEnterCs);
+        code.Add(0xFA);
+
+        while (code.Count < 0x80) code.Add(0x90);
+        // workerProc @ 0x80 (stdcall 1 arg):
+        // EnterCriticalSection(&cs); LeaveCriticalSection(&cs); WaitForSingleObject([eventVa], INFINITE); EnterCriticalSection(&cs); LeaveCriticalSection(&cs); ret 4
+        PushVa(csVa); Call(iatEnterCs);
+        PushVa(csVa); Call(iatLeaveCs);
+        code.AddRange([0x6A, 0xFF]); // push -1 (INFINITE)
+        code.AddRange([0xFF, 0x35]); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, eventVa); // push [eventVa]
+        Call(iatWait);
+        PushVa(csVa); Call(iatEnterCs);
+        PushVa(csVa); Call(iatLeaveCs);
+        code.AddRange([0xC2, 0x04, 0x00]);
+
+        while (code.Count < 0xC0) code.Add(0x90);
+        // timerProc @ 0xC0 (stdcall 5 args): inc dword [readyVa]; ret 20
+        code.AddRange([0xFF, 0x05]); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, readyVa);
+        code.AddRange([0xC2, 0x14, 0x00]);
+
+        var exe = Path.Combine(dir, "trap-bg.exe");
+        File.WriteAllBytes(exe, b.WithCode([.. code]).EntryPoint(0).Build());
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var r = BcRunner.Run(new BcRunOptions
+        {
+            ExePath = exe, AllowTranslationErrors = true,
+            Stdout = new MemoryStream(), Stderr = new MemoryStream(), Stdin = new MemoryStream(),
+        });
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), $"BcRunner.Run took {sw.Elapsed.TotalSeconds:F1}s on teardown.");
+        Assert.NotNull(r.Failure);
+        Assert.Contains("GuestTrapException", r.Failure);
+    }
 }

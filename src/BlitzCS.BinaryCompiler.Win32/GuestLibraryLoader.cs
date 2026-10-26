@@ -337,4 +337,5 @@ public sealed class GuestLibraryLoader : IDisposable
     }
 
     public void Dispose() => Set.Dispose();
+    public void DisposeAtProcessExit(int graceMilliseconds = 250) => Set.DisposeAtProcessExit(graceMilliseconds);
 }

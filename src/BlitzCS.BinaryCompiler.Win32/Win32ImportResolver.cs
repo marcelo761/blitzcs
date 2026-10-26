@@ -25,7 +25,7 @@ public sealed class Win32Coverage
 /// not resolved (the loader reports it by name or the guest faults at call time naming dll!name): there are no placeholder stubs.
 /// Create one resolver per guest module: it owns the emulated process state (heaps, handles, TLS, files) and its guest allocations.
 /// </summary>
-public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImportResolver, IDisposable
+public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImportResolver, IGuestProcessExitResolver, IDisposable
 {
     /// <summary>What the resolvers of one guest process share: the API registry, the service instances and the Win32 context (heaps, handle table, TLS/FLS index space, critical sections, files, registry ...). Reference counted: the context dies with the last resolver.</summary>
     private sealed class SharedState
@@ -198,6 +198,8 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
             return new Win32ImportVerdict(i.Dll, i.Name, i.Ordinal, api is null && registry.FindData(i.Dll, i.Name) is null ? Win32ImportStatus.Missing : Win32ImportStatus.Implemented, api?.Service ?? (api is null ? "data" : null));
         }),
     ];
+
+    public void OnProcessExiting() => Context.BeginProcessExit();
 
     public void Dispose()
     {

@@ -415,5 +415,21 @@ down and calls `ExitProcess(0)`: BcRun exits 0 with no fault. Visual check: the 
 window with "hello" at its top left. The runtime's second executable allocation (128 bytes, `VirtualAlloc(PAGE_EXECUTE_READWRITE)` in a routine that frees the previous one
 first) was made but not executed in this run. linux-x64 still stops at the same address, now with a message naming the missing write guard.
 
-Teardown note: with `BLITZCS_AUDIO=virtual` the same run reaches the same trap but BcRun then hangs while disposing the process (the virtual sink's worker thread had delivered
-waveOut callbacks into the guest); with `BLITZCS_AUDIO=none` it exits at once.
+Teardown note: with `BLITZCS_AUDIO=virtual` (SoLoud's background `winmmThread` waiting on `WaitForSingleObject(INFINITE)` inside the module), `BcRunner` now uses
+`GuestModuleSet.DisposeAtProcessExit`, which calls `Win32Context.BeginProcessExit()` to stop active timers/audio streams, release held critical sections and wake background
+waits before detaching modules, so both normal exits and mid-run traps tear down promptly (`BcRunTests.TrappingExecutableWithBackgroundAudioAndEventThreadsDisposesPromptly`).
+
+### Measured: a produced `Graphics3D` exe under BcRun (windows-x64, Wine 11 / Proton 11.0, Xvfb)
+
+Built by the original `blitzcc.exe` through `BcRunner.Run` and then executed through `BcRunner.Run` in the same test
+(`BlitzccDifferentialTests.ProducedGraphics3DExecutableRendersTexturedMeshReadsPixelsAndInputAndExitsZero`, verified with both `BLITZCS_AUDIO=none` and `BLITZCS_AUDIO=virtual`):
+`Graphics3D 320,240,0,2`, camera with `CameraClsColor 16,32,64`, directional light, procedurally textured cube (`CreateTexture 16,16`, `CreateCube`, `EntityColor 240,80,32`,
+`EntityFX 1`, `EntityTexture`), three frames of `TurnEntity`/`UpdateWorld`/`RenderWorld`/`Flip`, `KeyDown`/`MouseX`/`MouseY`, and `LockBuffer`/`ReadPixelFast`/`UnlockBuffer` at
+the screen centre (cube) and corner (background), writing the verified RGB values to a file before `End`.
+
+* **Direct3D 7 path exercised**: `IDirect3D7::CreateDevice` (`IID_IDirect3DHALDevice`), `CreateVertexBuffer`, `IDirect3DVertexBuffer7::Lock`/`Unlock` (via the guest shadow buffer),
+  `IDirect3DDevice7::SetViewport`, `SetTransform`, `SetRenderState`, `SetTexture`, `SetTextureStageState`, `SetMaterial`, `SetLight`, `LightEnable`, `Clear` (with `float dvZ` passed
+  in `XMM`), `BeginScene`, `DrawIndexedPrimitiveVB`, `EndScene`, and DirectInput8 keyboard/mouse polling (`GetDeviceState`, `GetDeviceData`).
+* **Second dynamic-code translation**: calling `ReadPixelFast` executes the runtime's second `VirtualAlloc(PAGE_EXECUTE_READWRITE)` allocation (the pixel-format conversion thunk,
+  entry `0x78200040`, 1 entry, 5 instructions, 76 bytes of host code, ~1.0 ms) alongside the main program region at `0x781A0000` (1 entry, 179 instructions, 2,526 bytes of host code).
+* **Result**: `BcRunner.Run` exits 0 (`ExitProcess(0)`) with `ok=1`, reading `16,32,64` at `(2,2)` (camera clear colour) and `240,80,32` at `(160,120)` (lit textured cube).
