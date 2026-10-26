@@ -174,6 +174,8 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         return api.Handler(new Win32Call(Context, memory, args.AsSpan(0, api.ArgCount), api.Variadic ? i => captured[i] : null));
     }
 
+    public uint Call(GuestMemory memory, string dll, string name, params uint[] args) => Call(Context.Bind(memory), dll, name, args);
+
     /// <summary>Static view of what the standard composition implements, against the priority list taken from real binaries.</summary>
     public static Win32Coverage Coverage { get; } = BuildCoverage();
 

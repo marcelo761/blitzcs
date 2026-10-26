@@ -34,6 +34,7 @@ public sealed unsafe class HostUser32Service : Win32Service
         // windows and geometry
         Bridge("GetDesktopWindow", HostResult.Handle);
         Bridge("GetForegroundWindow", HostResult.Handle);
+        Bridge(new HostFunction(H, "GetFocus", HostResult.Handle) { Succeeded = always });
         Bridge("IsWindow", HostResult.Int32, handle);
         Bridge("IsWindowVisible", HostResult.Int32, handle);
         Bridge(new HostFunction(H, "ShowWindow", HostResult.Int32, handle, ComArgs.Value) { Succeeded = always });

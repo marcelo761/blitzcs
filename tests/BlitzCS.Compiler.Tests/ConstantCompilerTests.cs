@@ -29,4 +29,13 @@ public sealed class ConstantCompilerTests
     [InlineData("Const A=1\nPrint A$")]
     public void InvalidConstantsProduceSourceDiagnostics(string source) =>
         Assert.Throws<BasicDiagnosticException>(() => BasicCompiler.Compile(source, "constants.bb"));
+    [Theory]
+    [InlineData("Const INFINITY# = (999.0) ^ (99999.0)\nGlobal result# = INFINITY", float.PositiveInfinity)]
+    [InlineData("Const INFINITY# = (999.0) ^ (99999.0)\nGlobal result# = -INFINITY", float.NegativeInfinity)]
+    public void InfinityConstantsEmitValidCSharp(string source, float expected) =>
+        ArrayCompilerTests.WithAssembly(source, a => Assert.Equal(expected, (float)a.GetType("BB")!.GetField("result")!.GetValue(null)!));
+
+    [Fact]
+    public void NanConstantEmitsValidCSharp() =>
+        ArrayCompilerTests.WithAssembly("Const NAN_VAL# = (-1.0) ^ (0.5)\nGlobal result# = NAN_VAL", a => Assert.True(float.IsNaN((float)a.GetType("BB")!.GetField("result")!.GetValue(null)!)));
 }

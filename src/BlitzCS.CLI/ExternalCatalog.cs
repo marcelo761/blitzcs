@@ -7,6 +7,12 @@ namespace BlitzCS.CLI;
 
 internal static class ExternalCatalog
 {
+    private static readonly HashSet<string> ReservedKeywordNames = new(
+        ("dim goto gosub return exit if then else endif elseif while wend for to step next function endfunction " +
+         "type endtype each local global field const select case default endselect repeat until forever data read restore " +
+         "abs sgn mod pi true false int float str include new delete first last insert before after null object handle " +
+         "and or xor not shl shr sar print end cs").Split(' '), StringComparer.OrdinalIgnoreCase);
+
     internal static ExternalCatalogResult Load(string catalogPath, string? target = null, bool isPackageBuild = false)
     {
         catalogPath = Path.GetFullPath(catalogPath);
@@ -28,6 +34,14 @@ internal static class ExternalCatalog
                 ? parsedCatalogTarget.BinaryCompilerTargetOs() ?? parsedCatalogTarget.CanonicalName()
                 : throw new ArgumentException($"Unknown binaryTarget '{targetElement.GetString()}'; expected linux-x64 or windows-x64 (or Win32, Linux32, Win64, Linux64)."))
             : null;
+        var blitz3dRuntime = root.TryGetProperty("blitz3dRuntime", out var b3dElement) && b3dElement.ValueKind == JsonValueKind.String
+            ? b3dElement.GetString() : null;
+        if (blitz3dRuntime is not null)
+        {
+            blitz3dRuntime = Path.GetFullPath(blitz3dRuntime, Path.GetDirectoryName(catalogPath)!);
+            if (!File.Exists(blitz3dRuntime))
+                throw new FileNotFoundException($"Blitz3D runtime library '{blitz3dRuntime}' does not exist.", blitz3dRuntime);
+        }
         string Read(JsonElement item, string key) => item.GetProperty(key).GetString()
             ?? throw new ArgumentException($"External catalog '{key}' cannot be null.");
         var catalogDirectory = Path.GetDirectoryName(catalogPath)!;
@@ -38,8 +52,23 @@ internal static class ExternalCatalog
         var directUserLibDecls = new List<UserLibFunctionDeclaration>();
         var bcsbreUserLibDecls = new List<UserLibFunctionDeclaration>();
         var compilationTarget = BinaryTranslationStep.ResolveCompilationTarget(binaryTarget, target);
+        if (blitz3dRuntime is not null)
+            TargetCapabilities.ValidateLegacyBinaryForRecompilation(blitz3dRuntime, compilationTarget, isPackageBuild);
         foreach (var group in userLibDecls.GroupBy(d => d.LibraryPath, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
         {
+            if (group.First().IsWin32SystemDll)
+            {
+                if (compilationTarget == CompilationTarget.Win32)
+                {
+                    directUserLibDecls.AddRange(group);
+                }
+                else
+                {
+                    bcsbreUserLibDecls.AddRange(group);
+                }
+                continue;
+            }
+
             var resolution = TargetCapabilities.ResolveDependency(group.Key, compilationTarget);
             if (resolution == DependencyResolutionKind.NativeDirect)
             {
@@ -53,11 +82,39 @@ internal static class ExternalCatalog
             }
         }
         var binaryItems = items.Where(item => item.TryGetProperty("binary", out var binary) && binary.ValueKind != JsonValueKind.Null).ToArray();
-        var specs = ReadLibrarySpecs(root, binaryItems, bcsbreUserLibDecls, catalogDirectory, compilationTarget, isPackageBuild);
+        var specs = ReadLibrarySpecs(root, binaryItems, bcsbreUserLibDecls, catalogDirectory, compilationTarget, isPackageBuild, blitz3dRuntime);
         var binaryLibraries = specs.Select(spec => spec.Path).ToArray();
         var explicitBinaryBindings = binaryItems.Select(item => ReadBinding(item, catalogDirectory, specs, compilationTarget, isPackageBuild)).ToArray();
         var userLibBinaryBindings = bcsbreUserLibDecls.Select(decl => ResolveUserLibBinaryBinding(decl, specs, compilationTarget, isPackageBuild)).ToArray();
-        var binaryBindings = explicitBinaryBindings.Concat(userLibBinaryBindings).ToArray();
+        var runtimeBindings = new List<BinaryBinding>();
+        var runtimeCmdMap = new Dictionary<string, Blitz3dRuntimeCommand>(StringComparer.OrdinalIgnoreCase);
+        if (blitz3dRuntime is not null)
+        {
+            var commands = Blitz3dRuntimeExtractor.ExtractCommands(blitz3dRuntime);
+            var existingNames = new HashSet<string>(explicitNames, StringComparer.OrdinalIgnoreCase);
+            foreach (var u in userLibDecls) existingNames.Add(u.BasicName);
+            foreach (var cmd in commands)
+            {
+                if (ReservedKeywordNames.Contains(cmd.BasicName))
+                    continue;
+                if (!existingNames.Add(cmd.BasicName))
+                    continue;
+                runtimeCmdMap[cmd.BasicName] = cmd;
+                runtimeBindings.Add(new BinaryBinding(
+                    BasicName: cmd.BasicName,
+                    LibraryPath: blitz3dRuntime,
+                    Export: "",
+                    Convention: GuestCallingConvention.Cdecl,
+                    Parameters: cmd.ParameterTypes,
+                    ReturnType: cmd.ReturnType,
+                    LibraryDefaultCdecl: false)
+                {
+                    CommandRva = cmd.Rva,
+                    FromUserLib = false
+                });
+            }
+        }
+        var binaryBindings = explicitBinaryBindings.Concat(userLibBinaryBindings).Concat(runtimeBindings).ToArray();
         DirectoryStaging? staging = null;
         string? bindingAssembly = null;
         string? directUserLibAssembly = null;
@@ -77,7 +134,7 @@ internal static class ExternalCatalog
             || binaryItems.Contains(item)).ToArray();
         var assemblyPaths = boundItems.Select(item => binaryItems.Contains(item) ? bindingAssembly!
             : Path.GetFullPath(Read(item, "assembly"), catalogDirectory))
-            .Concat(userLibBinaryBindings.Length > 0 ? [bindingAssembly!] : [])
+            .Concat(userLibBinaryBindings.Length > 0 || runtimeBindings.Count > 0 ? [bindingAssembly!] : [])
             .Concat(directUserLibDecls.Count > 0 ? [directUserLibAssembly!] : [])
             .Distinct()
             .ToArray();
@@ -135,7 +192,7 @@ internal static class ExternalCatalog
             signatures.Add(signature);
             if (function is not null) functions.Add(function);
         }
-        if (userLibBinaryBindings.Length > 0)
+        if (userLibBinaryBindings.Length > 0 || runtimeBindings.Count > 0)
         {
             var assembly = context.LoadAssembly(bindingAssembly!);
             foreach (var binding in userLibBinaryBindings)
@@ -145,7 +202,18 @@ internal static class ExternalCatalog
                 var methodName = BinaryBindingGenerator.MethodName(binding.BasicName);
                 var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static, binding.Parameters.Select(ToSystemType).ToArray())
                     ?? throw new ArgumentException($"External method '{type.FullName}.{methodName}' with the declared signature does not exist.");
-                signatures.Add(new ExternalFunctionSignature(binding.BasicName, binding.ReturnType, binding.Parameters));
+                signatures.Add(new ExternalFunctionSignature(binding.BasicName, binding.ReturnType, binding.Parameters, null, binding.PointerParameters));
+                functions.Add(new ExternalFunction(binding.BasicName, method));
+            }
+            foreach (var binding in runtimeBindings)
+            {
+                var cmd = runtimeCmdMap[binding.BasicName];
+                var typeName = BinaryBindingGenerator.TypeName(IndexOf(libraryIndexes, binding.LibraryPath));
+                var type = assembly.GetType(typeName, throwOnError: true)!;
+                var methodName = BinaryBindingGenerator.MethodName(binding.BasicName);
+                var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static, binding.Parameters.Select(ToSystemType).ToArray())
+                    ?? throw new ArgumentException($"External method '{type.FullName}.{methodName}' with the declared signature does not exist.");
+                signatures.Add(new ExternalFunctionSignature(binding.BasicName, binding.ReturnType, binding.Parameters, cmd.DefaultValues));
                 functions.Add(new ExternalFunction(binding.BasicName, method));
             }
         }
@@ -158,7 +226,7 @@ internal static class ExternalCatalog
                 var methodName = BinaryBindingGenerator.MethodName(decl.BasicName);
                 var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static, decl.ParameterTypes.Select(ToSystemType).ToArray())
                     ?? throw new ArgumentException($"External method '{type.FullName}.{methodName}' with the declared signature does not exist.");
-                signatures.Add(new ExternalFunctionSignature(decl.BasicName, decl.ReturnType, decl.ParameterTypes));
+                signatures.Add(new ExternalFunctionSignature(decl.BasicName, decl.ReturnType, decl.ParameterTypes, null, decl.PointerParameters));
                 functions.Add(new ExternalFunction(decl.BasicName, method));
             }
         }
@@ -207,9 +275,28 @@ internal static class ExternalCatalog
         CompilationTarget compilationTarget,
         bool isPackageBuild)
     {
+        if (decl.IsWin32SystemDll)
+        {
+            if (specs.Count == 0)
+                throw new InvalidOperationException($"External userlib function '{decl.BasicName}' ({decl.LibraryPath}!{decl.ExportName}) is a Win32 system DLL call, which requires at least one binary library or 'blitz3dRuntime' to provide the emulated guest memory context.");
+            var hostLib = specs[0].Path;
+            var sysDllName = decl.Win32SystemDllName ?? Path.GetFileName(decl.LibraryPath);
+            return new BinaryBinding(
+                BasicName: decl.BasicName,
+                LibraryPath: hostLib,
+                Export: decl.ExportName,
+                Convention: GuestCallingConvention.Stdcall,
+                Parameters: decl.ParameterTypes,
+                ReturnType: decl.ReturnType,
+                LibraryDefaultCdecl: false)
+            {
+                PointerParameters = decl.PointerParameters,
+                Win32SystemDll = sysDllName,
+                FromUserLib = true
+            };
+        }
+
         var libraryName = Path.GetFileName(decl.LibraryPath);
-        if (decl.ReturnType == ExternalValueType.String)
-            throw new ArgumentException($"External function '{decl.BasicName}' ({libraryName}!{decl.ExportName}): string return from binary library unsupported; the pointer ownership is not known.");
         TargetCapabilities.ValidateLegacyBinaryForRecompilation(decl.LibraryPath, compilationTarget, isPackageBuild);
         var spec = specs.First(candidate => PathEquals(candidate.Path, decl.LibraryPath));
         var image = PeReader.Read(File.ReadAllBytes(spec.EffectivePath));
@@ -226,22 +313,47 @@ internal static class ExternalCatalog
             throw new ArgumentException($"Binary library '{libraryName}' export '{requested}' is a forwarder to '{forwarder}', which is unsupported.");
         var exportName = candidates[0].Name!;
         var convention = GuestCallingConvention.Unknown;
+        int? exportArgCount = null;
+        var (hintConvention, hintBytes) = ExportAbiHints.Infer(exportName);
+        if (hintBytes is { } bytes && bytes > 4 * decl.ParameterTypes.Count)
+        {
+            exportArgCount = bytes / 4;
+        }
         if (spec.ExportConventions.TryGetValue(exportName, out var mapped) || spec.ExportConventions.TryGetValue("#" + candidates[0].Ordinal, out mapped))
         {
-            if (mapped.Convention == GuestCallingConvention.Stdcall && mapped.ArgCount != decl.ParameterTypes.Count)
+            if (mapped.Convention == GuestCallingConvention.Stdcall && mapped.ArgCount < decl.ParameterTypes.Count)
                 throw new ArgumentException($"External function '{decl.BasicName}' ({libraryName}!{exportName}): exportConventions says stdcall:{mapped.ArgCount} but the declaration has {decl.ParameterTypes.Count} parameter(s).");
+            if (mapped.Convention == GuestCallingConvention.Stdcall && mapped.ArgCount > decl.ParameterTypes.Count)
+                exportArgCount = mapped.ArgCount;
             convention = mapped.Convention;
         }
-        return new BinaryBinding(decl.BasicName, decl.LibraryPath, exportName, convention, decl.ParameterTypes, decl.ReturnType, spec.DefaultCdecl);
+        else if (hintConvention != GuestCallingConvention.Unknown)
+        {
+            convention = hintConvention;
+        }
+        else
+        {
+            convention = spec.DefaultCdecl ? GuestCallingConvention.Cdecl : GuestCallingConvention.Stdcall;
+        }
+        return new BinaryBinding(decl.BasicName, decl.LibraryPath, exportName, convention, decl.ParameterTypes, decl.ReturnType, spec.DefaultCdecl)
+        {
+            PointerParameters = decl.PointerParameters,
+            ExportArgCount = exportArgCount,
+            FromUserLib = true
+        };
     }
 
     /// <summary>
     /// Merges the <c>binaryLibraries</c> entries with the libraries named by function bindings (implicit entries with defaults), rejects duplicate files
     /// and duplicate output file names, and runs the opt-in preprocessors (<c>unpack</c>).
     /// </summary>
-    private static List<BinaryLibrarySpec> ReadLibrarySpecs(JsonElement root, JsonElement[] binaryItems, IReadOnlyList<UserLibFunctionDeclaration> bcsbreUserLibDecls, string catalogDirectory, CompilationTarget compilationTarget, bool isPackageBuild)
+    private static List<BinaryLibrarySpec> ReadLibrarySpecs(JsonElement root, JsonElement[] binaryItems, IReadOnlyList<UserLibFunctionDeclaration> bcsbreUserLibDecls, string catalogDirectory, CompilationTarget compilationTarget, bool isPackageBuild, string? blitz3dRuntime = null)
     {
         var specs = new List<BinaryLibrarySpec>();
+        if (blitz3dRuntime is not null)
+        {
+            specs.Add(new BinaryLibrarySpec(blitz3dRuntime));
+        }
         if (root.TryGetProperty("binaryLibraries", out var entries) && entries.ValueKind == JsonValueKind.Array)
             foreach (var entry in entries.EnumerateArray())
             {
@@ -249,8 +361,9 @@ internal static class ExternalCatalog
                 var existing = specs.FindIndex(candidate => PathEquals(candidate.Path, spec.Path));
                 if (existing >= 0)
                 {
-                    if (specs[existing].Explicit || spec.Explicit)
+                    if (specs[existing].Explicit && spec.Explicit)
                         throw new ArgumentException($"External catalog lists binary library '{spec.FileName}' more than once; its options would be ambiguous.");
+                    specs[existing] = spec;
                     continue;
                 }
                 specs.Add(spec);
@@ -266,7 +379,7 @@ internal static class ExternalCatalog
         }
         foreach (var decl in bcsbreUserLibDecls)
         {
-            if (!specs.Any(candidate => PathEquals(candidate.Path, decl.LibraryPath)))
+            if (!decl.IsWin32SystemDll && !specs.Any(candidate => PathEquals(candidate.Path, decl.LibraryPath)))
                 specs.Add(new BinaryLibrarySpec(decl.LibraryPath));
         }
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

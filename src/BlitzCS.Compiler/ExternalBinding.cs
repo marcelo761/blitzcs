@@ -13,6 +13,19 @@ internal sealed partial class SemanticAnalysis
         var converted = new IrExpression[signature.ParameterTypes.Count];
         for (var i = 0; i < converted.Length; i++)
         {
+            if (i < arguments.Count && i < signature.PointerParameters.Count && signature.PointerParameters[i])
+            {
+                if (arguments[i].Type == ValueType.Null)
+                {
+                    converted[i] = new IrInteger(0);
+                    continue;
+                }
+                if (arguments[i].Type.IsObject)
+                {
+                    converted[i] = new IrObjectOperation("marshal", ValueType.Integer, arguments[i], Location(call.Position));
+                    continue;
+                }
+            }
             var parameterType = ExternalFunction.ToInternal(signature.ParameterTypes[i]);
             IrExpression? defaultValue = null;
             var defaultIndex = i - (signature.ParameterTypes.Count - signature.DefaultValues.Count);

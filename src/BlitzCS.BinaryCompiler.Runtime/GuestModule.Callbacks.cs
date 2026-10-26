@@ -13,6 +13,18 @@ public sealed unsafe partial class GuestModule
     public uint CallAddress(uint guestAddress, params ReadOnlySpan<uint> args)
     {
         var rva = guestAddress - artifact.GuestImageBase;
+        try
+        {
+            return Invoke(ResolveRvaOffset(rva, $"address 0x{guestAddress:X8}"), args);
+        }
+        catch (GuestExportException)
+        {
+            throw new GuestTrapException($"The guest asked a callback at 0x{guestAddress:X8}, which is not a translated code entry of this image.");
+        }
+    }
+
+    private nint ResolveRvaOffset(uint rva, string label)
+    {
         Dictionary<uint, uint> map;
         lock (resourceLock)
         {
@@ -25,7 +37,10 @@ public sealed unsafe partial class GuestModule
             map = addressMap;
         }
         if (!map.TryGetValue(rva, out var hostOffset))
-            throw new GuestTrapException($"The guest asked a callback at 0x{guestAddress:X8}, which is not a translated code entry of this image.");
-        return Invoke(hostMap + (nint)hostOffset, args);
+            throw new GuestExportException($"The translated image has no translated entry at RVA 0x{rva:X} for '{label}'.");
+        return hostMap + (nint)hostOffset;
     }
+
+    public GuestCallResult InvokeRva(uint rva, string label, GuestReturn kind, ReadOnlySpan<uint> args, uint ecx = 0, uint edx = 0) =>
+        Invoke(ResolveRvaOffset(rva, label), args, kind, ecx, edx);
 }

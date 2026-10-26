@@ -326,4 +326,33 @@ public sealed class VirtualMemoryTests
         Assert.Contains(Win32ImportResolver.Coverage.Implemented, a => a.Name == "VirtualProtect");
         Assert.Contains(Win32ImportResolver.Coverage.Implemented, a => a.Name == "VirtualQuery");
     }
+
+    [Fact]
+    public void GlobalMemoryStatusFillsMemoryStatusStructure()
+    {
+        using var w = new World();
+        var buf = w.Buf(32);
+        var ret = w.Kernel("GlobalMemoryStatus", buf);
+        Assert.Equal(0u, ret);
+        Assert.Equal(32u, w.Mem.ReadUInt32(buf));
+        Assert.Equal(25u, w.Mem.ReadUInt32(buf + 4));
+        Assert.Equal(0x7FFF0000u, w.Mem.ReadUInt32(buf + 8));
+        Assert.Equal(0x60000000u, w.Mem.ReadUInt32(buf + 12));
+        Assert.Equal(0x7FFF0000u, w.Mem.ReadUInt32(buf + 16));
+        Assert.Equal(0x60000000u, w.Mem.ReadUInt32(buf + 20));
+        Assert.Equal(0x7FFF0000u, w.Mem.ReadUInt32(buf + 24));
+        Assert.Equal(0x60000000u, w.Mem.ReadUInt32(buf + 28));
+
+        // Unmapped buffer fails with NoAccess
+        Assert.Equal(0u, w.Kernel("GlobalMemoryStatus", 0));
+        Assert.Equal(Win32Error.NoAccess, w.LastError);
+    }
+
+    [Fact]
+    public void GetFocusIsRegisteredInHostUser32Service()
+    {
+        var reg = new Win32Registry();
+        new HostUser32Service().Register(reg);
+        Assert.NotNull(reg.Find("USER32.dll", "GetFocus", null));
+    }
 }

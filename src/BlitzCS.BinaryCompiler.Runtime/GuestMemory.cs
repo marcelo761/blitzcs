@@ -298,6 +298,13 @@ public sealed unsafe class GuestMemory
         finally { module.ExitCall(); }
     }
 
+    public byte[] ReadBytes(uint address, int length)
+    {
+        var bytes = new byte[length];
+        Read(address, bytes);
+        return bytes;
+    }
+
     public void Write(uint address, ReadOnlySpan<byte> source)
     {
         module.EnterCall();
@@ -383,6 +390,13 @@ public sealed class GuestBuffer : IDisposable
     {
         Bounds(offset, destination.Length);
         module.Memory.Read(Address + (uint)offset, destination);
+    }
+
+    public byte[] Read(int offset, int count)
+    {
+        var bytes = new byte[count];
+        Read(offset, bytes);
+        return bytes;
     }
 
     public byte[] ToArray()

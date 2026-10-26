@@ -15,17 +15,25 @@ internal sealed record UserLibFunctionDeclaration(
     ExternalValueType ReturnType,
     IReadOnlyList<ExternalValueType> ParameterTypes,
     string SourceDeclsPath,
-    int Line);
+    int Line,
+    IReadOnlyList<bool>? PointerParameters = null,
+    bool IsWin32SystemDll = false,
+    string? Win32SystemDllName = null);
 
 internal static partial class UserLibResolver
 {
+    private static readonly HashSet<string> Win32SystemDllNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "user32.dll", "kernel32.dll", "gdi32.dll", "advapi32.dll", "winmm.dll", "ole32.dll", "wsock32.dll", "ws2_32.dll"
+    };
+
     [GeneratedRegex(@"^\.lib\s+""([^""]*)""\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex LibDirectiveRegex();
 
     [GeneratedRegex(@"^([A-Za-z_][A-Za-z0-9_]*)([%#$]?)\s*\(([^)]*)\)\s*(?::\s*""([^""]+)"")?\s*$", RegexOptions.CultureInvariant)]
     private static partial Regex FunctionDeclRegex();
 
-    [GeneratedRegex(@"^\s*([A-Za-z_][A-Za-z0-9_]*)([%#$*])\s*$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\s*([A-Za-z_][A-Za-z0-9_]*)([%#$*]?)\s*$", RegexOptions.CultureInvariant)]
     private static partial Regex ParameterDeclRegex();
 
     internal static IReadOnlyList<UserLibFunctionDeclaration> ParseDeclsFile(string declsPath, string fallbackLibraryDirectory)
@@ -38,6 +46,8 @@ internal static partial class UserLibResolver
         var results = new List<UserLibFunctionDeclaration>();
         string? currentLibraryPath = null;
         var ignoreCurrentLib = false;
+        var currentIsWin32Sys = false;
+        string? currentWin32SysName = null;
 
         var lines = File.ReadAllLines(declsPath, Encoding.Latin1);
         for (var i = 0; i < lines.Length; i++)
@@ -54,13 +64,38 @@ internal static partial class UserLibResolver
                 {
                     ignoreCurrentLib = true;
                     currentLibraryPath = null;
+                    currentIsWin32Sys = false;
+                    currentWin32SysName = null;
                     continue;
                 }
 
                 ignoreCurrentLib = false;
                 var candidateInDeclsDir = Path.GetFullPath(libName, declsDirectory);
                 var candidateInCatalogDir = Path.GetFullPath(libName, fallbackLibraryDirectory);
-                currentLibraryPath = File.Exists(candidateInDeclsDir) ? candidateInDeclsDir : candidateInCatalogDir;
+                if (File.Exists(candidateInDeclsDir))
+                {
+                    currentLibraryPath = candidateInDeclsDir;
+                    currentIsWin32Sys = false;
+                    currentWin32SysName = null;
+                }
+                else if (File.Exists(candidateInCatalogDir))
+                {
+                    currentLibraryPath = candidateInCatalogDir;
+                    currentIsWin32Sys = false;
+                    currentWin32SysName = null;
+                }
+                else if (Win32SystemDllNames.Contains(libName))
+                {
+                    currentLibraryPath = libName;
+                    currentIsWin32Sys = true;
+                    currentWin32SysName = libName;
+                }
+                else
+                {
+                    currentLibraryPath = candidateInCatalogDir;
+                    currentIsWin32Sys = false;
+                    currentWin32SysName = null;
+                }
                 continue;
             }
 
@@ -89,6 +124,7 @@ internal static partial class UserLibResolver
             };
 
             var paramTypes = new List<ExternalValueType>();
+            var pointerFlags = new List<bool>();
             if (!string.IsNullOrWhiteSpace(rawParams))
             {
                 foreach (var part in rawParams.Split(','))
@@ -98,12 +134,11 @@ internal static partial class UserLibResolver
                         throw new ArgumentException($"{declsPath}({i + 1}): unsupported parameter '{part.Trim()}' in '{basicName}'.");
 
                     var paramTag = paramMatch.Groups[2].Value;
-                    if (paramTag == "*")
-                        throw new ArgumentException($"{declsPath}({i + 1}): pointer parameter '{part.Trim()}' in '{basicName}' requires an explicit ABI bridge.");
-
+                    var isPointer = paramTag == "*";
+                    pointerFlags.Add(isPointer);
                     paramTypes.Add(paramTag switch
                     {
-                        "%" => ExternalValueType.Integer,
+                        "%" or "" or "*" => ExternalValueType.Integer,
                         "#" => ExternalValueType.Float,
                         "$" => ExternalValueType.String,
                         _ => throw new ArgumentException($"{declsPath}({i + 1}): unsupported parameter tag '{paramTag}' in '{basicName}'.")
@@ -118,7 +153,10 @@ internal static partial class UserLibResolver
                 returnType,
                 paramTypes,
                 declsPath,
-                i + 1));
+                i + 1,
+                PointerParameters: pointerFlags.Any(p => p) ? pointerFlags : null,
+                IsWin32SystemDll: currentIsWin32Sys,
+                Win32SystemDllName: currentWin32SysName));
         }
 
         return results;

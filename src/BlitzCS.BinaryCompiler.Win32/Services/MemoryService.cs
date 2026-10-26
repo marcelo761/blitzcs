@@ -163,9 +163,27 @@ public sealed class MemoryService : Win32Service
         return 28;
     }
 
+    private static uint GlobalMemoryStatus(Win32Call c)
+    {
+        uint buffer = c[0];
+        if (!c.Mem.IsMapped(buffer, 32)) return c.Ctx.Fail(Win32Error.NoAccess);
+        Span<byte> b = stackalloc byte[32];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(b, 32);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(b[4..], 25);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(b[8..], 0x7FFF0000u);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(b[12..], 0x60000000u);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(b[16..], 0x7FFF0000u);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(b[20..], 0x60000000u);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(b[24..], 0x7FFF0000u);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(b[28..], 0x60000000u);
+        c.Mem.Write(buffer, b);
+        return 0;
+    }
+
     protected override void Define()
     {
         const string K = "KERNEL32.dll";
+        Std(K, "GlobalMemoryStatus", 1, GlobalMemoryStatus);
         Std(K, "VirtualAlloc", 4, c =>
         {
             uint address = c[0], size = c[1], type = c[2], protect = c[3];

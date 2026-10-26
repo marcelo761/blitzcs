@@ -21,12 +21,17 @@ public sealed class ExternalFunctionSignature
     /// <summary>An immutable snapshot of the explicitly declared trailing optional defaults.</summary>
     public IReadOnlyList<object> DefaultValues { get; }
     internal bool HasDeclaredDefaults { get; }
+    public IReadOnlyList<bool> PointerParameters { get; }
 
     public ExternalFunctionSignature(string name, ExternalValueType returnType, IEnumerable<ExternalValueType> parameterTypes)
         : this(name, returnType, parameterTypes, null) { }
 
     public ExternalFunctionSignature(string name, ExternalValueType returnType, IEnumerable<ExternalValueType> parameterTypes,
         IEnumerable<object>? defaultValues)
+        : this(name, returnType, parameterTypes, defaultValues, null) { }
+
+    public ExternalFunctionSignature(string name, ExternalValueType returnType, IEnumerable<ExternalValueType> parameterTypes,
+        IEnumerable<object>? defaultValues, IEnumerable<bool>? pointerParameters)
     {
         ArgumentNullException.ThrowIfNull(parameterTypes);
         ExternalFunction.ValidateName(name);
@@ -48,6 +53,23 @@ public sealed class ExternalFunctionSignature
             if (!valid)
                 throw new ArgumentException("External defaults must be finite primitive constants matching the trailing parameter types exactly.", nameof(defaultValues));
         }
+        bool[] pointers;
+        if (pointerParameters is null)
+        {
+            pointers = new bool[parameters.Length];
+        }
+        else
+        {
+            pointers = pointerParameters.ToArray();
+            if (pointers.Length != parameters.Length)
+                throw new ArgumentException("Pointer parameter flags must match parameter count.", nameof(pointerParameters));
+            for (var i = 0; i < pointers.Length; i++)
+            {
+                if (pointers[i] && parameters[i] != ExternalValueType.Integer)
+                    throw new ArgumentException("Pointer parameters must be declared as Integer type.", nameof(pointerParameters));
+            }
+        }
+        PointerParameters = Array.AsReadOnly(pointers);
         HasDeclaredDefaults = defaultValues is not null;
         DefaultValues = Array.AsReadOnly(defaults);
         Name = name.ToLowerInvariant();

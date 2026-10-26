@@ -252,6 +252,7 @@ public sealed class Win32Registry
     public static string NormalizeDll(string dll)
     {
         var d = dll.ToLowerInvariant();
+        if (d is "crtdll" or "crtdll.dll") return "msvcrt.dll";
         return Path.HasExtension(d) ? d : d + ".dll";
     }
 
@@ -522,7 +523,8 @@ public sealed class Win32Context : IDisposable
         lock (bindGate)
         {
             if (memory is null) { memory = mem; memoryOwner = mem; }
-            else if (!ReferenceEquals(memoryOwner, mem)) throw new Win32UsageException("This context is already bound to another memory.");
+            else if (!ReferenceEquals(memoryOwner, mem) && !ReferenceEquals(memory, mem) && !(mem is GuestMemoryAdapter a && ReferenceEquals(memoryOwner, a.Memory)))
+                throw new Win32UsageException("This context is already bound to another memory.");
         }
     }
 

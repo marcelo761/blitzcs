@@ -11,6 +11,29 @@ internal abstract class __BlitzObject
     internal int HandleId;
     internal __BlitzObjectNode Position;
     internal abstract void ClearFields();
+    internal virtual byte[] __PackFields() => System.Array.Empty<byte>();
+    internal virtual void __UnpackFields(byte[] bytes) { }
+    private static int __nextMarshalId;
+    private static readonly object __marshalGate = new();
+    internal static int Marshal(__BlitzObject value, string location)
+    {
+        if (value is null) return 0;
+        Require(value, location);
+        System.Collections.Concurrent.ConcurrentDictionary<int, (byte[] Bytes, System.Action<byte[]> WriteBack)> table;
+        lock (__marshalGate)
+        {
+            if (System.AppContext.GetData("__BlitzCS.ObjectBuffers") is not System.Collections.Concurrent.ConcurrentDictionary<int, (byte[] Bytes, System.Action<byte[]> WriteBack)> existing)
+            {
+                existing = new();
+                System.AppContext.SetData("__BlitzCS.ObjectBuffers", existing);
+            }
+            table = existing;
+        }
+        var id = System.Threading.Interlocked.Decrement(ref __nextMarshalId);
+        if (id >= 0) id = -1;
+        table[id] = (value.__PackFields(), value.__UnpackFields);
+        return id;
+    }
     internal static T RequireReference<T>(T value, string location) where T : __BlitzObject
     {
         if (value is null) throw new System.InvalidOperationException(location + ": Object does not exist.");

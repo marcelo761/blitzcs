@@ -28,7 +28,38 @@ internal static class CSharpEmitter
                 foreach (var field in type.Fields) output.AppendLine($"internal {Primitive.CSharp(field.Value)} @{field.Key} = {Primitive.Default(field.Value)};");
                 output.AppendLine("internal override void ClearFields() {");
                 foreach (var field in type.Fields) output.AppendLine($"@{field.Key} = {(field.Value.IsVector ? "null" : Primitive.Default(field.Value))};");
-                output.AppendLine("} }");
+                output.AppendLine("}");
+                if (type.Fields.Count > 0 && type.Fields.Values.All(f => !f.IsVector && (f == ValueType.Integer || f == ValueType.Float)))
+                {
+                    output.AppendLine("internal override byte[] __PackFields() {");
+                    output.AppendLine($"    var __b = new byte[{type.Fields.Count * 4}];");
+                    var idx = 0;
+                    foreach (var field in type.Fields)
+                    {
+                        var offset = idx * 4;
+                        if (field.Value == ValueType.Float)
+                            output.AppendLine($"    System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(new System.Span<byte>(__b, {offset}, 4), @{field.Key});");
+                        else
+                            output.AppendLine($"    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(new System.Span<byte>(__b, {offset}, 4), @{field.Key});");
+                        idx++;
+                    }
+                    output.AppendLine("    return __b;");
+                    output.AppendLine("}");
+                    output.AppendLine("internal override void __UnpackFields(byte[] __b) {");
+                    output.AppendLine($"    if (__b is null || __b.Length < {type.Fields.Count * 4}) return;");
+                    idx = 0;
+                    foreach (var field in type.Fields)
+                    {
+                        var offset = idx * 4;
+                        if (field.Value == ValueType.Float)
+                            output.AppendLine($"    @{field.Key} = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(new System.ReadOnlySpan<byte>(__b, {offset}, 4));");
+                        else
+                            output.AppendLine($"    @{field.Key} = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(new System.ReadOnlySpan<byte>(__b, {offset}, 4));");
+                        idx++;
+                    }
+                    output.AppendLine("}");
+                }
+                output.AppendLine("}");
             }
             output.AppendLine("internal static class __BlitzObjects {");
             foreach (var type in program.ObjectTypes) output.AppendLine($"internal static readonly __BlitzObjectList<__BlitzObject_{type.Name}> @{type.Name} = new();");
@@ -169,7 +200,7 @@ internal static class CSharpEmitter
         IrVectorAccess access => access.Type == ValueType.String ? $"({EmitVectorAccess(access)} ?? \"\")" : EmitVectorAccess(access),
         IrField field => field.Type == ValueType.String ? $"({EmitField(field)} ?? \"\")" : EmitField(field),
         IrInteger integer => integer.Value.ToString(CultureInfo.InvariantCulture),
-        IrFloat floating => floating.Value.ToString("R", CultureInfo.InvariantCulture) + "f",
+        IrFloat floating => EmitFloat(floating.Value),
         IrString text => Quote(text.Value),
         IrConvert conversion => EmitConversion(conversion),
         IrArrayAccess access => access.Type == ValueType.String ? $"({EmitArrayAccess(access)} ?? \"\")" : EmitArrayAccess(access),
@@ -207,6 +238,7 @@ internal static class CSharpEmitter
         "last" => $"{ObjectList(operation.Type)}.Last()",
         "after" => $"{ObjectList(operation.Type)}.Following(global::__BlitzObject.RequireReference({EmitExpression(operation.Value!)}, {Quote(operation.Location)}))",
         "before" => $"{ObjectList(operation.Type)}.Preceding(global::__BlitzObject.RequireReference({EmitExpression(operation.Value!)}, {Quote(operation.Location)}))",
+        "marshal" => $"global::__BlitzObject.Marshal({EmitExpression(operation.Value!)}, {Quote(operation.Location)})",
         _ => throw new InvalidOperationException("Unknown object operation.")
     };
 
@@ -243,4 +275,15 @@ internal static class CSharpEmitter
         TokenKind.Equal => "==", TokenKind.NotEqual => "!=", TokenKind.Less => "<", TokenKind.Greater => ">", TokenKind.LessEqual => "<=", TokenKind.GreaterEqual => ">=",
         _ => throw new InvalidOperationException("Unknown IR operator.")
     };
+
+    private static string EmitFloat(float value)
+    {
+        if (float.IsNaN(value)) return "global::System.Single.NaN";
+        if (float.IsPositiveInfinity(value)) return "global::System.Single.PositiveInfinity";
+        if (float.IsNegativeInfinity(value)) return "global::System.Single.NegativeInfinity";
+        var text = value.ToString("R", CultureInfo.InvariantCulture);
+        if (text == "-0") return "-0.0f";
+        if (text == "0") return "0.0f";
+        return text + "f";
+    }
 }
