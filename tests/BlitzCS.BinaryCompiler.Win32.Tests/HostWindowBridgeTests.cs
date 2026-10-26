@@ -179,6 +179,19 @@ public sealed class HostBridgeLayoutTests
         Assert.Equal(IntPtr.Zero, Marshal.ReadIntPtr(array, 24));
         Assert.Equal((8, 0x00FFFF0C, 1), (Marshal.ReadInt32(array, 32), Marshal.ReadInt32(array, 36), Marshal.ReadInt32(array, 40)));
     }
+
+    [Fact]
+    public void FvfStride_computes_vertex_size_for_standard_and_multi_texture_formats_and_refuses_invalid_fvf()
+    {
+        Assert.Equal(32, Direct3DAdapters.FvfStride(0x112));   // D3DFVF_VERTEX (XYZ | NORMAL | TEX1)
+        Assert.Equal(32, Direct3DAdapters.FvfStride(0x1E2));   // D3DFVF_LVERTEX (XYZ | RESERVED1 | DIFFUSE | SPECULAR | TEX1)
+        Assert.Equal(32, Direct3DAdapters.FvfStride(0x1C4));   // D3DFVF_TLVERTEX (XYZRHW | DIFFUSE | SPECULAR | TEX1)
+        Assert.Equal(44, Direct3DAdapters.FvfStride(0x252));   // Blitz3D vertex (XYZ | NORMAL | DIFFUSE | TEX2)
+        Assert.Equal(44, Direct3DAdapters.FvfStride(0x002u | 0x300u | (3u << 16) | (1u << 18) | (2u << 20)));   // XYZ (12) + 1D (4) + 3D (12) + 4D (16)
+        Assert.Throws<ComArgumentException>(() => Direct3DAdapters.FvfStride(0));          // no position
+        Assert.Throws<ComArgumentException>(() => Direct3DAdapters.FvfStride(0x014));      // XYZRHW | NORMAL
+        Assert.Throws<ComArgumentException>(() => Direct3DAdapters.FvfStride(0x902));      // 9 texture sets
+    }
 }
 
 /// <summary>Which hosts get the bridge (the Linux target must not gain these APIs).</summary>
@@ -457,5 +470,90 @@ public sealed class HostDirectDrawBridgeTests
         Assert.Equal(live - 2, com.LiveObjects);
         var dead = Assert.Throws<GuestImportException>(() => g.AddRef(dd));
         Assert.Contains("after the object was destroyed", dead.Message + dead.InnerException?.Message);
+    }
+
+    [RequiresHostDirectDrawFact]
+    public void Direct3D7_creates_a_device_and_vertex_buffer_locks_with_a_shadow_clears_with_float_z_and_draws()
+    {
+        using var g = new ComRig(256);
+        var mem = g.Module.Memory;
+        var create = g.GetProc("ddraw.dll", "DirectDrawCreateEx");
+        mem.Write(D(0x500), DdConst.IidDirectDraw7.ToByteArray());
+        Assert.Equal(0u, g.F("callptr4", create, 0, D(0x520), D(0x500), 0));
+        var dd = mem.ReadUInt32(D(0x520));
+        Assert.Equal(0u, g.Vt(dd, 20, 0, 8));                                  // SetCooperativeLevel(NULL, DDSCL_NORMAL)
+        Assert.Equal(0u, g.QueryInterface(dd, DdConst.IidDirect3D7, out var d3d));
+
+        // 32x32 32-bit RGB 3D-device render target in system memory
+        var desc = D(0x600);
+        mem.Write(desc, new byte[124]);
+        uint[] head = [124, 0x1007, 32, 32];
+        for (var i = 0; i < head.Length; i++) mem.WriteUInt32(desc + 4u * (uint)i, head[i]);
+        uint[] pf = [32, 0x40, 0, 32, 0xFF0000, 0xFF00, 0xFF, 0];
+        for (var i = 0; i < pf.Length; i++) mem.WriteUInt32(desc + 72 + 4u * (uint)i, pf[i]);
+        mem.WriteUInt32(desc + 104, 0x40 | 0x800 | 0x2000);                    // DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY | DDSCAPS_3DDEVICE
+        Assert.Equal(0u, g.Vt(dd, 6, desc, D(0x6C0), 0));
+        var target = mem.ReadUInt32(D(0x6C0));
+
+        // CreateDevice: try IID_IDirect3DRGBDevice, then IID_IDirect3DHALDevice
+        Guid[] clsidCandidates = [new("A4665C60-2673-11CF-A31A-00AA00B93356"), new("84E63DE0-46AA-11CF-816F-0000C020156E")];
+        uint device = 0, hr = 1;
+        foreach (var clsid in clsidCandidates)
+        {
+            mem.Write(D(0x540), clsid.ToByteArray());
+            hr = g.Vt(d3d, 4, D(0x540), target, D(0x560));
+            if (hr == 0) { device = mem.ReadUInt32(D(0x560)); break; }
+        }
+        Assert.Equal(0u, hr);
+        Assert.NotEqual(0u, device);
+
+        // Identity preserved for GetDirect3D and GetRenderTarget
+        Assert.Equal(0u, g.Vt(device, 7, D(0x564)));
+        Assert.Equal(d3d, mem.ReadUInt32(D(0x564)));
+        g.Release(d3d);
+        Assert.Equal(0u, g.Vt(device, 9, D(0x568)));
+        Assert.Equal(target, mem.ReadUInt32(D(0x568)));
+        g.Release(target);
+
+        // CreateVertexBuffer (3 TLVERTEX vertices = 96 bytes) + Lock/Unlock shadow round-trip
+        var vbDesc = D(0x700);
+        mem.WriteUInt32(vbDesc, 16);
+        mem.WriteUInt32(vbDesc + 4, 0x10000);                                  // D3DVBCAPS_SYSTEMMEMORY
+        mem.WriteUInt32(vbDesc + 8, 0x1C4);                                    // D3DFVF_TLVERTEX
+        mem.WriteUInt32(vbDesc + 12, 3);
+        Assert.Equal(0u, g.Vt(d3d, 5, vbDesc, D(0x720), 0));
+        var vb = mem.ReadUInt32(D(0x720));
+        Assert.Equal(0u, g.Vt(vb, 3, 1, D(0x724), D(0x728)));                  // Lock(DDLOCK_WAIT, &ptr, &size)
+        var vbShadow = mem.ReadUInt32(D(0x724));
+        var vbSize = mem.ReadUInt32(D(0x728));
+        Assert.Equal(96u, vbSize);
+        Assert.True(vbShadow != 0 && mem.IsMapped(vbShadow, 96));
+        for (uint i = 0; i < 24; i++) mem.WriteUInt32(vbShadow + i * 4, 0x1000u + i);
+        Assert.Equal(0u, g.Vt(vb, 4));                                         // Unlock
+        Assert.Equal(0x887601AAu, g.Vt(vb, 4));                                // DDERR_NOTLOCKED
+        Assert.Equal(0u, g.Vt(vb, 3, 0x11, D(0x724), 0));                      // Lock(DDLOCK_READONLY | DDLOCK_WAIT, &ptr, NULL)
+        var vbShadow2 = mem.ReadUInt32(D(0x724));
+        for (uint i = 0; i < 24; i++) Assert.Equal(0x1000u + i, mem.ReadUInt32(vbShadow2 + i * 4));
+        Assert.Equal(0u, g.Vt(vb, 4));
+
+        // SetViewport + Clear(count=0, rects=NULL, flags=D3DCLEAR_TARGET(1), color=0x00224466, z=1.0f, stencil=0) + BeginScene/EndScene
+        var vp = D(0x740);
+        mem.WriteUInt32(vp, 0); mem.WriteUInt32(vp + 4, 0); mem.WriteUInt32(vp + 8, 32); mem.WriteUInt32(vp + 12, 32);
+        mem.WriteUInt32(vp + 16, BitConverter.SingleToUInt32Bits(0.0f));
+        mem.WriteUInt32(vp + 20, BitConverter.SingleToUInt32Bits(1.0f));
+        Assert.Equal(0u, g.Vt(device, 13, vp));
+        Assert.Equal(0u, g.Vt(device, 10, 0, 0, 1, 0x00224466, BitConverter.SingleToUInt32Bits(1.0f), 0));
+        Assert.Equal(0u, g.Vt(device, 5));                                     // BeginScene
+        Assert.Equal(0u, g.Vt(device, 6));                                     // EndScene
+
+        // Verify target surface was cleared to 0x00224466
+        mem.Write(D(0x800), new byte[124]);
+        mem.WriteUInt32(D(0x800), 124);
+        Assert.Equal(0u, g.Vt(target, 25, 0, D(0x800), 0x11, 0));
+        var bits = mem.ReadUInt32(D(0x800) + 36);
+        Assert.Equal(0x00224466u, mem.ReadUInt32(bits) & 0x00FFFFFFu);
+        Assert.Equal(0u, g.Vt(target, 32, 0));
+
+        g.Release(vb); g.Release(device); g.Release(target); g.Release(d3d); g.Release(dd);
     }
 }

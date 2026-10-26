@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using BlitzCS.BcRun;
@@ -6,6 +7,18 @@ using BlitzCS.Testing;
 using Xunit;
 
 namespace BlitzCS.BinaryCompiler.Win32.Tests;
+
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class Blitz3DSdkDirectDrawFactAttribute : FactAttribute
+{
+    public Blitz3DSdkDirectDrawFactAttribute()
+    {
+        if (Blitz3DSdkFactAttribute.Dir is not { } dir) Skip = $"{Blitz3DSdkFactAttribute.Variable} is not set (point it at the extracted Blitz3D SDK root, the directory that contains bin/blitzcc.exe)";
+        else if (!File.Exists(Path.Combine(dir, "bin", "blitzcc.exe"))) Skip = $"{Blitz3DSdkFactAttribute.Variable}='{dir}' has no bin/blitzcc.exe";
+        else if (!OperatingSystem.IsWindows()) Skip = "needs a Windows host (Windows or Wine) with ddraw.dll; this host is not Windows";
+        else if (!System.Runtime.InteropServices.NativeLibrary.TryLoad("ddraw.dll", out _)) Skip = "the host's ddraw.dll cannot be loaded (under Wine: a prefix with the vkd3d DLLs, BLITZCS_WINE_GRAPHICS=1)";
+    }
+}
 
 /// <summary>
 /// End-to-end differential: the ORIGINAL blitzcc.exe (genuine Blitz3D SDK V1.118, BLITZCS_BLITZ3D_DIR) compiled through BCSBRE must produce executables that are
@@ -180,5 +193,69 @@ public sealed class BlitzccDifferentialTests : IDisposable
         var e = Assert.ThrowsAny<Exception>(() => AssertDigest(flipped, exe, "hello.bb"));
         Assert.Contains("AddressOfEntryPoint", e.Message);
         Assert.Contains("differs from the native-Wine reference", e.Message);
+    }
+
+    [Blitz3DSdkDirectDrawFact]
+    public void ProducedGraphics3DExecutableRendersTexturedMeshReadsPixelsAndInputAndExitsZero()
+    {
+        const string source = """
+            Graphics3D 320,240,0,2
+            SetBuffer BackBuffer()
+            cam = CreateCamera()
+            CameraClsColor cam, 16, 32, 64
+            light = CreateLight()
+            cube = CreateCube()
+            PositionEntity cube, 0, 0, 3
+            EntityColor cube, 240, 80, 32
+            EntityFX cube, 1
+            tex = CreateTexture(16, 16)
+            SetBuffer TextureBuffer(tex)
+            ClsColor 255, 255, 255
+            Cls
+            SetBuffer BackBuffer()
+            EntityTexture cube, tex
+            For frame = 1 To 3
+                TurnEntity cube, 0, 15, 0
+                UpdateWorld
+                RenderWorld
+                k = KeyDown(1)
+                mx = MouseX()
+                my = MouseY()
+                If frame = 3 Then
+                    LockBuffer BackBuffer()
+                    corner = ReadPixelFast(5, 5, BackBuffer()) And $FFFFFF
+                    center = ReadPixelFast(160, 120, BackBuffer()) And $FFFFFF
+                    UnlockBuffer BackBuffer()
+                EndIf
+                Flip
+            Next
+            f = WriteFile("C:\g3d_out.txt")
+            WriteLine f, "corner=" + Hex$(corner)
+            WriteLine f, "center=" + Hex$(center)
+            WriteLine f, "key=" + k + " mx=" + mx + " my=" + my
+            CloseFile f
+            End
+            """;
+
+        Compile("g3d.bb", ("g3d.bb", source));
+        var sandbox = PrepareSandbox();
+        var exePath = Path.Combine(sandbox, "out.exe");
+        var outFile = Path.Combine(sandbox, "g3d_out.txt");
+        File.Delete(outFile);
+
+        var r = BcRunner.Run(new BcRunOptions
+        {
+            ExePath = exePath, SandboxRoot = sandbox, TargetOs = "windows-x64",
+            CacheDirectory = Path.Combine(dir, "cache"),
+            Stdout = new MemoryStream(), Stderr = new MemoryStream(), Stdin = new MemoryStream(),
+        });
+        Assert.True(r.Failure is null, $"produced Graphics3D exe failed: {r.Failure}\n{string.Join("\n", r.Diagnostics)}");
+        Assert.True(r.CalledExit);
+        Assert.Equal(0u, r.ExitCode);
+        Assert.True(File.Exists(outFile), "produced Graphics3D exe did not write C:\\g3d_out.txt");
+        var report = File.ReadAllText(outFile);
+        Assert.Contains("corner=00102040", report);
+        Assert.Contains("center=00F05020", report);
+        Assert.Contains("key=0 mx=160 my=120", report);
     }
 }

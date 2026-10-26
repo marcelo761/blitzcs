@@ -30,7 +30,8 @@ export DOTNET_gcServer=0 DOTNET_TieredPGO=0
 export BLITZCS_WINE_WORK="${BLITZCS_WINE_WORK:-/tmp/blitzcs-w-$(id -u)}"
 _d="${BLITZCS_WINE_DISPLAY:-:97}"
 if [ -z "${BLITZCS_WINE_NO_XVFB:-}" ]; then
-  if ! [ -e "/tmp/.X11-unix/X${_d#:}" ]; then
+  if ! pgrep -f "Xvfb $_d(\$| )" >/dev/null 2>&1; then
+    rm -f "/tmp/.X11-unix/X${_d#:}" "/tmp/.X${_d#:}-lock" 2>/dev/null || true
     _xv=$(command -v Xvfb || true); [ -z "$_xv" ] && [ -x "$HOME/.local/bin/Xvfb" ] && _xv="$HOME/.local/bin/Xvfb"
     if [ -n "$_xv" ]; then ("$_xv" "$_d" -screen 0 800x600x24 >/dev/null 2>&1 &) ; sleep 1; else echo "wine/env.sh: Xvfb not found (wineboot may still work headless)" >&2; fi
   fi

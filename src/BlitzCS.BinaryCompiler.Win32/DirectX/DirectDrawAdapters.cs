@@ -14,6 +14,7 @@ public static class DdConst
     public static readonly Guid IidDirectDrawClipper = new("6C14DB85-A733-11CE-A521-0020AF0BE560");
     public static readonly Guid IidDirect3D7 = new("F5049E77-4861-11D2-A407-00A0C90629A8");
     public static readonly Guid IidDirect3DDevice7 = new("F5049E79-4861-11D2-A407-00A0C90629A8");
+    public static readonly Guid IidDirect3DVertexBuffer7 = new("F5049E7D-4861-11D2-A407-00A0C90629A8");
     public const uint DdErrInvalidParams = 0x80070057, DdErrNoDirectDrawHw = 0x887601FF;
     public const uint DdsdLpSurface = 0x800;
 }
@@ -24,7 +25,8 @@ public static class DdConst
 /// </summary>
 public static class DdLayouts
 {
-    public const int GuestSurfaceDesc2 = 124, HostSurfaceDesc2 = 136, GuestDdCapsMax = 380, DeviceIdentifier2 = 1072, D3dDeviceDesc7 = 236, PixelFormat = 32;
+    public const int GuestSurfaceDesc2 = 124, HostSurfaceDesc2 = 136, GuestDdCapsMax = 380, DeviceIdentifier2 = 1072, D3dDeviceDesc7 = 236, PixelFormat = 32,
+        D3dViewport7 = 24, D3dMatrix = 64, D3dMaterial7 = 68, D3dLight7 = 104, D3dVertexBufferDesc = 16, D3dClipStatus = 32;
 
     /// <summary>Host to guest. lpSurface is never handed over (a host address): it reads 0.</summary>
     public static void SurfaceDescToGuest(ReadOnlySpan<byte> h, Span<byte> g)
@@ -61,6 +63,8 @@ public static unsafe class DirectDrawAdapters
         iid == DdConst.IidDirectDraw ? dd1 ??= DirectDraw1() :
         iid == DdConst.IidDirectDrawClipper ? clipper ??= Clipper() :
         iid == DdConst.IidDirect3D7 ? d3d7 ??= Direct3D7() :
+        iid == DdConst.IidDirect3DDevice7 ? Direct3DAdapters.DeviceTable :
+        iid == DdConst.IidDirect3DVertexBuffer7 ? Direct3DAdapters.VertexBufferTable :
         iid == DdConst.IidDirectDrawSurface7 ? DirectDrawSurfaces.Table :
         null;
 
@@ -244,8 +248,8 @@ public static unsafe class DirectDrawAdapters
         var i = new GuestComInterface("IDirect3D7", DdConst.IidDirect3D7);
         var host = HostOf(DdConst.IidDirect3D7);
         i.Add(new GuestComMethod("EnumDevices", 2, c => EnumDevices(c, host(c.Object))));
-        i.Absent("CreateDevice", 3, "IDirect3DDevice7 has no adapter table yet");
-        i.Absent("CreateVertexBuffer", 3, "IDirect3DVertexBuffer7 has no adapter table");
+        i.Add(new HostComMethod("CreateDevice", 4, ComArgs.Guid(optional: false), InObject(DdConst.IidDirectDrawSurface7, false), OutObject(DdConst.IidDirect3DDevice7)).ToGuest(host));
+        i.Add(new HostComMethod("CreateVertexBuffer", 5, ComArgs.InStruct(DdLayouts.D3dVertexBufferDesc), OutObject(DdConst.IidDirect3DVertexBuffer7), ComArgs.Value).ToGuest(host));
         i.Add(new GuestComMethod("EnumZBufferFormats", 3, c => EnumZBufferFormats(c, host(c.Object))));
         i.Add(new HostComMethod("EvictManagedTextures", 7).ToGuest(host));
         return i;

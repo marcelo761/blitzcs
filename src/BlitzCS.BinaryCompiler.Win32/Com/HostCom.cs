@@ -81,11 +81,12 @@ public sealed class ComCallScope : IDisposable
 {
     private readonly List<Action<uint>> completions = [];
     private readonly GuestComCall? call;
-    internal ComCallScope(GuestComCall call) { this.call = call; Mem = call.Mem; Ctx = call.Ctx; }
+    internal ComCallScope(GuestComCall call, uint[]? guestArgs = null) { this.call = call; Mem = call.Mem; Ctx = call.Ctx; GuestArgs = guestArgs ?? []; }
     internal ComCallScope(IWin32Memory mem, Win32Context ctx, uint[] guestArgs) { Mem = mem; Ctx = ctx; GuestArgs = guestArgs; }
     public GuestComCall Call => call ?? throw new InvalidOperationException("This adapted call is a flat export, not a COM method.");
-    /// <summary>All guest argument words of a flat export call (an argument whose conversion depends on another one, such as a counted string, reads it here). Empty for COM calls.</summary>
+    /// <summary>All guest argument words of the call (an argument whose conversion depends on another one, such as a counted string or array, reads it here).</summary>
     public uint[] GuestArgs { get; } = [];
+    public uint Arg(int index) => index < GuestArgs.Length ? GuestArgs[index] : Call.Arg(index);
     public IWin32Memory Mem { get; }
     public Win32Context Ctx { get; }
     public NativeScope Native { get; } = new();
@@ -205,11 +206,13 @@ public sealed class HostComMethod
     /// <summary>Converts the guest arguments, calls the native method, completes the out arguments and returns the host HRESULT unchanged (E_INVALIDARG for an unadaptable argument).</summary>
     public uint Invoke(HostComInterface host, GuestComCall call)
     {
-        using var scope = new ComCallScope(call);
+        var guestArgs = new uint[Args.Count];
+        for (var i = 0; i < Args.Count; i++) guestArgs[i] = call.Arg(i);
+        using var scope = new ComCallScope(call, guestArgs);
         Span<nint> native = stackalloc nint[Args.Count];
         try
         {
-            for (var i = 0; i < Args.Count; i++) native[i] = Args[i].ToHost(scope, call.Arg(i));
+            for (var i = 0; i < Args.Count; i++) native[i] = Args[i].ToHost(scope, guestArgs[i]);
         }
         catch (ComArgumentException e)
         {
