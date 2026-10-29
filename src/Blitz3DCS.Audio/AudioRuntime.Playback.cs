@@ -1,12 +1,17 @@
 namespace Blitz3DCS.Audio;
 
-public sealed record AudioStatistics(int Assets, int Channels, long SubmittedFrames, long NonSilentFrames, double PcmEnergy);
+public sealed record AudioStatistics(int Assets, int Channels, long SubmittedFrames, long NonSilentFrames, double PcmEnergy)
+{
+    public long StreamUnderruns { get; init; }
+    public long StreamBufferBytes { get; init; }
+}
 
 public sealed partial class AudioRuntime
 {
-    private sealed class Asset(DecodedAudio audio, bool stream, bool loop)
+    private sealed class Asset(DecodedAudio? audio, BufferedAudioStream? buffered, bool stream, bool loop)
     {
-        internal readonly DecodedAudio Audio = audio;
+        internal readonly DecodedAudio? Audio = audio;
+        internal readonly BufferedAudioStream? Buffered = buffered;
         internal readonly bool Stream = stream;
         internal bool Loop = loop;
         internal int Volume = stream ? 128 : 255;
@@ -29,7 +34,18 @@ public sealed partial class AudioRuntime
 
     public AudioStatistics Statistics
     {
-        get { lock (_gate) { PruneChannels(); return new(_assets.Count, _channels.Count, _submittedFrames, _nonSilentFrames, _pcmEnergy); } }
+        get
+        {
+            lock (_gate)
+            {
+                PruneChannels();
+                return new(_assets.Count, _channels.Count, _submittedFrames, _nonSilentFrames, _pcmEnergy)
+                {
+                    StreamUnderruns = _mixer?.StreamUnderruns ?? 0,
+                    StreamBufferBytes = _assets.Values.Sum(static asset => asset.Buffered?.RetainedBufferBytes ?? 0),
+                };
+            }
+        }
     }
     public int GetError() { lock (_gate) return _errorCode; }
     private int Fail(int code, string message, int value = 0) { _errorCode = code; LastError = message; return value; }
@@ -53,25 +69,51 @@ public sealed partial class AudioRuntime
                 return Fail(18, "Only file-backed LOOP_OFF(1)/LOOP_NORMAL(2), zero offset and full file are implemented.");
         }
         // File IO and codec allocations run outside the render/control gate.
-        DecodedAudio decoded;
-        try { decoded = AudioDecoder.Decode(path.Replace('\\', Path.DirectorySeparatorChar)); }
+        DecodedAudio? decoded = null;
+        BufferedAudioStream? buffered = null;
+        try
+        {
+            var normalizedPath = path.Replace('\\', Path.DirectorySeparatorChar);
+            if (stream) buffered = _streamLoader(normalizedPath);
+            else decoded = AudioDecoder.Decode(normalizedPath);
+        }
         catch (FileNotFoundException error) { lock (_gate) return session == _session ? Fail(9, error.Message) : 0; }
-        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or BadImageFormatException or EntryPointNotFoundException)
+        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or TimeoutException or DllNotFoundException or BadImageFormatException or EntryPointNotFoundException)
         { lock (_gate) return session == _session ? Fail(10, error.Message) : 0; }
+
+        var disposeStream = false;
+        var result = 0;
         lock (_gate)
         {
-            if (_mixer is null || session != _session) return Fail(2, "Audio session changed during decoding.");
-            if (decoded.Channels is not (1 or 2)) return Fail(10, "Only mono/stereo audio is supported.");
-            if (_nextToken > int.MaxValue) return Fail(12, "Audio handle token space is exhausted.");
-            var token = Token();
-            _assets.Add(token, new(decoded, stream, (mode & 2) != 0));
-            return stream ? token : Success(token);
+            if (_mixer is null || session != _session)
+            {
+                disposeStream = buffered is not null;
+                result = session == _session ? Fail(2, "Audio session is no longer initialized.") : 0;
+            }
+            else if (!stream && decoded?.Channels is not (1 or 2))
+            {
+                result = Fail(10, "Only mono/stereo audio is supported.");
+            }
+            else if (_nextToken > int.MaxValue)
+            {
+                disposeStream = buffered is not null;
+                result = Fail(12, "Audio handle token space is exhausted.");
+            }
+            else
+            {
+                var token = Token();
+                _assets.Add(token, new(decoded, buffered, stream, (mode & 2) != 0));
+                result = stream ? token : Success(token);
+            }
         }
+        if (disposeStream) buffered!.Dispose();
+        return result;
     }
 
     public int StreamPlay(int channel, int handle) => Play(handle, channel, true);
     public int PlaySample(int handle) => Play(handle, -1, false);
-    private int Play(int handle, int channel, bool stream)
+    public int PlaySample3D(int handle, AudioEmitterState emitter) => Play(handle, -1, false, emitter);
+    private int Play(int handle, int channel, bool stream, AudioEmitterState? emitter = null)
     {
         lock (_gate)
         {
@@ -80,12 +122,22 @@ public sealed partial class AudioRuntime
                 return Fail(14, "Invalid or deleted audio asset handle.", -1);
             if (_nextToken > int.MaxValue) return Fail(12, "Audio handle token space is exhausted.", -1);
             PruneChannels();
-            if (stream) { _mixer.StopByAsset(asset.Audio); PruneChannels(); }
             var slot = -1;
             if (channel != -1 && !_channels.TryGetValue(channel, out slot))
                 return Fail(14, "Invalid channel handle.", -1);
-            slot = _mixer.Play(asset.Audio, asset.Volume, asset.Pan, asset.Frequency, slot, asset.Loop);
+            slot = stream
+                ? _mixer.Play(asset.Buffered!, asset.Volume, asset.Pan, asset.Frequency, slot, asset.Loop)
+                : _mixer.Play(asset.Audio!, asset.Volume, asset.Pan, asset.Frequency, slot, asset.Loop);
             if (slot < 0) return Fail(16, "All software audio channels are allocated.", -1);
+            if (emitter is { } spatialEmitter)
+            {
+                try { _mixer.SetChannel3D(slot, spatialEmitter); }
+                catch (ArgumentException error)
+                {
+                    _mixer.Stop(slot);
+                    return Fail(14, error.Message, -1);
+                }
+            }
             if (_slotTokens[slot] != 0) _channels.Remove(_slotTokens[slot]);
             var token = Token();
             _slotTokens[slot] = token;
@@ -103,20 +155,35 @@ public sealed partial class AudioRuntime
         {
             if (_mixer is null || !_assets.TryGetValue(handle, out var asset) || !asset.Stream)
                 return Fail(14, "Invalid stream handle.");
-            _mixer.StopByAsset(asset.Audio); PruneChannels(); return 1;
+            _mixer.StopByAsset(asset.Buffered!); PruneChannels(); return 1;
         }
     }
     public int StreamClose(int handle) => Free(handle, true);
     public int SampleFree(int handle) => Free(handle, false);
     private int Free(int handle, bool stream)
     {
+        BufferedAudioStream? disposeStream;
+        var result = 0;
         lock (_gate)
         {
             if (_mixer is null || !_assets.TryGetValue(handle, out var asset) || asset.Stream != stream)
                 return Fail(14, "Invalid or deleted audio asset handle.");
-            _mixer.StopByAsset(asset.Audio);
-            _assets.Remove(handle); PruneChannels(); return Success();
+            if (stream)
+            {
+                disposeStream = asset.Buffered;
+                _mixer.StopByAsset(asset.Buffered!);
+            }
+            else
+            {
+                disposeStream = null;
+                _mixer.StopByAsset(asset.Audio!);
+            }
+            _assets.Remove(handle);
+            PruneChannels();
+            result = Success();
         }
+        disposeStream?.Dispose();
+        return result;
     }
     public int StopSound(int channel)
     {

@@ -7,6 +7,7 @@ public sealed partial class AudioRuntime : IDisposable
 {
     private readonly object _gate = new();
     private readonly ISdlAudio _sdl;
+    private readonly Func<string, BufferedAudioStream> _streamLoader;
     private uint _device;
     private bool _ownsAudioSubsystem;
     private bool _disposed;
@@ -17,7 +18,12 @@ public sealed partial class AudioRuntime : IDisposable
 
     public AudioRuntime() : this(new SdlAudio()) { }
 
-    internal AudioRuntime(ISdlAudio sdl) => _sdl = sdl;
+    internal AudioRuntime(ISdlAudio sdl, Func<string, BufferedAudioStream>? streamLoader = null)
+    {
+        NativeAudioImportResolver.EnsureInstalled();
+        _sdl = sdl;
+        _streamLoader = streamLoader ?? (path => BufferedAudioStream.Load(path));
+    }
 
     public bool IsInitialized
     {
@@ -102,6 +108,7 @@ public sealed partial class AudioRuntime : IDisposable
     {
         Thread? thread;
         ManualResetEventSlim? stop;
+        BufferedAudioStream[] streams;
         lock (_gate)
         {
             _session++;
@@ -114,6 +121,7 @@ public sealed partial class AudioRuntime : IDisposable
             _playback?.Dispose();
             _playback = null;
             _mixer = null;
+            streams = _assets.Values.Select(static asset => asset.Buffered).OfType<BufferedAudioStream>().ToArray();
             _assets.Clear();
             _channels.Clear();
             _paused.Clear();
@@ -135,6 +143,7 @@ public sealed partial class AudioRuntime : IDisposable
             _errorCode = 0;
         }
         if (thread is not null && thread != Thread.CurrentThread) thread.Join();
+        foreach (var stream in streams) stream.Dispose();
         stop?.Dispose();
     }
 

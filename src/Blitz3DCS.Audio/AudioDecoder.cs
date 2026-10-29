@@ -38,6 +38,7 @@ public static class AudioDecoder
     /// <exception cref="InvalidDataException">The file is malformed or exceeds supported bounds.</exception>
     public static DecodedAudio Decode(string path)
     {
+        NativeAudioImportResolver.EnsureInstalled();
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var extension = Path.GetExtension(path);
         if (!extension.Equals(".wav", StringComparison.OrdinalIgnoreCase) &&
@@ -55,7 +56,7 @@ public static class AudioDecoder
         }
         catch (DllNotFoundException error)
         {
-            throw new InvalidOperationException("Audio decoding requires the Linux libsndfile runtime (libsndfile.so.1).", error);
+            throw new InvalidOperationException("Audio decoding requires the matching libsndfile native runtime beside the application on Windows, or libsndfile.so.1 on Linux.", error);
         }
         if (file == IntPtr.Zero)
             throw new InvalidDataException($"Could not decode audio file '{fullPath}': {SndFile.GetError(IntPtr.Zero)}");
