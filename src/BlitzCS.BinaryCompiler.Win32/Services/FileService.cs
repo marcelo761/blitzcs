@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 
 namespace BlitzCS.BinaryCompiler.Win32;
@@ -25,10 +26,25 @@ internal sealed class FindHandle(List<FileSystemInfo?> entries, List<string> nam
 
 internal sealed class FileState : IDisposable
 {
+    internal sealed class DirectoryListing
+    {
+        public readonly string[] Names;
+        public readonly Dictionary<string, string> ByName;
+
+        public DirectoryListing(string[] names)
+        {
+            Names = names;
+            ByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var n in names)
+                ByName.TryAdd(n, n);
+        }
+    }
+
     private readonly Win32Context ctx;
     private readonly uint[] stdSlots = [3, 7, 11];
     private Stream?[] stdStreams = new Stream?[3];
     private readonly object gate = new();
+    private readonly Dictionary<string, DirectoryListing> dirListings = new(StringComparer.Ordinal);
 
     public FileState(Win32Context ctx)
     {
@@ -55,6 +71,36 @@ internal sealed class FileState : IDisposable
                 1 => ctx.Options.Stdout ?? Console.OpenStandardOutput(),
                 _ => ctx.Options.Stderr ?? Console.OpenStandardError(),
             };
+    }
+
+    internal DirectoryListing GetDirectoryListing(string dir)
+    {
+        lock (gate)
+        {
+            if (dirListings.TryGetValue(dir, out var listing)) return listing;
+            string[] entries;
+            try
+            {
+                entries = Directory.EnumerateFileSystemEntries(dir)
+                    .Select(Path.GetFileName)
+                    .Where(n => n is not null)
+                    .Select(n => n!)
+                    .ToArray();
+            }
+            catch
+            {
+                entries = [];
+            }
+            listing = new DirectoryListing(entries);
+            dirListings[dir] = listing;
+            return listing;
+        }
+    }
+
+    public void InvalidatePathCache()
+    {
+        lock (gate)
+            dirListings.Clear();
     }
 
     public void Dispose() { }
@@ -85,11 +131,11 @@ internal sealed class FileState : IDisposable
             var next = Path.Combine(current, parts[i]);
             if (!Exists(next) && ctx.Options.CaseInsensitiveFileNames && Directory.Exists(current))
             {
-                var match = Directory.EnumerateFileSystemEntries(current).Select(Path.GetFileName).FirstOrDefault(n => string.Equals(n, parts[i], StringComparison.OrdinalIgnoreCase));
-                if (match is not null) next = Path.Combine(current, match);
+                var listing = GetDirectoryListing(current);
+                if (listing.ByName.TryGetValue(parts[i], out var match)) next = Path.Combine(current, match);
             }
             else if (!ctx.Options.CaseInsensitiveFileNames && HostIsCaseInsensitive && Exists(next) && Directory.Exists(current)
-                     && !Directory.EnumerateFileSystemEntries(current).Any(e => string.Equals(Path.GetFileName(e), parts[i], StringComparison.Ordinal)))
+                     && !GetDirectoryListing(current).Names.Any(e => string.Equals(e, parts[i], StringComparison.Ordinal)))
             {
                 // Exact-case lookups were requested but the host file system folds case (Windows, macOS, Wine): Exists() would accept "DIR" for "dir".
                 // The name only matches in a different case, which a case-sensitive file system would report as missing.
@@ -156,6 +202,7 @@ public sealed class FileService : Win32Service
             var stream = new FileStream(host, mode, hostAccess, FileShare.ReadWrite | FileShare.Delete);
             var handle = c.Ctx.NewHandle(new FileHandle(stream, wantRead, wantWrite, host));
             c.Ctx.LastError = existed && disposition is 2 or 4 ? Win32Error.AlreadyExists : Win32Error.Success;
+            if (disposition is 1 or 2 or 4) c.Ctx.Files.InvalidatePathCache();
             return handle;
         }
         catch (UnauthorizedAccessException) { return c.Ctx.Fail(Win32Error.AccessDenied, InvalidHandle); }
@@ -173,19 +220,22 @@ public sealed class FileService : Win32Service
         if (c.Ctx.GetHandle<FileHandle>(handle) is { } f) { if (!f.CanRead) return c.Ctx.Fail(Win32Error.AccessDenied); stream = f.Stream; }
         else if (c.Ctx.GetHandle<StdStream>(handle) is { Slot: 0 } std) stream = c.Ctx.Files.HostStream(std);
         else return c.Ctx.Fail(c.Ctx.GetHandle<StdStream>(handle) is null ? Win32Error.InvalidHandle : Win32Error.AccessDenied);
-        var chunk = new byte[(int)Math.Min(count, 65536u)];
+        var chunkSize = (int)Math.Min(count, 65536u);
+        if (chunkSize == 0) { c.Mem.WriteUInt32(readPtr, 0); return 1; }
+        var chunk = ArrayPool<byte>.Shared.Rent(chunkSize);
         uint total = 0;
         try
         {
             while (total < count)
             {
-                var n = stream.Read(chunk, 0, (int)Math.Min(chunk.Length, count - total));
+                var n = stream.Read(chunk, 0, (int)Math.Min(chunkSize, count - total));
                 if (n == 0) break;
                 c.Mem.Write(buffer + total, chunk.AsSpan(0, n));
                 total += (uint)n;
             }
         }
         catch (IOException) { c.Mem.WriteUInt32(readPtr, total); return c.Ctx.Fail(Win32Error.InvalidFunction); }
+        finally { ArrayPool<byte>.Shared.Return(chunk); }
         c.Mem.WriteUInt32(readPtr, total);
         return 1;
     }
@@ -199,13 +249,15 @@ public sealed class FileService : Win32Service
         if (c.Ctx.GetHandle<FileHandle>(handle) is { } f) { if (!f.CanWrite) return c.Ctx.Fail(Win32Error.AccessDenied); stream = f.Stream; }
         else if (c.Ctx.GetHandle<StdStream>(handle) is { Slot: > 0 } std) { stream = c.Ctx.Files.HostStream(std); flush = true; }
         else return c.Ctx.Fail(c.Ctx.GetHandle<StdStream>(handle) is null ? Win32Error.InvalidHandle : Win32Error.AccessDenied);
-        var chunk = new byte[(int)Math.Min(count, 65536u)];
+        var chunkSize = (int)Math.Min(count, 65536u);
+        if (chunkSize == 0) { c.Mem.WriteUInt32(writtenPtr, 0); return 1; }
+        var chunk = ArrayPool<byte>.Shared.Rent(chunkSize);
         uint total = 0;
         try
         {
             while (total < count)
             {
-                var n = (int)Math.Min(chunk.Length, count - total);
+                var n = (int)Math.Min(chunkSize, count - total);
                 c.Mem.Read(buffer + total, chunk.AsSpan(0, n));
                 stream.Write(chunk, 0, n);
                 total += (uint)n;
@@ -213,6 +265,7 @@ public sealed class FileService : Win32Service
             if (flush) stream.Flush();
         }
         catch (IOException) { c.Mem.WriteUInt32(writtenPtr, total); return c.Ctx.Fail(Win32Error.InvalidFunction); }
+        finally { ArrayPool<byte>.Shared.Return(chunk); }
         c.Mem.WriteUInt32(writtenPtr, total);
         return 1;
     }

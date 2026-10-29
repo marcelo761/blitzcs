@@ -60,6 +60,7 @@ public sealed class FilePathService : Win32Service
             File.SetLastWriteTimeUtc(dst, info.LastWriteTimeUtc);
             File.SetLastAccessTimeUtc(dst, info.LastAccessTimeUtc);
             File.SetAttributes(dst, (info.Attributes & FileAttributes.ReadOnly) != 0 ? FileAttributes.ReadOnly : FileAttributes.Normal);
+            c.Ctx.Files.InvalidatePathCache();
             return 1;
         }
         catch (UnauthorizedAccessException) { return c.Ctx.Fail(Win32Error.AccessDenied); }
@@ -79,7 +80,7 @@ public sealed class FilePathService : Win32Service
         if (Directory.Exists(host)) return c.Ctx.Fail(Win32Error.AccessDenied);
         if (!File.Exists(host)) return c.Ctx.Fail(Missing(host));
         if ((File.GetAttributes(host) & FileAttributes.ReadOnly) != 0) return c.Ctx.Fail(Win32Error.AccessDenied);
-        try { File.Delete(host); return 1; }
+        try { File.Delete(host); c.Ctx.Files.InvalidatePathCache(); return 1; }
         catch (UnauthorizedAccessException) { return c.Ctx.Fail(Win32Error.AccessDenied); }
         catch (IOException) { return c.Ctx.Fail(ErrSharing); }
     }
@@ -105,6 +106,7 @@ public sealed class FilePathService : Win32Service
             }
             else if (srcDir) Directory.Move(src, dst);
             else File.Move(src, dst);
+            c.Ctx.Files.InvalidatePathCache();
             return 1;
         }
         catch (UnauthorizedAccessException) { return c.Ctx.Fail(Win32Error.AccessDenied); }
@@ -153,7 +155,7 @@ public sealed class FilePathService : Win32Service
         var (host, e) = Resolve(c, name); if (host is null) return c.Ctx.Fail(e);
         if (Directory.Exists(host) || File.Exists(host)) return c.Ctx.Fail(Win32Error.AlreadyExists);
         if (!Directory.Exists(Path.GetDirectoryName(host) ?? "")) return c.Ctx.Fail(Win32Error.PathNotFound);
-        try { Directory.CreateDirectory(host); return 1; }
+        try { Directory.CreateDirectory(host); c.Ctx.Files.InvalidatePathCache(); return 1; }
         catch (UnauthorizedAccessException) { return c.Ctx.Fail(Win32Error.AccessDenied); }
     }
 
@@ -164,7 +166,7 @@ public sealed class FilePathService : Win32Service
         if (!Directory.Exists(host)) return c.Ctx.Fail(Missing(host));
         if (string.Equals(Path.GetFullPath(host).TrimEnd('/'), Path.GetFullPath(c.Ctx.Options.SandboxRoot!).TrimEnd('/'), StringComparison.Ordinal)) return c.Ctx.Fail(Win32Error.AccessDenied);
         if (Directory.EnumerateFileSystemEntries(host).Any()) return c.Ctx.Fail(ErrDirNotEmpty);
-        try { Directory.Delete(host); return 1; }
+        try { Directory.Delete(host); c.Ctx.Files.InvalidatePathCache(); return 1; }
         catch (UnauthorizedAccessException) { return c.Ctx.Fail(Win32Error.AccessDenied); }
         catch (IOException) { return c.Ctx.Fail(ErrSharing); }
     }
@@ -185,6 +187,7 @@ public sealed class FilePathService : Win32Service
                 var (h, _) = Resolve(c, Make(u));
                 if (h is null || File.Exists(h) || Directory.Exists(h)) continue;
                 File.Create(h).Dispose();
+                c.Ctx.Files.InvalidatePathCache();
                 unique = u; break;
             }
             if (unique == 0) return c.Ctx.Fail(Win32Error.AccessDenied, 0);
@@ -239,7 +242,7 @@ public sealed class FilePathService : Win32Service
         var parts = new List<string>();
         foreach (var part in Kernel32WideService.GuestPath(c, name)[3..].Split('\\', StringSplitOptions.RemoveEmptyEntries))
         {
-            var match = Directory.EnumerateFileSystemEntries(current).Select(Path.GetFileName).FirstOrDefault(n => string.Equals(n, part, StringComparison.OrdinalIgnoreCase)) ?? part;
+            var match = c.Ctx.Files.GetDirectoryListing(current).ByName.TryGetValue(part, out var m) ? m : part;
             parts.Add(match);
             current = Path.Combine(current, match);
         }

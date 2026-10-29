@@ -9,7 +9,7 @@ namespace BlitzCS.BinaryCompiler.Win32;
 /// <summary>
 /// DDRAW.dll creation functions bridged to the HOST's ddraw.dll (registered with the window bridge only, i.e. on a Windows host). The objects are guest COM objects over the native ones
 /// (<see cref="DirectDrawAdapters"/>, <see cref="DirectInputAdapters"/>, <see cref="HostComRegistry"/>); the module needs a dynamic stub pool for their vtables. DINPUT8.dll!DirectInput8Create
-/// creates IDirectInput8A objects. d3dxof.dll!DirectXFileCreate is not registered: it stays absent and faults by name.
+/// creates IDirectInput8A objects. d3dxof.dll!DirectXFileCreate creates IDirectXFile objects.
 /// </summary>
 public sealed unsafe class HostDirectXService : Win32Service
 {
@@ -23,6 +23,24 @@ public sealed unsafe class HostDirectXService : Win32Service
         Std("DINPUT8.dll", "DirectInput8Create", 5, DirectInput8Create);
         Std("DINPUT.dll", "DirectInputCreateEx", 5, DirectInputCreateEx);
         Std("DINPUT.dll", "DirectInputCreateA", 4, DirectInputCreateA);
+        Std("d3dxof.dll", "DirectXFileCreate", 1, DirectXFileCreate);
+    }
+
+    /// <summary>DirectXFileCreate(lplpDirectXFile): creates IDirectXFile object over d3dxof.dll.</summary>
+    private static uint DirectXFileCreate(Win32Call c)
+    {
+        uint ppDirectXFile = c[0];
+        if (ppDirectXFile == 0) return ComHr.InvalidArg;
+        c.Mem.WriteUInt32(ppDirectXFile, 0);
+
+        var module = GuestModule.Current ?? throw new Win32UsageException("d3dxof!DirectXFileCreate needs a running guest module (its COM objects live in the guest's memory).");
+        nint dxf = 0;
+        var hr = (uint)HostFunction.CallNative(c.Ctx, HostExports.Get("d3dxof.dll", "DirectXFileCreate"), [(nint)(&dxf)]);
+        if (!ComHr.Succeeded(hr) || dxf == 0) return ComHr.Succeeded(hr) ? ComHr.Fail : hr;
+
+        var com = GuestComHost.For(c.Ctx, module);
+        c.Mem.WriteUInt32(ppDirectXFile, HostComRegistry.For(com, DirectXTables.Find).Wrap(dxf, DirectXFileAdapters.IidDirectXFile));
+        return ComHr.Ok;
     }
 
     /// <summary>DirectInputCreateEx(hinst, version, riid, ppv, outer): IDirectInput7A and IDirectInput8A.</summary>

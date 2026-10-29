@@ -209,4 +209,20 @@ public sealed class DynamicCodeTests : IDisposable
         Assert.Contains("disabled (GuestModuleOptions.DynamicCode = false)", e.Message);
         Assert.Empty(off.module.DynamicTranslations);
     }
+
+    [Fact]
+    public void GuestProcessEnvironment_registry_capacity_supports_large_dynamic_allocation_counts()
+    {
+        Assert.True(GuestProcessEnvironment.RegistryCapacity >= 65536);
+        using var env = new GuestProcessEnvironment(ownedBySet: false);
+        // Registering more than the old limit of 1024 modules does not exhaust the registry.
+        var slots = new List<int>();
+        for (var i = 0; i < 1100; i++)
+        {
+            var slot = env.Publish((uint)(0x20000000 + i * 0x1000), 0x1000, 0x10000, 0x20000);
+            slots.Add(slot);
+        }
+        Assert.Equal(1100, slots.Count);
+        Assert.Equal(1100, slots.Distinct().Count());
+    }
 }

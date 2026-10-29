@@ -127,9 +127,18 @@ public sealed class Kernel32SrwService : Win32Service
             while (!waiter.Woken)
             {
                 if (srw.Aborted && c.Ctx.IsExitingOnAnotherThread) c.Ctx.ThrowIfPoisoned();
-                if (milliseconds == Infinite) { Monitor.Wait(srw.Gate); continue; }
+                if (milliseconds == Infinite)
+                {
+                    using (c.Ctx.SuspendGuestMemoryWriterForHostWait())
+                        Monitor.Wait(srw.Gate);
+                    continue;
+                }
                 var left = milliseconds - clock.ElapsedMilliseconds;
-                if (left <= 0 || !Monitor.Wait(srw.Gate, (int)Math.Min(left, int.MaxValue)))
+                if (left <= 0) break;
+                bool timedOut;
+                using (c.Ctx.SuspendGuestMemoryWriterForHostWait())
+                    timedOut = !Monitor.Wait(srw.Gate, (int)Math.Min(left, int.MaxValue));
+                if (timedOut)
                 {
                     if (srw.Aborted && c.Ctx.IsExitingOnAnotherThread) c.Ctx.ThrowIfPoisoned();
                     if (!waiter.Woken) break;

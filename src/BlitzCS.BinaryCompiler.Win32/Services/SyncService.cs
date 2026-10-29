@@ -77,6 +77,17 @@ internal sealed class KernelMutex
     }
 }
 
+internal static class WaitForSingleObjectHelper
+{
+    internal static uint Wait(object target, uint timeout) => target switch
+    {
+        KernelEvent e => e.Wait(timeout) ? SyncService.WaitObject0 : SyncService.WaitTimeout,
+        KernelMutex m => m.Acquire(timeout) ? SyncService.WaitObject0 : SyncService.WaitTimeout,
+        KernelThread t => t.Done.Wait(timeout) ? SyncService.WaitObject0 : SyncService.WaitTimeout,
+        _ => SyncService.WaitFailed,
+    };
+}
+
 internal sealed class SyncState
 {
     public readonly object AtomicGate = new();
@@ -239,14 +250,14 @@ public sealed class SyncService : Win32Service
         Std(K, "ReleaseMutex", 1, c => c.Ctx.GetHandle<KernelMutex>(c[0]) is not { } m ? c.Ctx.Fail(Win32Error.InvalidHandle) : m.Release() ? 1u : c.Ctx.Fail(Win32Error.NotOwner));
         Std(K, "WaitForSingleObject", 2, c =>
         {
-            var target = c.Ctx.GetHandle<object>(c[0]);
-            return target switch
-            {
-                KernelEvent e => e.Wait(c[1]) ? WaitObject0 : WaitTimeout,
-                KernelMutex m => m.Acquire(c[1]) ? WaitObject0 : WaitTimeout,
-                KernelThread t => t.Done.Wait(c[1]) ? WaitObject0 : WaitTimeout,
-                _ => c.Ctx.Fail(Win32Error.InvalidHandle, WaitFailed),
-            };
+            var handle = c[0];
+            var timeout = c[1];
+            var target = c.Ctx.GetHandle<object>(handle);
+            if (target is not (KernelEvent or KernelMutex or KernelThread))
+                return c.Ctx.Fail(Win32Error.InvalidHandle, WaitFailed);
+            if (timeout == 0) return WaitForSingleObjectHelper.Wait(target, timeout);
+            using (c.Ctx.SuspendGuestMemoryWriterForHostWait())
+                return WaitForSingleObjectHelper.Wait(target, timeout);
         });
     }
 

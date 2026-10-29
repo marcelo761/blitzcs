@@ -81,7 +81,7 @@ public static unsafe class Direct3DAdapters
         var stride = FvfStride(s.Arg(fvfIndex));
         var count = checked((int)s.Arg(countIndex));
         if (count < 0 || count > 1 << 20) throw new ComArgumentException($"A vertex count of {count} is not plausible.");
-        return s.Native.Copy(s.Mem.ReadBytes(v, checked(count * stride)));
+        return s.Native.CopyFromGuest(s.Mem, v, checked(count * stride));
     });
 
     // ---- IDirect3DDevice7 ----
@@ -176,10 +176,17 @@ public static unsafe class Direct3DAdapters
         uint count = c.Arg(0), rects = c.Arg(1), flags = c.Arg(2), color = c.Arg(3), zBits = c.Arg(4), stencil = c.Arg(5);
         if ((count > 0 && rects == 0) || count > 65536) return DdConst.DdErrInvalidParams;
         using var scope = new NativeScope();
-        var nativeRects = count == 0 || rects == 0 ? 0 : scope.Copy(c.Mem.ReadBytes(rects, checked((int)count * 16)));
+        var nativeRects = count == 0 || rects == 0 ? 0 : scope.CopyFromGuest(c.Mem, rects, checked((int)count * 16));
         var self = host.Pointer;
         var f = (delegate* unmanaged<nint, uint, nint, uint, uint, float, uint, int>)(*(nint**)self)[10];
-        var hr = (uint)f(self, count, nativeRects, flags, color, BitConverter.UInt32BitsToSingle(zBits), stencil);
+        uint hr;
+        if (c.Profile.Enabled)
+        {
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            try { hr = (uint)f(self, count, nativeRects, flags, color, BitConverter.UInt32BitsToSingle(zBits), stencil); }
+            finally { c.Profile.RecordNativeCall(System.Diagnostics.Stopwatch.GetTimestamp() - start); }
+        }
+        else hr = (uint)f(self, count, nativeRects, flags, color, BitConverter.UInt32BitsToSingle(zBits), stencil);
         WindowProcBridge.ThrowPendingCallbackFault();
         return hr;
     }

@@ -22,6 +22,16 @@ public sealed class RequiresHostDirectDrawFactAttribute : FactAttribute
     }
 }
 
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class RequiresHostDirectXFileFactAttribute : FactAttribute
+{
+    public RequiresHostDirectXFileFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows()) Skip = "needs a Windows host (Windows or Wine) with d3dxof.dll; this host is not Windows";
+        else if (!System.Runtime.InteropServices.NativeLibrary.TryLoad("d3dxof.dll", out _)) Skip = "the host's d3dxof.dll cannot be loaded";
+    }
+}
+
 /// <summary>32-bit/64-bit structure conversions of the bridge. Pure computation: runs on every host.</summary>
 public sealed class HostBridgeLayoutTests
 {
@@ -221,6 +231,27 @@ public sealed class HostBridgeCompositionTests
         if (!OperatingSystem.IsWindows())
             Assert.Contains("needs a Windows host", Assert.Throws<Win32UsageException>(() => new Win32ImportResolver(new Win32Options { HostWindowing = HostWindowingKind.Host })).Message);
     }
+
+    [Fact]
+    public void HostFunction_caches_resolved_native_export_and_HostExports_is_case_insensitive()
+    {
+        var fn = new HostFunction("kernel32.dll", "GetModuleHandleW", HostResult.Pointer);
+        if (OperatingSystem.IsWindows())
+        {
+            var p1 = fn.NativeExport;
+            Assert.NotEqual(0, p1);
+            var p2 = fn.NativeExport;
+            Assert.Equal(p1, p2);
+            var p3 = HostExports.Get("KERNEL32.DLL", "getmodulehandlew");
+            Assert.Equal(p1, p3);
+        }
+        else
+        {
+            var ex = Assert.Throws<Win32UsageException>(() => _ = fn.NativeExport);
+            Assert.Contains("kernel32.dll", ex.Message);
+            Assert.Contains("GetModuleHandleW", ex.Message);
+        }
+    }
 }
 
 /// <summary>
@@ -400,6 +431,237 @@ public sealed class HostDirectDrawBridgeTests
 {
     private static uint D(uint o) => ComRig.Data(o);
 
+    [Theory]
+    [InlineData(0x31545844u, 8)]  // DXT1
+    [InlineData(0x33545844u, 16)] // DXT3
+    [InlineData(0x35545844u, 16)] // DXT5
+    public void DirectDrawSurface7_Lock_copies_compressed_linear_surface_bytes(uint fourCc, int blockBytes)
+    {
+        using var native = new FakeNativeSurface(8, 8, fourCc, blockBytes);
+        using var g = new ComRig(64);
+        var surface = HostComRegistry.For(GuestComHost.For(g.Resolver.Context, g.Module), DirectXTables.Find)
+            .Wrap(native.Pointer, DdConst.IidDirectDrawSurface7);
+        var desc = D(0x500);
+        g.Module.Memory.Write(desc, new byte[DdLayouts.GuestSurfaceDesc2]);
+        g.Module.Memory.WriteUInt32(desc, DdLayouts.GuestSurfaceDesc2);
+
+        Assert.Equal(0u, g.Vt(surface, 25, 0, desc, 0, 0));
+        var guestSize = checked((int)g.Module.Memory.ReadUInt32(desc + 16));
+        var guestBits = g.Module.Memory.ReadUInt32(desc + 36);
+        var linearBytes = native.Bytes.Length;
+        Assert.True(g.Module.Memory.IsMapped(guestBits, (uint)linearBytes));
+        Assert.Equal(linearBytes, guestSize);
+        Assert.Equal(native.Bytes, g.Module.Memory.ReadBytes(guestBits, linearBytes));
+
+        var changed = Enumerable.Repeat((byte)0xA5, linearBytes).ToArray();
+        g.Module.Memory.Write(guestBits, changed);
+        Assert.Equal(0u, g.Vt(surface, 32, 0));
+        Assert.Equal(changed, native.Bytes);
+    }
+
+    [Theory]
+    [InlineData(0x31545844u, 8)]
+    [InlineData(0x35545844u, 16)]
+    public void DirectDrawSurface7_Lock_handles_a_tiny_compressed_mip_as_one_block(uint fourCc, int blockBytes)
+    {
+        using var native = new FakeNativeSurface(1, 1, fourCc, blockBytes);
+        using var g = new ComRig(64);
+        var surface = HostComRegistry.For(GuestComHost.For(g.Resolver.Context, g.Module), DirectXTables.Find)
+            .Wrap(native.Pointer, DdConst.IidDirectDrawSurface7);
+        var desc = D(0x500);
+        g.Module.Memory.Write(desc, new byte[DdLayouts.GuestSurfaceDesc2]);
+        g.Module.Memory.WriteUInt32(desc, DdLayouts.GuestSurfaceDesc2);
+
+        Assert.Equal(0u, g.Vt(surface, 25, 0, desc, 0, 0));
+        var guestBits = g.Module.Memory.ReadUInt32(desc + 36);
+        Assert.Equal(blockBytes, native.Bytes.Length);
+        Assert.Equal(native.Bytes, g.Module.Memory.ReadBytes(guestBits, blockBytes));
+        Assert.Equal(0u, g.Vt(surface, 32, 0));
+    }
+
+    [Theory]
+    [InlineData(0x10u, false)] // DDLOCK_READONLY copies in, not back
+    [InlineData(0x20u, true)]  // DDLOCK_WRITEONLY copies back, not in
+    public void DirectDrawSurface7_CompressedLock_obeys_readonly_and_writeonly(uint flags, bool startsZero)
+    {
+        using var native = new FakeNativeSurface(4, 4, 0x31545844, 8);
+        using var g = new ComRig(64);
+        var surface = HostComRegistry.For(GuestComHost.For(g.Resolver.Context, g.Module), DirectXTables.Find)
+            .Wrap(native.Pointer, DdConst.IidDirectDrawSurface7);
+        var desc = D(0x500);
+        g.Module.Memory.Write(desc, new byte[DdLayouts.GuestSurfaceDesc2]);
+        g.Module.Memory.WriteUInt32(desc, DdLayouts.GuestSurfaceDesc2);
+
+        Assert.Equal(0u, g.Vt(surface, 25, 0, desc, flags, 0));
+        var guestBits = g.Module.Memory.ReadUInt32(desc + 36);
+        var surfaceBytes = native.Bytes.Length;
+        var before = g.Module.Memory.ReadBytes(guestBits, surfaceBytes);
+        Assert.Equal(startsZero, before.All(b => b == 0));
+        var replacement = Enumerable.Repeat((byte)0x6C, surfaceBytes).ToArray();
+        g.Module.Memory.Write(guestBits, replacement);
+        Assert.Equal(0u, g.Vt(surface, 32, 0));
+        Assert.Equal(flags == 0x20 ? replacement : native.OriginalBytes, native.Bytes);
+    }
+
+    [Fact]
+    public void DirectDrawSurface7_Lock_rejects_unknown_fourcc_with_a_named_error()
+    {
+        using var native = new FakeNativeSurface(8, 8, 0x12345678, 8);
+        using var g = new ComRig(64);
+        var surface = HostComRegistry.For(GuestComHost.For(g.Resolver.Context, g.Module), DirectXTables.Find)
+            .Wrap(native.Pointer, DdConst.IidDirectDrawSurface7);
+        var desc = D(0x500);
+        g.Module.Memory.Write(desc, new byte[DdLayouts.GuestSurfaceDesc2]);
+        g.Module.Memory.WriteUInt32(desc, DdLayouts.GuestSurfaceDesc2);
+
+        var error = Assert.Throws<GuestImportException>(() => g.Vt(surface, 25, 0, desc, 0, 0));
+        Assert.Contains("IDirectDrawSurface7::Lock", error.Message + error.InnerException?.Message);
+        Assert.Contains("0x4", error.Message + error.InnerException?.Message);
+    }
+
+    [Fact]
+    public void DirectDrawSurface7_Lock_rejects_a_too_small_linear_size_and_unlocks_before_reading_bits()
+    {
+        using var native = new FakeNativeSurface(8, 8, 0x31545844, 8, linearSizeOverride: 31, returnNullBits: true);
+        using var g = new ComRig(64);
+        var surface = HostComRegistry.For(GuestComHost.For(g.Resolver.Context, g.Module), DirectXTables.Find)
+            .Wrap(native.Pointer, DdConst.IidDirectDrawSurface7);
+        var desc = D(0x500);
+        g.Module.Memory.Write(desc, new byte[DdLayouts.GuestSurfaceDesc2]);
+        g.Module.Memory.WriteUInt32(desc, DdLayouts.GuestSurfaceDesc2);
+
+        var error = Assert.Throws<GuestImportException>(() => g.Vt(surface, 25, 0, desc, 0, 0));
+        Assert.Contains("unusable compressed layout", error.Message + error.InnerException?.Message);
+        Assert.Equal(1, native.UnlockCalls);
+    }
+
+    [Fact]
+    public void DirectDrawSurface7_Lock_rejects_a_partial_compressed_rect_and_unlocks_before_reading_bits()
+    {
+        using var native = new FakeNativeSurface(8, 8, 0x31545844, 8, returnNullBits: true);
+        using var g = new ComRig(64);
+        var surface = HostComRegistry.For(GuestComHost.For(g.Resolver.Context, g.Module), DirectXTables.Find)
+            .Wrap(native.Pointer, DdConst.IidDirectDrawSurface7);
+        var desc = D(0x500);
+        var rect = D(0x600);
+        g.Module.Memory.Write(desc, new byte[DdLayouts.GuestSurfaceDesc2]);
+        g.Module.Memory.WriteUInt32(desc, DdLayouts.GuestSurfaceDesc2);
+        foreach (var (i, value) in new[] { 0, 0, 4, 4 }.Select((value, i) => (i, value)))
+            g.Module.Memory.WriteUInt32(rect + (uint)(i * 4), (uint)value);
+
+        var error = Assert.Throws<GuestImportException>(() => g.Vt(surface, 25, rect, desc, 0, 0));
+        Assert.Contains("whole-surface lock", error.Message + error.InnerException?.Message);
+        Assert.Equal(1, native.UnlockCalls);
+    }
+
+    [Fact]
+    public void DirectDrawSurface7_Root_releases_attached_native_surfaces_before_its_own_native_reference()
+    {
+        var releaseOrder = new List<string>();
+        using var child = new FakeNativeSurface(4, 4, 0x31545844, 8, releaseEvents: releaseOrder, releaseName: "child", initialReferences: 0);
+        using var root = new FakeNativeSurface(4, 4, 0x31545844, 8, releaseEvents: releaseOrder, releaseName: "root", attachedChild: child);
+        using var g = new ComRig(64);
+        var registry = HostComRegistry.For(GuestComHost.For(g.Resolver.Context, g.Module), DirectXTables.Find);
+        var rootGuest = registry.Wrap(root.Pointer, DdConst.IidDirectDrawSurface7);
+        var caps = D(0x500);
+        var outSurface = D(0x520);
+        g.Module.Memory.Write(caps, new byte[16]);
+
+        Assert.Equal(0u, g.Vt(rootGuest, 12, caps, outSurface));
+        var childGuest = g.Module.Memory.ReadUInt32(outSurface);
+        Assert.NotEqual(0u, childGuest);
+        Assert.Equal(1u, g.Release(childGuest)); // leave only the root's attached-surface reference
+        Assert.Equal(0u, g.Release(rootGuest));
+
+        Assert.Equal(new[] { "child", "root" }, releaseOrder);
+    }
+
+    private sealed unsafe class FakeNativeSurface : IDisposable
+    {
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int Query(nint self, nint iid, nint result);
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate uint Ref(nint self);
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int Method(nint self, nint a, nint b, nint c, nint d);
+        private readonly List<Delegate> keep = [];
+        private readonly nint block;
+        private readonly nint bits;
+        private readonly List<string>? releaseEvents;
+        private readonly string? releaseName;
+        private readonly FakeNativeSurface? attachedChild;
+        private int references = 1;
+        public nint Pointer => block;
+        public int Pitch { get; }
+        public byte[] Bytes { get; }
+        public byte[] OriginalBytes { get; }
+        public int UnlockCalls { get; private set; }
+
+        public FakeNativeSurface(int width, int height, uint fourCc, int blockBytes, int? linearSizeOverride = null, bool returnNullBits = false,
+            List<string>? releaseEvents = null, string? releaseName = null, FakeNativeSurface? attachedChild = null, int initialReferences = 1)
+        {
+            this.releaseEvents = releaseEvents;
+            this.releaseName = releaseName;
+            this.attachedChild = attachedChild;
+            references = initialReferences;
+            int blockRows = (height + 3) / 4, blockColumns = (width + 3) / 4;
+            Pitch = checked(blockColumns * blockRows * blockBytes);
+            Bytes = Enumerable.Range(0, Pitch).Select(i => (byte)(i + 1)).ToArray();
+            OriginalBytes = [.. Bytes];
+            bits = (nint)NativeMemory.Alloc((nuint)Bytes.Length);
+            Marshal.Copy(Bytes, 0, bits, Bytes.Length);
+
+            var vtbl = (nint*)NativeMemory.AllocZeroed(33, (nuint)sizeof(nint));
+            Query qi = (self, _, result) => { *(nint*)result = self; Interlocked.Increment(ref references); return 0; };
+            Ref add = _ => (uint)Interlocked.Increment(ref references);
+            Ref release = _ =>
+            {
+                var value = Interlocked.Decrement(ref references);
+                if (value == 0 && releaseName is not null) releaseEvents!.Add(releaseName);
+                return (uint)value;
+            };
+            Method lockMethod = (_, _, desc, _, _) =>
+            {
+                Marshal.WriteInt32(desc, 136);
+                Marshal.WriteInt32(desc, 8, height);
+                Marshal.WriteInt32(desc, 12, width);
+                Marshal.WriteInt32(desc, 16, linearSizeOverride ?? Pitch);
+                Marshal.WriteInt64(desc, 40, returnNullBits ? 0 : (long)bits);
+                Marshal.WriteInt32(desc, 4, 0x81007); // DDSD_CAPS|HEIGHT|WIDTH|PIXELFORMAT|LINEARSIZE; union at offset 16 is a byte count
+                Marshal.WriteInt32(desc, 84, 0x4); // DDPF_FOURCC
+                Marshal.WriteInt32(desc, 88, unchecked((int)fourCc));
+                Marshal.WriteInt32(desc, 92, 0); // compressed formats have no RGB bit count
+                return 0;
+            };
+            Method unlockMethod = (_, _, _, _, _) =>
+            {
+                UnlockCalls++;
+                Marshal.Copy(bits, Bytes, 0, Bytes.Length);
+                return 0;
+            };
+            Method getAttachedMethod = (_, _, outSurface, _, _) =>
+            {
+                if (attachedChild is null) return unchecked((int)0x80004005);
+                Interlocked.Increment(ref attachedChild.references); // GetAttachedSurface returns an owned native reference
+                *(nint*)outSurface = attachedChild.Pointer;
+                return 0;
+            };
+            keep.AddRange([qi, add, release, lockMethod, unlockMethod, getAttachedMethod]);
+            vtbl[0] = Marshal.GetFunctionPointerForDelegate(qi);
+            vtbl[1] = Marshal.GetFunctionPointerForDelegate(add);
+            vtbl[2] = Marshal.GetFunctionPointerForDelegate(release);
+            vtbl[12] = Marshal.GetFunctionPointerForDelegate(getAttachedMethod);
+            vtbl[25] = Marshal.GetFunctionPointerForDelegate(lockMethod);
+            vtbl[32] = Marshal.GetFunctionPointerForDelegate(unlockMethod);
+            block = (nint)NativeMemory.Alloc((nuint)sizeof(nint));
+            *(nint**)block = vtbl;
+        }
+
+        public void Dispose()
+        {
+            NativeMemory.Free(*(void**)block);
+            NativeMemory.Free((void*)block);
+            NativeMemory.Free((void*)bits);
+        }
+    }
+
     [RequiresHostDirectDrawFact]
     public void One_guest_identity_per_host_object_lifetimes_follow_the_guest_and_Lock_uses_a_shadow()
     {
@@ -472,6 +734,61 @@ public sealed class HostDirectDrawBridgeTests
         Assert.Equal(live - 2, com.LiveObjects);
         var dead = Assert.Throws<GuestImportException>(() => g.AddRef(dd));
         Assert.Contains("after the object was destroyed", dead.Message + dead.InnerException?.Message);
+    }
+
+    [RequiresHostDirectDrawFact]
+    public void DirectDrawSurface7_AttachedSurfaces_LifetimeTiedToRoot()
+    {
+        using var g = new ComRig(256);
+        var mem = g.Module.Memory;
+        var com = GuestComHost.For(g.Resolver.Context, g.Module);
+        var create = g.GetProc("ddraw.dll", "DirectDrawCreateEx");
+        mem.Write(D(0x500), DdConst.IidDirectDraw7.ToByteArray());
+        Assert.Equal(0u, g.F("callptr4", create, 0, D(0x520), D(0x500), 0));
+        var dd = mem.ReadUInt32(D(0x520));
+        Assert.Equal(0u, g.Vt(dd, 20, 0, 8)); // SetCooperativeLevel(NULL, DDSCL_NORMAL)
+
+        // Create 32x32 surface with 2 mipmap levels:
+        var desc = D(0x600);
+        mem.Write(desc, new byte[124]);
+        uint[] head = [124, 0x21007, 32, 32];
+        for (var i = 0; i < head.Length; i++) mem.WriteUInt32(desc + 4u * (uint)i, head[i]);
+        uint[] pf = [32, 0x40, 0, 32, 0xFF0000, 0xFF00, 0xFF, 0];
+        for (var i = 0; i < pf.Length; i++) mem.WriteUInt32(desc + 72 + 4u * (uint)i, pf[i]);
+        mem.WriteUInt32(desc + 104, 0x8 | 0x1000 | 0x400000 | 0x800); // DDSCAPS_COMPLEX | DDSCAPS_TEXTURE | DDSCAPS_MIPMAP | DDSCAPS_SYSTEMMEMORY
+        mem.WriteUInt32(desc + 28, 2); // dwMipMapCount = 2
+        Assert.Equal(0u, g.Vt(dd, 6, desc, D(0x6C0), 0));
+        var rootSurf = mem.ReadUInt32(D(0x6C0));
+        Assert.NotEqual(0u, rootSurf);
+
+        // GetAttachedSurface(DDSCAPS_TEXTURE | DDSCAPS_MIPMAP, &dest)
+        var caps = D(0x700);
+        mem.WriteUInt32(caps, 0x1000 | 0x400000); // DDSCAPS_TEXTURE | DDSCAPS_MIPMAP
+        mem.WriteUInt32(caps + 4, 0);
+        mem.WriteUInt32(caps + 8, 0);
+        mem.WriteUInt32(caps + 12, 0);
+        Assert.Equal(0u, g.Vt(rootSurf, 12, caps, D(0x6C4)));
+        var childSurf = mem.ReadUInt32(D(0x6C4));
+        Assert.NotEqual(0u, childSurf);
+        Assert.NotEqual(rootSurf, childSurf);
+
+        // Releasing childSurf from the guest decrements its COM reference,
+        // but because childSurf is attached to rootSurf, its lifetime is bound to rootSurf.
+        // It must remain alive while rootSurf is alive.
+        g.Release(childSurf);
+        Assert.True(com.Find(childSurf)?.IsAlive == true);
+
+        // Calling a method on the child surface works without "after the object was destroyed".
+        var outCaps = D(0x750);
+        Assert.Equal(0u, g.Vt(childSurf, 14, outCaps)); // GetCaps
+
+        // Destroying rootSurf destroys both root and attached children.
+        g.Release(rootSurf);
+        Assert.False(com.Find(childSurf)?.IsAlive == true);
+        var dead = Assert.Throws<GuestImportException>(() => g.Vt(childSurf, 14, outCaps));
+        Assert.Contains("after the object was destroyed", dead.Message + dead.InnerException?.Message);
+
+        g.Release(dd);
     }
 
     [RequiresHostDirectDrawFact]
@@ -557,5 +874,118 @@ public sealed class HostDirectDrawBridgeTests
         Assert.Equal(0u, g.Vt(target, 32, 0));
 
         g.Release(vb); g.Release(device); g.Release(target); g.Release(d3d); g.Release(dd);
+    }
+}
+
+[Collection("GuestRuntime")]
+public sealed class HostDirectXFileBridgeTests
+{
+    private static uint D(uint o) => ComRig.Data(o);
+
+    [Fact]
+    public void DirectXFile_table_contains_all_interfaces_and_resolves_through_DirectXTables()
+    {
+        var file = DirectXTables.Find(DirectXFileAdapters.IidDirectXFile);
+        Assert.NotNull(file);
+        Assert.Equal("IDirectXFile", file.Name);
+
+        var enumObj = DirectXTables.Find(DirectXFileAdapters.IidDirectXFileEnumObject);
+        Assert.NotNull(enumObj);
+        Assert.Equal("IDirectXFileEnumObject", enumObj.Name);
+
+        var data = DirectXTables.Find(DirectXFileAdapters.IidDirectXFileData);
+        Assert.NotNull(data);
+        Assert.Equal("IDirectXFileData", data.Name);
+        Assert.Contains(DirectXFileAdapters.IidDirectXFileObject, data.AlsoAnswers);
+
+        var obj = DirectXTables.Find(DirectXFileAdapters.IidDirectXFileObject);
+        Assert.NotNull(obj);
+        Assert.Equal("IDirectXFileObject", obj.Name);
+
+        var dataRef = DirectXTables.Find(DirectXFileAdapters.IidDirectXFileDataReference);
+        Assert.NotNull(dataRef);
+        Assert.Equal("IDirectXFileDataReference", dataRef.Name);
+        Assert.Contains(DirectXFileAdapters.IidDirectXFileObject, dataRef.AlsoAnswers);
+
+        var binary = DirectXTables.Find(DirectXFileAdapters.IidDirectXFileBinary);
+        Assert.NotNull(binary);
+        Assert.Equal("IDirectXFileBinary", binary.Name);
+        Assert.Contains(DirectXFileAdapters.IidDirectXFileObject, binary.AlsoAnswers);
+
+        var saveObj = DirectXTables.Find(DirectXFileAdapters.IidDirectXFileSaveObject);
+        Assert.NotNull(saveObj);
+        Assert.Equal("IDirectXFileSaveObject", saveObj.Name);
+    }
+
+    [RequiresHostDirectXFileFact]
+    public void DirectXFileCreate_creates_IDirectXFile_registers_templates_and_enumerates_memory_source()
+    {
+        using var g = new ComRig(256);
+        var mem = g.Module.Memory;
+        var create = g.GetProc("d3dxof.dll", "DirectXFileCreate");
+        Assert.NotEqual(0u, create);
+
+        mem.WriteUInt32(D(0x500), 0);
+        Assert.Equal(0u, g.F("callptr1", create, D(0x500)));
+        var dxf = mem.ReadUInt32(D(0x500));
+        Assert.NotEqual(0u, dxf);
+
+        // Minimal DirectX X-file text template and data
+        const string xfile =
+            "xof 0302txt 0064\n" +
+            "template Header { <3D82AB43-62DA-11CF-AB39-0020AF71E433> WORD major; WORD minor; DWORD flags; }\n" +
+            "Header root { 1; 0; 0; }\n";
+        var xbytes = System.Text.Encoding.ASCII.GetBytes(xfile);
+
+        // Memory load structure: { LPVOID lpMemory; DWORD dSize; }
+        var memData = D(0x600);
+        mem.Write(memData, xbytes);
+        var memDesc = D(0x520);
+        mem.WriteUInt32(memDesc, memData);
+        mem.WriteUInt32(memDesc + 4, (uint)xbytes.Length);
+
+        // IDirectXFile::CreateEnumObject(pvSource, DXFILELOAD_FROMMEMORY=2, &enumObj)
+        mem.WriteUInt32(D(0x530), 0);
+        Assert.Equal(0u, g.Vt(dxf, 3, memDesc, 2, D(0x530)));
+        var enumObj = mem.ReadUInt32(D(0x530));
+        Assert.NotEqual(0u, enumObj);
+
+        // IDirectXFileEnumObject::GetNextDataObject(&dataObj)
+        mem.WriteUInt32(D(0x540), 0);
+        Assert.Equal(0u, g.Vt(enumObj, 3, D(0x540)));
+        var dataObj = mem.ReadUInt32(D(0x540));
+        Assert.NotEqual(0u, dataObj);
+
+        // IDirectXFileData::GetType(&pTypeGuid)
+        mem.WriteUInt32(D(0x550), 0);
+        Assert.Equal(0u, g.Vt(dataObj, 6, D(0x550)));
+        var pTypeGuid = mem.ReadUInt32(D(0x550));
+        Assert.NotEqual(0u, pTypeGuid);
+        var typeGuid = new Guid(mem.ReadBytes(pTypeGuid, 16));
+        Assert.Equal(DirectXFileAdapters.IidDirectXFileObject, typeGuid);
+
+        // IDirectXFileData::GetData(NULL, &size, &pData)
+        mem.WriteUInt32(D(0x560), 0);
+        mem.WriteUInt32(D(0x564), 0);
+        Assert.Equal(0u, g.Vt(dataObj, 5, 0, D(0x560), D(0x564)));
+        var dataSize = mem.ReadUInt32(D(0x560));
+        var pData = mem.ReadUInt32(D(0x564));
+        Assert.Equal(8u, dataSize);
+        Assert.NotEqual(0u, pData);
+        Assert.Equal(1u, (uint)mem.ReadByte(pData) | ((uint)mem.ReadByte(pData + 1) << 8));
+        Assert.Equal(0u, (uint)mem.ReadByte(pData + 2) | ((uint)mem.ReadByte(pData + 3) << 8));
+        Assert.Equal(0u, mem.ReadUInt32(pData + 4));
+
+        // IDirectXFileData::GetName(name, &len)
+        var nameBuf = D(0x570);
+        mem.WriteUInt32(D(0x580), 32);
+        Assert.Equal(0u, g.Vt(dataObj, 3, nameBuf, D(0x580)));
+        var name = mem.ReadAnsiString(nameBuf);
+        Assert.Equal("root", name);
+
+        // Release
+        g.Release(dataObj);
+        g.Release(enumObj);
+        g.Release(dxf);
     }
 }

@@ -370,6 +370,8 @@ public sealed class Win32Options
     public WaveOutObserver? WaveOutObserver { get; init; }
     /// <summary>VirtualSink only: the raw consume-time slices (about 10 ms each). HostWinmm cannot know consumption times and never calls it.</summary>
     public WaveOutObserver? WaveOutSliceObserver { get; init; }
+    /// <summary>Optional caller-owned per-COM-method profiler. Null (default) leaves COM calls on the unprofiled path.</summary>
+    public BlitzCS.BinaryCompiler.Win32.Com.ComBridgeProfiler? ComBridgeProfiler { get; init; }
 }
 
 /// <summary>Per-process emulation state shared by the services. One instance serves one guest process: a single module, or all modules of a <see cref="GuestModuleSet"/> when the resolvers were made with <see cref="Win32ImportResolver.SharedFactory"/>.</summary>
@@ -386,6 +388,14 @@ public sealed class Win32Context : IDisposable
     public Win32Context(Win32Options options)
     {
         Options = options;
+        if (options.ComBridgeProfiler is { } configuredProfiler)
+            ComBridgeProfiler = configuredProfiler;
+        else if (Environment.GetEnvironmentVariable("BLITZCS_PROFILE_COM_PATH") is { Length: > 0 } profilePath)
+        {
+            var environmentProfiler = new BlitzCS.BinaryCompiler.Win32.Com.ComBridgeProfiler(profilePath, exportAtProcessExit: true);
+            ComBridgeProfiler = environmentProfiler;
+            AddDisposable(environmentProfiler);
+        }
         Heaps = new HeapState(this);
         Virtual = new VirtualState();
         Sync = new SyncState();
@@ -395,6 +405,7 @@ public sealed class Win32Context : IDisposable
     }
 
     public Win32Options Options { get; }
+    internal BlitzCS.BinaryCompiler.Win32.Com.ComBridgeProfiler? ComBridgeProfiler { get; }
 
     private static readonly Action<string>? EnvironmentTrace = Environment.GetEnvironmentVariable("BLITZCS_WIN32_TRACE") == "1" ? (m => { Console.Error.WriteLine(m); Console.Error.Flush(); }) : null;
 
@@ -447,9 +458,12 @@ public sealed class Win32Context : IDisposable
     internal void Sleep(int milliseconds)
     {
         if (milliseconds <= 0) { Thread.Yield(); return; }
-        if (exitEvent.Wait(milliseconds) && IsExitingOnAnotherThread)
-            throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
+        using (GuestModule.Current?.SuspendMemoryWriterForHostWait())
+            if (exitEvent.Wait(milliseconds) && IsExitingOnAnotherThread)
+                throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
     }
+
+    internal IDisposable? SuspendGuestMemoryWriterForHostWait() => GuestModule.Current?.SuspendMemoryWriterForHostWait();
 
     internal void ThrowIfPoisoned()
     {

@@ -40,12 +40,25 @@ public static unsafe class HostInvoke
 /// <summary>Resolves exports of the host's own system DLLs (user32, gdi32, ddraw ...) on first use. A missing DLL or export is a named <see cref="Win32UsageException"/>, never a silent NULL.</summary>
 public static class HostExports
 {
-    private static readonly ConcurrentDictionary<string, nint> libraries = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly ConcurrentDictionary<string, nint> exports = new(StringComparer.OrdinalIgnoreCase);
-
-    public static nint Get(string dll, string name) => exports.GetOrAdd(dll + "!" + name, _ =>
+    private sealed class ExportKeyComparer : IEqualityComparer<(string Dll, string Name)>
     {
-        var lib = libraries.GetOrAdd(dll, d => NativeLibrary.TryLoad(d, out var h) ? h : 0);
+        public static readonly ExportKeyComparer Instance = new();
+        public bool Equals((string Dll, string Name) x, (string Dll, string Name) y) =>
+            string.Equals(x.Dll, y.Dll, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+        public int GetHashCode((string Dll, string Name) obj) =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Dll),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Name));
+    }
+
+    private static readonly ConcurrentDictionary<string, nint> libraries = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<(string, string), nint> exports = new(ExportKeyComparer.Instance);
+
+    public static nint Get(string dll, string name) => exports.GetOrAdd((dll, name), static key =>
+    {
+        var (dll, name) = key;
+        var lib = libraries.GetOrAdd(dll, static d => NativeLibrary.TryLoad(d, out var h) ? h : 0);
         if (lib == 0) throw new Win32UsageException($"The host has no loadable {dll}, so {dll}!{name} cannot be bridged.");
         return NativeLibrary.TryGetExport(lib, name, out var f) ? f : throw new Win32UsageException($"The host's {dll} does not export {name}.");
     });

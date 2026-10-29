@@ -11,7 +11,7 @@ namespace BlitzCS.BinaryCompiler.Win32.DirectX;
 /// <list type="bullet">
 /// <item><b>Surface memory (Lock/Unlock).</b> The pointer the host's Lock returns is a 64-bit host address. The guest gets a shadow in guest memory with the host's pitch: guest Lock = host Lock
 /// (held until the guest unlocks, as on Windows) + a copy of the locked rows into the shadow (skipped for DDLOCK_WRITEONLY); guest Unlock = the rows copied back (skipped for DDLOCK_READONLY) +
-/// host Unlock. lpSurface in the guest's DDSURFACEDESC2 is the shadow. Formats without a whole number of bytes per pixel (FOURCC, below 8 bits) are refused by name.</item>
+/// host Unlock. lpSurface in the guest's DDSURFACEDESC2 is the shadow. Whole-surface DXT1–DXT5 locks use DDSD_LINEARSIZE and copy the compressed bytes unchanged; other FOURCC formats and sub-byte RGB formats are refused by name.</item>
 /// <item><b>DDBLTFX</b> (100 bytes on the guest, 128 on the host: five unions of a DWORD and a surface pointer). The DWORD members are copied; the surface-pointer forms (z-buffer and alpha
 /// overrides, pattern) are refused by name.</item>
 /// </list>
@@ -33,6 +33,16 @@ public static unsafe class DirectDrawSurfaces
 
     private sealed class Locks { public readonly List<Shadow> Active = []; }
     private static readonly ConditionalWeakTable<GuestComObject, Locks> locks = new();
+
+    private sealed class SurfaceNode
+    {
+        public GuestComObject? Root;
+        public readonly HashSet<GuestComObject> Attached = [];
+        public bool HasDestroyHook;
+    }
+
+    private static readonly ConditionalWeakTable<GuestComObject, SurfaceNode> nodes = new();
+    private static readonly object hierarchyGate = new();
 
     /// <summary>Guest DDBLTFX (100 bytes) to host (128 bytes): the five DWORD/pointer unions are 4 bytes on the guest and 8-byte aligned 8 bytes on the host; their DWORD members are copied.</summary>
     public static void BltFxToHost(ReadOnlySpan<byte> g, Span<byte> h)
@@ -75,17 +85,16 @@ public static unsafe class DirectDrawSurfaces
     {
         var i = new GuestComInterface("IDirectDrawSurface7", Surface7);
         Func<GuestComObject, HostComInterface> host = Host;
-        var outSurface = DirectDrawAdapters.OutObject(Surface7);
-        i.Add(new HostComMethod("AddAttachedSurface", 3, Surface(false)).ToGuest(host));
+        i.Add(new GuestComMethod("AddAttachedSurface", 1, AddAttachedSurface));
         i.Add(new HostComMethod("AddOverlayDirtyRect", 4, ComArgs.InStruct(16)).ToGuest(host));
         i.Add(new HostComMethod("Blt", 5, Rect, Surface(true), Rect, ComArgs.Value, BltFx(a => a[3])).ToGuest(host));
         i.Absent("BltBatch", 3, "DDBLTBATCH (an array of structures with surface pointers) has no adapter row; DirectDraw does not implement it either");
         i.Add(new HostComMethod("BltFast", 7, ComArgs.Value, ComArgs.Value, Surface(true), Rect, ComArgs.Value).ToGuest(host));
-        i.Add(new HostComMethod("DeleteAttachedSurface", 8, ComArgs.Value, Surface(true)).ToGuest(host));
+        i.Add(new GuestComMethod("DeleteAttachedSurface", 2, DeleteAttachedSurface));
         i.Add(new GuestComMethod("EnumAttachedSurfaces", 2, EnumAttachedSurfaces));
         i.Absent("EnumOverlayZOrders", 3, "overlays have no adapter rows");
         i.Add(new HostComMethod("Flip", 11, Surface(true), ComArgs.Value).ToGuest(host));
-        i.Add(new HostComMethod("GetAttachedSurface", 12, ComArgs.InStruct(16), outSurface).ToGuest(host));
+        i.Add(new GuestComMethod("GetAttachedSurface", 2, GetAttachedSurface));
         i.Add(new HostComMethod("GetBltStatus", 13, ComArgs.Value).ToGuest(host));
         i.Add(new HostComMethod("GetCaps", 14, ComArgs.OutBytes(16)).ToGuest(host));
         i.Add(new HostComMethod("GetClipper", 15, DirectDrawAdapters.OutObject(DdConst.IidDirectDrawClipper)).ToGuest(host));
@@ -133,6 +142,110 @@ public static unsafe class DirectDrawSurfaces
         return i;
     }
 
+    private static void AttachChild(GuestComHost host, GuestComObject parent, uint childGuestAddr)
+    {
+        var child = host.Find(childGuestAddr);
+        if (child is null || child == parent) return;
+        lock (hierarchyGate)
+        {
+            var root = nodes.TryGetValue(parent, out var pNode) && pNode.Root is { } r && r.IsAlive ? r : parent;
+            if (child == root) return;
+            var rootNode = nodes.GetValue(root, _ => new SurfaceNode());
+            var childNode = nodes.GetValue(child, _ => new SurfaceNode());
+            childNode.Root = root;
+            if (rootNode.Attached.Add(child))
+            {
+                host.AddRef(child);
+                if (!rootNode.HasDestroyHook)
+                {
+                    rootNode.HasDestroyHook = true;
+                    Action<GuestComObject> releaseChildren = _ =>
+                    {
+                        List<GuestComObject> toRelease;
+                        lock (hierarchyGate)
+                        {
+                            toRelease = [.. rootNode.Attached];
+                            rootNode.Attached.Clear();
+                        }
+                        foreach (var attached in toRelease)
+                        {
+                            try { if (attached.IsAlive) host.Release(attached); } catch { }
+                        }
+                    };
+                    // The native complex surface must still be alive when its attached
+                    // surfaces release their native references. The proxy's callback follows.
+                    root.OnDestroy = releaseChildren + root.OnDestroy;
+                }
+            }
+        }
+    }
+
+    private static void DetachChild(GuestComHost host, GuestComObject parent, GuestComObject child)
+    {
+        lock (hierarchyGate)
+        {
+            var root = nodes.TryGetValue(parent, out var pNode) && pNode.Root is { } r && r.IsAlive ? r : parent;
+            if (nodes.TryGetValue(root, out var rootNode) && rootNode.Attached.Remove(child))
+            {
+                try { if (child.IsAlive) host.Release(child); } catch { }
+            }
+        }
+    }
+
+    private static uint AddAttachedSurface(GuestComCall c)
+    {
+        uint attachedAddr = c.Arg(0);
+        if (attachedAddr == 0) return DdConst.DdErrInvalidParams;
+        var attachedObj = c.Host.Find(attachedAddr);
+        if (attachedObj is null) return DdConst.DdErrInvalidParams;
+        var hr = Host(c.Object).Invoke(3, Host(attachedObj).Pointer);
+        WindowProcBridge.ThrowPendingCallbackFault();
+        if (ComHr.Succeeded(hr))
+        {
+            AttachChild(c.Host, c.Object, attachedAddr);
+        }
+        return hr;
+    }
+
+    private static uint DeleteAttachedSurface(GuestComCall c)
+    {
+        uint flags = c.Arg(0), attachedAddr = c.Arg(1);
+        nint nativeAttached = 0;
+        GuestComObject? attachedObj = null;
+        if (attachedAddr != 0)
+        {
+            attachedObj = c.Host.Find(attachedAddr);
+            if (attachedObj is null) return DdConst.DdErrInvalidParams;
+            nativeAttached = Host(attachedObj).Pointer;
+        }
+        var hr = Host(c.Object).Invoke(8, (nint)flags, nativeAttached);
+        WindowProcBridge.ThrowPendingCallbackFault();
+        if (ComHr.Succeeded(hr) && attachedObj is not null)
+        {
+            DetachChild(c.Host, c.Object, attachedObj);
+        }
+        return hr;
+    }
+
+    private static uint GetAttachedSurface(GuestComCall c)
+    {
+        uint capsPtr = c.Arg(0), outSurfPtr = c.Arg(1);
+        if (outSurfPtr == 0) return ComHr.Pointer;
+        c.Mem.WriteUInt32(outSurfPtr, 0);
+        if (capsPtr == 0) return DdConst.DdErrInvalidParams;
+        using var scope = new NativeScope();
+        var nativeCaps = scope.Copy(c.Mem.ReadBytes(capsPtr, 16));
+        nint nativeOut = 0;
+        var hr = Host(c.Object).Invoke(12, nativeCaps, (nint)(&nativeOut));
+        WindowProcBridge.ThrowPendingCallbackFault();
+        if (!ComHr.Succeeded(hr) || nativeOut == 0) return hr;
+        var registry = HostComRegistry.For(c.Host, DirectXTables.Find);
+        var guestAddr = registry.Wrap(nativeOut, Surface7);
+        AttachChild(c.Host, c.Object, guestAddr);
+        c.Mem.WriteUInt32(outSurfPtr, guestAddr);
+        return hr;
+    }
+
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private delegate int SurfacesCallback(nint surface, nint desc, nint context);
 
@@ -151,6 +264,7 @@ public static unsafe class DirectDrawSurfaces
             try
             {
                 var guest = registry.Wrap(surface, Surface7);
+                AttachChild(call.Host, call.Object, guest);
                 Span<byte> g = stackalloc byte[DdLayouts.GuestSurfaceDesc2];
                 DdLayouts.SurfaceDescToGuest(new ReadOnlySpan<byte>((void*)desc, DdLayouts.HostSurfaceDesc2), g);
                 mem.Write(scratch.Address, g);
@@ -186,20 +300,46 @@ public static unsafe class DirectDrawSurfaces
             var pitch = BinaryPrimitives.ReadInt32LittleEndian(h[16..]);
             var bitCount = BinaryPrimitives.ReadUInt32LittleEndian(h[(80 + 12)..]);   // ddpfPixelFormat.dwRGBBitCount
             var pfFlags = BinaryPrimitives.ReadUInt32LittleEndian(h[(80 + 4)..]);
-            if ((pfFlags & 0x4) != 0 || bitCount < 8 || bitCount % 8 != 0)       // DDPF_FOURCC, or less than a byte per pixel
-                throw new Win32UsageException($"IDirectDrawSurface7::Lock on a surface with pixel format flags 0x{pfFlags:X} and {bitCount} bits per pixel: only whole-byte RGB formats are bridged.");
-            int width = (int)BinaryPrimitives.ReadUInt32LittleEndian(h[12..]), height = (int)BinaryPrimitives.ReadUInt32LittleEndian(h[8..]);
-            if (guestRect is not null)
+            int width = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(h[12..])), height = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(h[8..]));
+            int rowBytes, rows;
+            if ((pfFlags & 0x4) != 0) // DDPF_FOURCC: the union holds a total byte size, not a scanline pitch.
             {
-                width = BinaryPrimitives.ReadInt32LittleEndian(guestRect.AsSpan(8)) - BinaryPrimitives.ReadInt32LittleEndian(guestRect);
-                height = BinaryPrimitives.ReadInt32LittleEndian(guestRect.AsSpan(12)) - BinaryPrimitives.ReadInt32LittleEndian(guestRect.AsSpan(4));
+                var fourCc = BinaryPrimitives.ReadUInt32LittleEndian(h[(80 + 8)..]);
+                var blockBytes = fourCc switch
+                {
+                    0x31545844 => 8, // DXT1: one 8-byte block per 4x4 texels
+                    0x32545844 or 0x33545844 or 0x34545844 or 0x35545844 => 16, // DXT2–DXT5
+                    _ => throw new Win32UsageException($"IDirectDrawSurface7::Lock: unsupported FOURCC 0x{fourCc:X} (pixel format flags 0x{pfFlags:X}); only DXT1–DXT5 compressed formats are bridged."),
+                };
+                var fullRect = guestRect is null || (BinaryPrimitives.ReadInt32LittleEndian(guestRect) == 0
+                    && BinaryPrimitives.ReadInt32LittleEndian(guestRect.AsSpan(4)) == 0
+                    && BinaryPrimitives.ReadInt32LittleEndian(guestRect.AsSpan(8)) == width
+                    && BinaryPrimitives.ReadInt32LittleEndian(guestRect.AsSpan(12)) == height);
+                if (!fullRect || (BinaryPrimitives.ReadUInt32LittleEndian(h[4..]) & 0x80000) == 0) // DDSD_LINEARSIZE
+                    throw new Win32UsageException("IDirectDrawSurface7::Lock: compressed surfaces require a whole-surface lock with DDSD_LINEARSIZE.");
+                var minimumBytes = checked(((width + 3) / 4) * ((height + 3) / 4) * blockBytes);
+                if (width <= 0 || height <= 0 || pitch < minimumBytes)
+                    throw new Win32UsageException($"IDirectDrawSurface7::Lock: unusable compressed layout ({width}x{height}, linear size {pitch}, minimum {minimumBytes}).");
+                rowBytes = pitch;
+                rows = 1;
             }
-            var rowBytes = checked(width * (int)(bitCount / 8));
-            if (bits == 0 || pitch < rowBytes || height <= 0 || rowBytes <= 0) throw new Win32UsageException($"IDirectDrawSurface7::Lock: the host returned an unusable lock (bits 0x{bits:X}, pitch {pitch}, {width}x{height}).");
-            var buffer = c.Mem.Allocate(checked(pitch * height));
+            else
+            {
+                if (bitCount < 8 || bitCount % 8 != 0)
+                    throw new Win32UsageException($"IDirectDrawSurface7::Lock on a surface with pixel format flags 0x{pfFlags:X} and {bitCount} bits per pixel: only whole-byte RGB formats are bridged.");
+                if (guestRect is not null)
+                {
+                    width = BinaryPrimitives.ReadInt32LittleEndian(guestRect.AsSpan(8)) - BinaryPrimitives.ReadInt32LittleEndian(guestRect);
+                    height = BinaryPrimitives.ReadInt32LittleEndian(guestRect.AsSpan(12)) - BinaryPrimitives.ReadInt32LittleEndian(guestRect.AsSpan(4));
+                }
+                rowBytes = checked(width * (int)(bitCount / 8));
+                rows = height;
+            }
+            if (bits == 0 || pitch < rowBytes || rows <= 0 || rowBytes <= 0) throw new Win32UsageException($"IDirectDrawSurface7::Lock: the host returned an unusable lock (bits 0x{bits:X}, pitch/linear size {pitch}, {width}x{height}).");
+            var buffer = c.Mem.Allocate(checked(pitch * rows));
             if ((flags & DdLockWriteOnly) == 0)
-                for (var y = 0; y < height; y++) c.Mem.Write(buffer.Address + (uint)(y * pitch), new ReadOnlySpan<byte>((void*)(bits + (nint)y * pitch), rowBytes));
-            lock (locks) locks.GetValue(c.Object, _ => new Locks()).Active.Add(new Shadow { Buffer = buffer, HostBits = bits, Pitch = pitch, Rows = height, RowBytes = rowBytes, Flags = flags, Rect = guestRect });
+                for (var y = 0; y < rows; y++) c.Mem.Write(buffer.Address + (uint)(y * pitch), new ReadOnlySpan<byte>((void*)(bits + (nint)y * pitch), rowBytes));
+            lock (locks) locks.GetValue(c.Object, _ => new Locks()).Active.Add(new Shadow { Buffer = buffer, HostBits = bits, Pitch = pitch, Rows = rows, RowBytes = rowBytes, Flags = flags, Rect = guestRect });
             Span<byte> g = stackalloc byte[DdLayouts.GuestSurfaceDesc2];
             DdLayouts.SurfaceDescToGuest(h, g);
             BinaryPrimitives.WriteUInt32LittleEndian(g[4..], BinaryPrimitives.ReadUInt32LittleEndian(h[4..]));   // keep DDSD_LPSURFACE: lpSurface is valid (the shadow)

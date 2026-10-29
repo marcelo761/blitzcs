@@ -19,11 +19,12 @@ public static class ComIids
 /// <summary>A COM call from the guest: <c>this</c> is argument 0 of the stdcall frame, method arguments follow.</summary>
 public readonly struct GuestComCall
 {
-    internal GuestComCall(GuestComHost host, GuestComObject obj, GuestComFace face, GuestCall raw) { Host = host; Object = obj; Face = face; Raw = raw; }
+    internal GuestComCall(GuestComHost host, GuestComObject obj, GuestComFace face, GuestCall raw, ComBridgeProfiler.Sample profile = default) { Host = host; Object = obj; Face = face; Raw = raw; Profile = profile; }
     public GuestComHost Host { get; }
     public GuestComObject Object { get; }
     public GuestComFace Face { get; }
     public GuestCall Raw { get; }
+    internal ComBridgeProfiler.Sample Profile { get; }
     public IWin32Memory Mem => Host.Memory;
     /// <summary>Method argument <paramref name="index"/> (0 = the first argument after <c>this</c>), as the 32-bit word the guest pushed.</summary>
     public uint Arg(int index) => Raw.Arg(index + 1);
@@ -278,9 +279,11 @@ public sealed class GuestComHost : IDisposable
     private string DeadMessage(uint self)
     {
         lock (gate)
+        {
             return tombstones.TryGetValue(self, out var name)
                 ? $"The guest called a method of {name} through interface pointer 0x{self:X8} after the object was destroyed (its last reference was already released: double Release or use after free)."
                 : $"The guest called a COM method through 0x{self:X8}, which is not an object of this module.";
+        }
     }
 
     private GuestComObject Resolve(uint self, out GuestComFace face)
@@ -294,10 +297,23 @@ public sealed class GuestComHost : IDisposable
 
     private uint Dispatch(GuestComMethod method, GuestCall g)
     {
+        var profiler = Context.ComBridgeProfiler;
+        if (profiler is null)
+        {
+            var unprofiledObject = Resolve(g.Arg(0), out var unprofiledFace);
+            if (!unprofiledObject.IsAlive) throw new GuestComException(DeadMessage(g.Arg(0)));
+            Context.Trace?.Invoke($"[{Environment.CurrentManagedThreadId}] {unprofiledFace.Interface.Name}::{method.Name} ({unprofiledObject})");
+            return method.Handler is { } unprofiledHandler ? unprofiledHandler(new GuestComCall(this, unprofiledObject, unprofiledFace, g)) : ComHr.NotImpl;
+        }
+
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var obj = Resolve(g.Arg(0), out var face);
         if (!obj.IsAlive) throw new GuestComException(DeadMessage(g.Arg(0)));
         Context.Trace?.Invoke($"[{Environment.CurrentManagedThreadId}] {face.Interface.Name}::{method.Name} ({obj})");
-        return method.Handler is { } h ? h(new GuestComCall(this, obj, face, g)) : ComHr.NotImpl;
+        var sample = profiler.BeginAt(face.Interface.Name, method.Name, started);
+        using var active = sample.Activate();
+        try { return method.Handler is { } h ? h(new GuestComCall(this, obj, face, g, sample)) : ComHr.NotImpl; }
+        finally { sample.Complete(); }
     }
 
     private uint QueryInterface(GuestCall g)

@@ -20,11 +20,13 @@ public enum HostResult
 /// </summary>
 public sealed class HostFunction
 {
+    private nint cachedExport;
     public HostFunction(string dll, string name, HostResult result, params ComArg[] args) { Dll = dll; Name = name; Result = result; Args = args; }
     public string Dll { get; }
     public string Name { get; }
     public HostResult Result { get; }
     public IReadOnlyList<ComArg> Args { get; }
+    public nint NativeExport => cachedExport != 0 ? cachedExport : (cachedExport = HostExports.Get(Dll, Name));
     /// <summary>Decides from the native result whether output arguments are copied back (default: a non-zero result).</summary>
     public Func<nint, bool> Succeeded { get; init; } = r => (int)r != 0;
     /// <summary>The value the guest receives when an argument cannot be adapted (the API's documented failure value; the last error is ERROR_INVALID_PARAMETER).</summary>
@@ -44,7 +46,7 @@ public sealed class HostFunction
             c.Ctx.Options.DebugOutput?.Invoke($"{Dll}!{Name}: {e.Message}");
             return c.Ctx.Fail(Win32Error.InvalidParameter, FailureValue);
         }
-        var r = CallNative(c.Ctx, HostExports.Get(Dll, Name), native);
+        var r = CallNative(c.Ctx, NativeExport, native);
         scope.Complete(Succeeded(r) ? ComHr.Ok : ComHr.Fail);
         return ToGuest(r, Result, $"{Dll}!{Name}");
     }
@@ -95,7 +97,7 @@ public static class HostArgs
     public static ComArg CountedArray(int countIndex, int elementSize, bool optional = true) => new DelegateComArg((s, v) =>
     {
         if (v == 0) return optional ? 0 : throw new ComArgumentException("An array pointer must not be NULL.");
-        return s.Native.Copy(s.Mem.ReadBytes(v, checked((int)s.GuestArgs[countIndex] * elementSize)));
+        return s.Native.CopyFromGuest(s.Mem, v, checked((int)s.GuestArgs[countIndex] * elementSize));
     });
 
     /// <summary>An output array (identical layout) of <paramref name="elementSize"/>-byte elements whose count is computed from the guest arguments; copied back on success.</summary>
