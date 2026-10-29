@@ -6,6 +6,7 @@ using Xunit;
 
 namespace BlitzCS.BinaryCompiler.Tests;
 
+[Collection("GuestRuntime")]
 public sealed class BinaryLibraryWorkstreamBTests
 {
     private static GuestModule CreateModule()

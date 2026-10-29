@@ -54,3 +54,6 @@ Thumbs.db
 /continue.md
 /handoff.md
 /.trail/
+
+# Nested graft caches (generated, local).
+**/graft/.cache/
