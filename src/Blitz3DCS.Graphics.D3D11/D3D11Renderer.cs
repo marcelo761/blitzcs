@@ -1065,16 +1065,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             new("TEXCOORD", 1, Format.R32G32B32A32_Float, 36, 0)
         ];
         _blitInputLayout = _device.CreateInputLayout(blitElements, blitVertexBytecode.Span);
-        for (var samplerIndex = 0; samplerIndex < _textureSamplers.Length; samplerIndex++)
-        {
-            var clampU = (samplerIndex & 1) != 0;
-            var clampV = (samplerIndex & 2) != 0;
-            _textureSamplers[samplerIndex] = _device.CreateSamplerState(new SamplerDescription(Filter.MinMagMipLinear,
-                clampU ? TextureAddressMode.Clamp : TextureAddressMode.Wrap,
-                clampV ? TextureAddressMode.Clamp : TextureAddressMode.Wrap,
-                TextureAddressMode.Clamp, 0, 1, ComparisonFunction.Never,
-                new Color4(0, 0, 0, 0), 0, float.MaxValue));
-        }
+        CreateTextureSamplers();
         _alphaBlendState = _device.CreateBlendState(BlendDescription.NonPremultiplied);
         _transformBuffer = _device.CreateBuffer((uint)sizeof(TransformConstants), BindFlags.ConstantBuffer,
             ResourceUsage.Dynamic, CpuAccessFlags.Write);
@@ -1298,6 +1289,48 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         }
     }
 
+    private float _textureLodBias;
+
+    /// <summary>Legacy global mip LOD bias applied to every texture stage sampler (D3D11 range -16 to 15.99).</summary>
+    public float TextureLodBias
+    {
+        get => _textureLodBias;
+        set
+        {
+            CheckAccess();
+            if (!float.IsFinite(value) || value < -16f || value >= 16f)
+                throw new ArgumentOutOfRangeException(nameof(value), "Texture LOD bias must be finite and within [-16, 16).");
+            if (value == _textureLodBias) return;
+            _textureLodBias = value;
+            ClearPipelineState();
+            DisposeTextureSamplers();
+            CreateTextureSamplers();
+        }
+    }
+
+    private void CreateTextureSamplers()
+    {
+        for (var samplerIndex = 0; samplerIndex < _textureSamplers.Length; samplerIndex++)
+        {
+            var clampU = (samplerIndex & 1) != 0;
+            var clampV = (samplerIndex & 2) != 0;
+            _textureSamplers[samplerIndex] = _device!.CreateSamplerState(new SamplerDescription(Filter.MinMagMipLinear,
+                clampU ? TextureAddressMode.Clamp : TextureAddressMode.Wrap,
+                clampV ? TextureAddressMode.Clamp : TextureAddressMode.Wrap,
+                TextureAddressMode.Clamp, _textureLodBias, 1, ComparisonFunction.Never,
+                new Color4(0, 0, 0, 0), 0, float.MaxValue));
+        }
+    }
+
+    private void DisposeTextureSamplers()
+    {
+        for (var i = 0; i < _textureSamplers.Length; i++)
+        {
+            _textureSamplers[i]?.Dispose();
+            _textureSamplers[i] = null;
+        }
+    }
+
     private void ReleaseGraphicsResources()
     {
         ClearPipelineState();
@@ -1306,11 +1339,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         foreach (var texture in _textures) texture.DisposeFromRenderer();
         _textures.Clear();
         _alphaBlendState?.Dispose(); _alphaBlendState = null;
-        for (var i = 0; i < _textureSamplers.Length; i++)
-        {
-            _textureSamplers[i]?.Dispose();
-            _textureSamplers[i] = null;
-        }
+        DisposeTextureSamplers();
         _inputLayout?.Dispose(); _inputLayout = null;
         _transformBuffer?.Dispose(); _transformBuffer = null;
         _materialBuffer?.Dispose(); _materialBuffer = null;
@@ -1318,6 +1347,8 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         _multiplyBlendState?.Dispose(); _multiplyBlendState = null;
         _additiveBlendState?.Dispose(); _additiveBlendState = null;
         _noCullRasterizerState?.Dispose(); _noCullRasterizerState = null;
+        _wireframeRasterizerState?.Dispose(); _wireframeRasterizerState = null;
+        _wireframeNoCullRasterizerState?.Dispose(); _wireframeNoCullRasterizerState = null;
         _readOnlyDepthState?.Dispose(); _readOnlyDepthState = null;
         _disabledDepthState?.Dispose(); _disabledDepthState = null;
         _blitVertexBuffer?.Dispose(); _blitVertexBuffer = null;

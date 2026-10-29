@@ -291,6 +291,40 @@ public static partial class LegacyGraphics
         GetTexture(texture).Blend = blend;
     }
 
+    /// <summary>
+    /// Stores one element of the texture's 2x2 bump-environment matrix, as the legacy runtime does.
+    /// The values only affect blend mode 6, which TextureBlend rejects explicitly in this backend.
+    /// </summary>
+    public static void TextureBumpEnvMat(int texture, int x, int y, float value)
+    {
+        CheckThreadIfStarted();
+        EnsureNoBufferLocked();
+        ArgumentOutOfRangeException.ThrowIfNegative(x);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(x, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(y);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(y, 1);
+        if (!float.IsFinite(value)) throw new ArgumentOutOfRangeException(nameof(value), "Bump environment values must be finite.");
+        GetTexture(texture).BumpEnvMat[x, y] = value;
+    }
+
+    /// <summary>Stores the texture's bump-environment luminance scale (consumed only by blend mode 6).</summary>
+    public static void TextureBumpEnvScale(int texture, float scale)
+    {
+        CheckThreadIfStarted();
+        EnsureNoBufferLocked();
+        if (!float.IsFinite(scale)) throw new ArgumentOutOfRangeException(nameof(scale), "Bump environment scale must be finite.");
+        GetTexture(texture).BumpEnvScale = scale;
+    }
+
+    /// <summary>Stores the texture's bump-environment luminance offset (consumed only by blend mode 6).</summary>
+    public static void TextureBumpEnvOffset(int texture, float offset)
+    {
+        CheckThreadIfStarted();
+        EnsureNoBufferLocked();
+        if (!float.IsFinite(offset)) throw new ArgumentOutOfRangeException(nameof(offset), "Bump environment offset must be finite.");
+        GetTexture(texture).BumpEnvOffset = offset;
+    }
+
     public static int BackBuffer()
     {
         CheckThreadIfStarted();
@@ -496,6 +530,9 @@ public static partial class LegacyGraphics
         return new CopyRegion(checked((int)sx), checked((int)sy), checked((int)dx), checked((int)dy), checked((int)w), checked((int)h));
     }
 
+    internal static void RegisterTextureForTesting(TextureRep rep) => Textures.Add(rep.Handle, rep);
+    internal static void ForgetTextureForTesting(int handle) => Textures.Remove(handle);
+
     private static TextureRep GetTexture(int texture) => Textures.TryGetValue(texture, out var rep)
         ? rep : throw new ArgumentException($"Texture handle {texture} is invalid or has been freed.", nameof(texture));
 
@@ -642,6 +679,9 @@ public static partial class LegacyGraphics
         public string SourceName { get; set; } = string.Empty;
         public List<TextureFrame> Frames { get; } = frames;
         public int Blend { get; set; } = 2;
+        public float[,] BumpEnvMat { get; } = new float[2, 2];
+        public float BumpEnvScale { get; set; }
+        public float BumpEnvOffset { get; set; }
         public Vector2 Scale { get; set; } = Vector2.One;
         public Vector2 Position { get; set; }
         public float Rotation { get; set; }

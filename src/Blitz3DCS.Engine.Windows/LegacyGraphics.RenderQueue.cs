@@ -95,7 +95,7 @@ public static partial class LegacyGraphics
             var effects = surfaceMaterial.Effects | material.Effects;
             var fog = (effects & 8) != 0 ? null : GetCameraFogForRendering(camera.Entity);
             var depthMode = draw.Order != 0 ? 2 : draw.Blend != 0 ? 1 : 0;
-            var state = new D3D11LightingDrawState(effects, surfaceMaterial.Shininess + material.Shininess, draw.Blend, depthMode);
+            var state = new D3D11LightingDrawState(effects, surfaceMaterial.Shininess + material.Shininess, draw.Blend, depthMode, _wireframe);
             renderer.DrawMesh(gpuMesh, draw.WorldViewProjection, RenderLayers, draw.Blend == 1, draw.Color, fog,
                 draw.World * view, state, draw.World);
             _trianglesRendered += draw.Surface.Indices.Count / 3;

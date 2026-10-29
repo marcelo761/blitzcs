@@ -17,7 +17,7 @@ public readonly record struct D3D11Light(
     float OuterConeRadians);
 
 /// <summary>Per-mesh legacy lighting and rasterization settings.</summary>
-public readonly record struct D3D11LightingDrawState(int Effects, float Shininess, int Blend = 0, int DepthMode = 0)
+public readonly record struct D3D11LightingDrawState(int Effects, float Shininess, int Blend = 0, int DepthMode = 0, bool Wireframe = false)
 {
     /// <summary>Preserves the renderer's historical vertex-colored, unlit default.</summary>
     public static D3D11LightingDrawState Default => new(Effects: 35, Shininess: 0);
@@ -30,6 +30,8 @@ public sealed unsafe partial class D3D11Renderer
     private ID3D11BlendState? _multiplyBlendState;
     private ID3D11BlendState? _additiveBlendState;
     private ID3D11RasterizerState? _noCullRasterizerState;
+    private ID3D11RasterizerState? _wireframeRasterizerState;
+    private ID3D11RasterizerState? _wireframeNoCullRasterizerState;
     private ID3D11DepthStencilState? _readOnlyDepthState;
     private ID3D11DepthStencilState? _disabledDepthState;
 
@@ -111,6 +113,8 @@ public sealed unsafe partial class D3D11Renderer
         _multiplyBlendState = _device!.CreateBlendState(multiply);
         _additiveBlendState = _device.CreateBlendState(add);
         _noCullRasterizerState = _device!.CreateRasterizerState(RasterizerDescription.CullNone);
+        _wireframeRasterizerState = _device.CreateRasterizerState(new RasterizerDescription(CullMode.Back, FillMode.Wireframe));
+        _wireframeNoCullRasterizerState = _device.CreateRasterizerState(new RasterizerDescription(CullMode.None, FillMode.Wireframe));
         _readOnlyDepthState = _device.CreateDepthStencilState(new DepthStencilDescription
         {
             DepthEnable = true, DepthWriteMask = DepthWriteMask.Zero, DepthFunc = ComparisonFunction.LessEqual,
@@ -125,8 +129,10 @@ public sealed unsafe partial class D3D11Renderer
     {
         _context!.VSSetConstantBuffer(2, _lightingBuffer!);
         _context.PSSetConstantBuffer(2, _lightingBuffer!);
-        if ((state.Effects & 16) != 0) _context.RSSetState(_noCullRasterizerState);
-        else _context.RSSetState(null);
+        var noCull = (state.Effects & 16) != 0;
+        _context.RSSetState(state.Wireframe
+            ? noCull ? _wireframeNoCullRasterizerState : _wireframeRasterizerState
+            : noCull ? _noCullRasterizerState : null);
         var blend = state.Blend switch
         {
             2 => _multiplyBlendState,

@@ -65,6 +65,7 @@ public static partial class LegacyGraphics
         }
         _renderer.Dispose();
         _renderer = null;
+        _wireframe = false;
         _width = 0;
         _height = 0;
         _threadId = 0;
