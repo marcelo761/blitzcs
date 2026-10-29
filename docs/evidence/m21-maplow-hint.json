@@ -1,0 +1,60 @@
+{
+  "workload": "2048 held 4096-byte low mappings, then 5 samples of 1000 allocate/free cycles of 64 bytes under Wine",
+  "results": {
+    "baseline": {
+      "os": "Microsoft Windows NT 10.0.19045.0",
+      "platform": "windows",
+      "allocationGranularity": 65536,
+      "heldMappings": 2048,
+      "heldBytesPerMap": 4096,
+      "heldSetupMs": 1272.6295,
+      "churnBytesPerMap": 64,
+      "cyclesPerSample": 1000,
+      "samplesMs": [
+        1190.8127,
+        1186.7137,
+        1194.9581,
+        1193.5117,
+        1203.0213
+      ],
+      "medianSampleMs": 1193.5117,
+      "medianUsPerMapFree": 1193.5117,
+      "minSampleMs": 1186.7137,
+      "maxSampleMs": 1203.0213,
+      "uniqueChurnAddressesAcrossAllSamples": 1,
+      "noTemporaryRangeOverlappedHeldMappings": true
+    },
+    "hint": {
+      "os": "Microsoft Windows NT 10.0.19045.0",
+      "platform": "windows",
+      "allocationGranularity": 65536,
+      "heldMappings": 2048,
+      "heldBytesPerMap": 4096,
+      "heldSetupMs": 8.9295,
+      "churnBytesPerMap": 64,
+      "cyclesPerSample": 1000,
+      "samplesMs": [
+        6.1115,
+        5.3086,
+        5.1151,
+        5.3933,
+        5.4596
+      ],
+      "medianSampleMs": 5.3933,
+      "medianUsPerMapFree": 5.3933,
+      "minSampleMs": 5.1151,
+      "maxSampleMs": 6.1115,
+      "uniqueChurnAddressesAcrossAllSamples": 1,
+      "noTemporaryRangeOverlappedHeldMappings": true
+    },
+    "contract": {
+      "platform": "windows",
+      "first": "0x78000000",
+      "staleHint": "0x78010000",
+      "blockerIntact": true,
+      "fallback": "0x78020000",
+      "reused": "0x78020000",
+      "exactHoleReuse": true
+    }
+  }
+}

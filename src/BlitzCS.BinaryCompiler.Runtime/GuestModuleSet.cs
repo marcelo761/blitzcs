@@ -73,6 +73,7 @@ public sealed class GuestModuleSet : IDisposable
         if (entries.Any(e => e.Key == key)) throw new ArgumentException($"A module named '{name}' is already in the set.", nameof(name));
         if (conventions?.Default is { } d && d != GuestCallingConvention.Cdecl)
             throw new ArgumentException("ExportConventions.Default accepts only Cdecl; declare stdcall exports individually with their argument count.", nameof(conventions));
+        environment.ConfigureStableReads(artifact.SourceSha256);
         entries.Add(new Entry { Key = key, DisplayName = name, Artifact = artifact, Image = image, Conventions = conventions ?? new ExportConventions(), Options = moduleOptions ?? new GuestModuleOptions() });
         return this;
     }

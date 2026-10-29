@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using BlitzCS.BinaryCompiler.CodeGen;
 using BlitzCS.BinaryCompiler.Runtime;
 using BlitzCS.BinaryCompiler.Tests.Support;
@@ -201,6 +202,80 @@ public sealed class CrossModuleDispatchTests
         var pointer = lonely.Memory.ReadUInt32(lonely.Bind("getvt", GuestCallingConvention.Cdecl, 0).Call());   // P2.add1
         var ex = Assert.Throws<GuestTrapException>(() => Fn(set, "z", "z_callptr", 2).Call(pointer, 1));
         Assert.Contains("untranslated code", ex.Message);
+    }
+
+    [Fact]
+    public void LateRegistryTargetIsReachableAfterEarlierAndRetiredRecords()
+    {
+        const int fillers = 15;
+        var modules = Enumerable.Range(0, fillers).Select(i => ($"p{i:D2}", LibP())).ToList();
+        modules.Add(("target", LibP()));
+        modules.Add(("target2", LibP()));
+        modules.Add(("z", LibZ(false)));
+        var built = Translate(OptimizationProfile.Release, [.. modules]);
+        using var set = new GuestModuleSet();
+        for (var i = 0; i < fillers; i++)
+            set.Add($"p{i:D2}.dll", built[i].Artifact, built[i].Image, ExportConventions.AllCdecl);
+        set.Add("target.dll", built[fillers].Artifact, built[fillers].Image, ExportConventions.AllCdecl);
+        set.Add("target2.dll", built[fillers + 1].Artifact, built[fillers + 1].Image, ExportConventions.AllCdecl);
+        set.Add("z.dll", built[fillers + 2].Artifact, built[fillers + 2].Image, ExportConventions.AllCdecl);
+        set.LoadAll();
+
+        var callptr = Fn(set, "z", "z_callptr", 2);
+        var context = set["z"].HostImageBase + (nint)built[fillers + 2].Artifact.ContextOffset;
+        var cachedRecord = () => Marshal.ReadIntPtr(context + (nint)ModuleRegistryLayout.CachedRecordCellOffset);
+        var retiredTarget = set["p00"].Bind("getvt", GuestCallingConvention.Cdecl, 0).Call();
+        var retiredPointer = set["p00"].Memory.ReadUInt32(retiredTarget);
+        var target = set["target"].Bind("getvt", GuestCallingConvention.Cdecl, 0).Call();
+        var pointer = set["target"].Memory.ReadUInt32(target);
+        var target2 = set["target2"].Bind("getvt", GuestCallingConvention.Cdecl, 0).Call();
+        var pointer2 = set["target2"].Memory.ReadUInt32(target2);
+        var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
+        var callers = new[] { retiredPointer, pointer, pointer2 }.Select(address => new Thread(() =>
+        {
+            try
+            {
+                for (var i = 0; i < 512; i++)
+                    if (callptr.Call(address, (uint)i) != (uint)i + 1) failures.Add($"0x{address:X8} call {i}");
+            }
+            catch (Exception e) { failures.Add(e.ToString()); }
+        })).ToArray();
+        foreach (var thread in callers) thread.Start();
+        foreach (var thread in callers) thread.Join();
+        Assert.Empty(failures);
+
+        // Alternate two live records at the end of the registry. Each target change misses the per-module MRU cell,
+        // so both paths must continue resolving correctly through the registry fallback.
+        for (uint i = 0; i < 128; i++)
+            Assert.Equal(i + 1, callptr.Call((i & 1) == 0 ? pointer : pointer2, i));
+
+        Assert.Equal(42u, callptr.Call(retiredPointer, 41)); // leave p00 in the cache before retiring it
+        var beforeRetirement = cachedRecord();
+        Assert.NotEqual(nint.Zero, beforeRetirement);
+
+        set.Unload("p00"); // its stable registry slot remains before the live target
+        var retired = Assert.Throws<GuestTrapException>(() => callptr.Call(retiredPointer, 42));
+        Assert.Contains("'p00.dll'", retired.Message);
+        Assert.Contains("unloaded", retired.Message);
+        Assert.Equal(beforeRetirement, cachedRecord());
+
+        Assert.Equal(43u, callptr.Call(pointer, 42));
+        Assert.NotEqual(beforeRetirement, cachedRecord()); // stale cache was revalidated and replaced by the late live record
+        Assert.Equal(44u, callptr.Call(pointer2, 43));
+
+        var data = set["target"].Bind("getvt", GuestCallingConvention.Cdecl, 0).Call();
+        var ex = Assert.Throws<GuestTrapException>(() => callptr.Call(data, 1));
+        Assert.Contains($"0x{data:X8}", ex.Message);
+        Assert.Contains("untranslated code", ex.Message);
+
+        // Removing and adding the same artifact leaves the retired record inert and publishes a fresh live record.
+        // The old guest address must resolve to the retranslated module rather than the earlier retired slot.
+        set.Add("p00.dll", built[0].Artifact, built[0].Image, ExportConventions.AllCdecl);
+        set.LoadAll();
+        var retranslatedTarget = set["p00"].Bind("getvt", GuestCallingConvention.Cdecl, 0).Call();
+        var retranslatedPointer = set["p00"].Memory.ReadUInt32(retranslatedTarget);
+        Assert.Equal(retiredPointer, retranslatedPointer);
+        Assert.Equal(45u, callptr.Call(retranslatedPointer, 44));
     }
 
     [Theory, MemberData(nameof(Profiles))]

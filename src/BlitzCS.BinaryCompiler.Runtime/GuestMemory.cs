@@ -1,3 +1,6 @@
+using System.Numerics;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Text;
 
 namespace BlitzCS.BinaryCompiler.Runtime;
@@ -69,7 +72,37 @@ public sealed unsafe class GuestMemory
 {
     private readonly GuestModule module;
     private readonly object gate = new();
-    private volatile GuestRegion[] regions = [];
+    private readonly record struct RegionStartKey(ulong Start, long Order) : IComparable<RegionStartKey>
+    {
+        public int CompareTo(RegionStartKey other)
+        {
+            var start = Start.CompareTo(other.Start);
+            // Descending order keeps equal-start keys adjacent and lets boundary sentinels
+            // select the oldest mapping. Overlap lookup itself follows ByOrder.
+            return start != 0 ? start : other.Order.CompareTo(Order);
+        }
+    }
+
+    private sealed class RegionSnapshot(
+        PersistentAvlMap<RegionStartKey, GuestRegion>.Node? byStart,
+        PersistentAvlMap<long, GuestRegion>.Node? byOrder,
+        long nextOrder,
+        bool hasOverlaps)
+    {
+        internal static readonly RegionSnapshot Empty = new(null, null, 0, false);
+        internal PersistentAvlMap<RegionStartKey, GuestRegion>.Node? ByStart { get; } = byStart;
+        internal PersistentAvlMap<long, GuestRegion>.Node? ByOrder { get; } = byOrder;
+        internal long NextOrder { get; } = nextOrder;
+        internal bool HasOverlaps { get; } = hasOverlaps;
+
+        // This memo is only ever filled from the snapshot's own immutable index, so it
+        // cannot outlive a mapping mutation or retain a previous snapshot's region.
+        internal RegionCache? CachedRegion;
+    }
+
+    private sealed record RegionCache(GuestRegion Region, ulong UntilStart);
+
+    private volatile RegionSnapshot regionSnapshot = RegionSnapshot.Empty;
     private volatile GuestMemory[] peers = [];
 
     internal GuestMemory(GuestModule module) => this.module = module;
@@ -82,12 +115,52 @@ public sealed unsafe class GuestMemory
 
     internal void Add(GuestRegion region)
     {
-        lock (gate) regions = [.. regions, region];
+        using var mutation = module.Environment.EnterMemoryMutation();
+        lock (gate)
+        {
+            var current = regionSnapshot;
+            var order = checked(current.NextOrder + 1);
+            var key = new RegionStartKey(region.Start, order);
+            var hasOverlaps = current.HasOverlaps || HasPotentialOverlap(current.ByStart, region);
+            var byStart = PersistentAvlMap<RegionStartKey, GuestRegion>.Set(current.ByStart, key, region);
+            var byOrder = PersistentAvlMap<long, GuestRegion>.Set(current.ByOrder, order, region);
+            regionSnapshot = new(byStart, byOrder, order, hasOverlaps);
+        }
     }
 
     internal void Remove(ulong start)
     {
-        lock (gate) regions = [.. regions.Where(r => r.Start != start)];
+        using var mutation = module.Environment.EnterMemoryMutation();
+        lock (gate)
+        {
+            var current = regionSnapshot;
+            var byStart = current.ByStart;
+            var byOrder = current.ByOrder;
+            var query = new RegionStartKey(start, 0);
+            var removedAny = false;
+            while (PersistentAvlMap<RegionStartKey, GuestRegion>.TryGetPredecessor(byStart, query, out var key, out _)
+                   && key.Start == start)
+            {
+                byStart = PersistentAvlMap<RegionStartKey, GuestRegion>.Remove(byStart, key);
+                byOrder = PersistentAvlMap<long, GuestRegion>.Remove(byOrder, key.Order);
+                removedAny = true;
+            }
+            if (removedAny) regionSnapshot = new(byStart, byOrder, current.NextOrder, current.HasOverlaps);
+        }
+    }
+
+    private static bool HasPotentialOverlap(PersistentAvlMap<RegionStartKey, GuestRegion>.Node? root, GuestRegion added)
+    {
+        // In a non-overlapping snapshot, the immediate neighbors are enough. A repeated
+        // start is conservatively considered overlap so reads switch to insertion order.
+        if (PersistentAvlMap<RegionStartKey, GuestRegion>.TryGetPredecessor(
+                root, new RegionStartKey(added.Start, 0), out var previousKey, out var previous))
+        {
+            if (previousKey.Start == added.Start || previous.End > added.Start) return true;
+        }
+        return PersistentAvlMap<RegionStartKey, GuestRegion>.TryGetSuccessor(
+                   root, new RegionStartKey(added.Start, long.MinValue), out var nextKey, out _)
+               && nextKey.Start < added.End;
     }
 
     /// <summary>Makes the regions of <paramref name="peer"/> (another module of the same <see cref="GuestModuleSet"/>) addressable here: one process, one guest address space.</summary>
@@ -103,7 +176,8 @@ public sealed unsafe class GuestMemory
 
     internal void Clear()
     {
-        lock (gate) regions = [];
+        using var mutation = module.Environment.EnterMemoryMutation();
+        lock (gate) regionSnapshot = RegionSnapshot.Empty;
     }
 
     public bool IsMapped(uint address, uint length)
@@ -116,14 +190,57 @@ public sealed unsafe class GuestMemory
     private GuestRegion? Find(uint address, long length, bool write)
     {
         var end = (ulong)address + (ulong)length;
-        foreach (var r in regions)
-            if (address >= r.Start && end <= r.End)
-                return Accessible(r, address, end, write) ? r : null;
-        foreach (var peer in peers)
-            foreach (var r in peer.regions)
+        var snapshot = regionSnapshot;
+        // Zero-length boundary queries retain their original insertion-order semantics.
+        if (length <= 0)
+        {
+            foreach (var r in PersistentAvlMap<long, GuestRegion>.Enumerate(snapshot.ByOrder))
                 if (address >= r.Start && end <= r.End)
                     return Accessible(r, address, end, write) ? r : null;
+            foreach (var peer in peers)
+                foreach (var r in PersistentAvlMap<long, GuestRegion>.Enumerate(peer.regionSnapshot.ByOrder))
+                    if (address >= r.Start && end <= r.End)
+                        return Accessible(r, address, end, write) ? r : null;
+            return null;
+        }
+        if (snapshot.HasOverlaps)
+        {
+            foreach (var r in PersistentAvlMap<long, GuestRegion>.Enumerate(snapshot.ByOrder))
+                if (address >= r.Start && end <= r.End)
+                    return Accessible(r, address, end, write) ? r : null;
+        }
+        else
+        {
+            if (FindCovering(snapshot, address, end) is { } own)
+                return Accessible(own, address, end, write) ? own : null;
+        }
+        foreach (var peer in peers)
+            if (FindCovering(peer.regionSnapshot, address, end) is { } r)
+                return Accessible(r, address, end, write) ? r : null;
         return null;
+    }
+
+    private static GuestRegion? FindCovering(RegionSnapshot snapshot, uint address, ulong end)
+    {
+        var cached = Volatile.Read(ref snapshot.CachedRegion);
+        if (cached is not null && address >= cached.Region.Start && address < cached.UntilStart && end <= cached.Region.End)
+            return cached.Region;
+        if (!PersistentAvlMap<RegionStartKey, GuestRegion>.TryGetPredecessor(
+                snapshot.ByStart,
+                new RegionStartKey(address, 0),
+                out var foundKey,
+                out var found) ||
+            end > found.End)
+            return null;
+        var untilStart = PersistentAvlMap<RegionStartKey, GuestRegion>.TryGetSuccessor(
+            snapshot.ByStart,
+            new RegionStartKey(foundKey.Start, long.MinValue),
+            out var nextKey,
+            out _)
+            ? nextKey.Start
+            : (ulong)uint.MaxValue + 1;
+        Volatile.Write(ref snapshot.CachedRegion, new RegionCache(found, untilStart));
+        return found;
     }
 
     private static bool Accessible(GuestRegion r, uint address, ulong end, bool write)
@@ -145,10 +262,11 @@ public sealed unsafe class GuestMemory
 
     internal GuestRegion? FindRegion(uint address, out GuestMemory owner)
     {
-        foreach (var r in regions)
+        var snapshot = regionSnapshot;
+        foreach (var r in PersistentAvlMap<long, GuestRegion>.Enumerate(snapshot.ByOrder))
             if (address >= r.Start && address < r.End) { owner = this; return r; }
         foreach (var peer in peers)
-            foreach (var r in peer.regions)
+            foreach (var r in PersistentAvlMap<long, GuestRegion>.Enumerate(peer.regionSnapshot.ByOrder))
                 if (address >= r.Start && address < r.End) { owner = peer; return r; }
         owner = this;
         return null;
@@ -176,8 +294,11 @@ public sealed unsafe class GuestMemory
         try
         {
             var best = 0x1_0000_0000UL;
-            foreach (var r in regions) if (r.Start > address && r.Start < best) best = r.Start;
-            foreach (var peer in peers) foreach (var r in peer.regions) if (r.Start > address && r.Start < best) best = r.Start;
+            var snapshot = regionSnapshot;
+            foreach (var r in PersistentAvlMap<long, GuestRegion>.Enumerate(snapshot.ByOrder)) if (r.Start > address && r.Start < best) best = r.Start;
+            foreach (var peer in peers)
+                foreach (var r in PersistentAvlMap<long, GuestRegion>.Enumerate(peer.regionSnapshot.ByOrder))
+                    if (r.Start > address && r.Start < best) best = r.Start;
             return best;
         }
         finally { module.ExitCall(); }
@@ -193,6 +314,7 @@ public sealed unsafe class GuestMemory
         module.EnterCall();
         try
         {
+            using var mutation = module.Environment.EnterMemoryMutation();
             if (protection == MemoryProtection.ReadExecute) throw new ArgumentException("Host execute permission is never granted to guest data.", nameof(protection));
             var platform = PlatformMemory.Current;
             var ps = (uint)platform.PageSize;
@@ -240,6 +362,7 @@ public sealed unsafe class GuestMemory
     /// </summary>
     private void GuardedWrite(uint address, long length, delegate*<byte*, void*, void> store, void* state)
     {
+        using var mutation = module.Environment.EnterMemoryMutation();
         if (length >= 0 && Find(address, length, true) is not null) { store((byte*)(nuint)address, state); return; }
         if (length > 0 && module.Environment.TryDynamicCodeDataWrite(this, address, (uint)length, store, state)) return;
         throw new GuestMemoryException(address, length, true);
@@ -251,6 +374,7 @@ public sealed unsafe class GuestMemory
         module.EnterCall();
         try
         {
+            using var mutation = module.Environment.EnterMemoryMutation();
             var ps = (uint)PlatformMemory.Current.PageSize;
             if (length == 0) return;
             var region = FindRegion(address, out var owner);
@@ -331,16 +455,53 @@ public sealed unsafe class GuestMemory
         module.EnterCall();
         try
         {
-            var sb = new StringBuilder();
-            for (var i = 0; i <= maxLength; i++)
+            // Preserve the old byte-by-byte wrapping behavior if any allowed index can cross the 32-bit address boundary.
+            if (maxLength >= 0 && (ulong)address + (ulong)maxLength > uint.MaxValue)
+                return ReadAnsiStringScalar(address, maxLength);
+
+            long i = 0;
+            if (Sse2.IsSupported && maxLength >= 15)
             {
-                var b = *Check(address + (uint)i, 1, false);
-                if (b == 0) return sb.ToString();
-                sb.Append((char)b);
+                while (i <= (long)maxLength - 15)
+                {
+                    var blockAddress = (ulong)address + (ulong)i;
+                    // The guest pointer arithmetic below wraps at 32 bits. Keep vector reads out of that case.
+                    if (blockAddress > uint.MaxValue - 15UL) break;
+
+                    if (Find((uint)blockAddress, 16, false) is null) break; // Retry scalarly to preserve the exact fault/terminator boundary.
+                    var block = (byte*)(nuint)(uint)blockAddress;
+
+                    var zeros = Sse2.CompareEqual(Sse2.LoadVector128(block), Vector128<byte>.Zero);
+                    var mask = Sse2.MoveMask(zeros.AsSByte());
+                    if (mask != 0)
+                    {
+                        i += BitOperations.TrailingZeroCount((uint)mask);
+                        return Encoding.Latin1.GetString(new ReadOnlySpan<byte>((byte*)(nuint)address, (int)i));
+                    }
+                    i += 16;
+                }
+            }
+
+            for (; i <= maxLength; i++)
+            {
+                var b = *Check(unchecked(address + (uint)i), 1, false);
+                if (b == 0) return Encoding.Latin1.GetString(new ReadOnlySpan<byte>((byte*)(nuint)address, (int)i));
             }
             throw new GuestMemoryException(address, maxLength, false);
         }
         finally { module.ExitCall(); }
+    }
+
+    private string ReadAnsiStringScalar(uint address, int maxLength)
+    {
+        var sb = new StringBuilder();
+        for (var i = 0; i <= maxLength; i++)
+        {
+            var b = *Check(unchecked(address + (uint)i), 1, false);
+            if (b == 0) return sb.ToString();
+            sb.Append((char)b);
+        }
+        throw new GuestMemoryException(address, maxLength, false);
     }
 
     /// <summary>Allocates a zeroed scratch buffer in the low 4 GiB. Dispose the buffer (or the module) to free it.</summary>

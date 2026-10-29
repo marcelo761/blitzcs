@@ -1,0 +1,1016 @@
+{
+  "schemaVersion": 1,
+  "scope": "Linux x64 paired microbenchmarks of command entry and Latin-1 NUL-terminated string reads",
+  "manifest": {
+    "order": [
+      "r1 baseline ANSI",
+      "r1 candidate ANSI",
+      "r1 baseline command-entry",
+      "r1 candidate command-entry",
+      "r2 candidate ANSI",
+      "r2 baseline ANSI",
+      "r2 candidate command-entry",
+      "r2 baseline command-entry",
+      "r3 baseline ANSI",
+      "r3 candidate ANSI",
+      "r3 baseline command-entry",
+      "r3 candidate command-entry"
+    ],
+    "runtimeSha256ByBuild": {
+      "baseline": "fda15d56a7db316e5edbc91e7e3d177cb8670f30492f657678f26e5b21c6bec0",
+      "candidate": "eb9c7ae4d9aea0f993190cfa986d2876ed39a2e1d0b6e1fb9f23f473d481a300"
+    },
+    "note": "Command-entry JSON predates runtime hash reporting, so its loaded DLL hash is recorded here from the exact swap order; the ANSI mode independently hashes the loaded assembly in each run.",
+    "benchmarkAssemblySha256": "4a9d55f667d15208ed1e43043dcbfa67562a4fb0d831c9316696b42b97264871",
+    "environment": {
+      "os": "Linux-7.2.9-ogc3.1.fc44.x86_64-x86_64-with-glibc2.43",
+      "dotnet": "10.0.13",
+      "cpuPinned": 3,
+      "readyToRun": false,
+      "tieredPgo": false,
+      "samplesPerRound": 5,
+      "ansiIterationsPerSample": 10000,
+      "commandEntryIterationsPerSample": 100000
+    }
+  },
+  "summary": {
+    "benchmark": "ansi-string-and-command-entry-paired-runtime",
+    "baselineRuntimeSha256": "fda15d56a7db316e5edbc91e7e3d177cb8670f30492f657678f26e5b21c6bec0",
+    "candidateRuntimeSha256": "eb9c7ae4d9aea0f993190cfa986d2876ed39a2e1d0b6e1fb9f23f473d481a300",
+    "runtimeReadyToRun": "disabled for both builds; required to load the Windows-published baseline under Linux",
+    "runtimeTieredPGO": "disabled for both builds",
+    "cpu": 3,
+    "rounds": 3,
+    "results": {
+      "ansi-baseline": {
+        "8": {
+          "rounds": [
+            509.47,
+            510.13,
+            511.58
+          ],
+          "median": 510.13
+        },
+        "24": {
+          "rounds": [
+            997.88,
+            1006.19,
+            1001.03
+          ],
+          "median": 1001.03
+        },
+        "128": {
+          "rounds": [
+            1198.15,
+            1205.43,
+            1197.53
+          ],
+          "median": 1198.15
+        }
+      },
+      "ansi-candidate": {
+        "8": {
+          "rounds": [
+            285.61,
+            280.26,
+            285.83
+          ],
+          "median": 285.61
+        },
+        "24": {
+          "rounds": [
+            321.32,
+            318.64,
+            321.58
+          ],
+          "median": 321.32
+        },
+        "128": {
+          "rounds": [
+            510.25,
+            515.6,
+            512.08
+          ],
+          "median": 512.08
+        }
+      },
+      "command-baseline": {
+        "cached-GuestFunction.Call": {
+          "rounds": [
+            363.796,
+            369.006,
+            359.919
+          ],
+          "median": 363.796
+        },
+        "GuestModule.InvokeRva": {
+          "rounds": [
+            251.819,
+            231.623,
+            251.904
+          ],
+          "median": 251.819
+        },
+        "guest-side-loop-calling-nop_fn": {
+          "rounds": [
+            1.471,
+            1.507,
+            1.507
+          ],
+          "median": 1.507
+        }
+      },
+      "command-candidate": {
+        "cached-GuestFunction.Call": {
+          "rounds": [
+            524.907,
+            379.306,
+            365.269
+          ],
+          "median": 379.306
+        },
+        "GuestModule.InvokeRva": {
+          "rounds": [
+            218.126,
+            226.775,
+            215.535
+          ],
+          "median": 218.126
+        },
+        "guest-side-loop-calling-nop_fn": {
+          "rounds": [
+            1.508,
+            1.589,
+            2.325
+          ],
+          "median": 1.589
+        }
+      }
+    },
+    "benchmarkAssemblySha256": "4a9d55f667d15208ed1e43043dcbfa67562a4fb0d831c9316696b42b97264871",
+    "environment": {
+      "os": "Linux-7.2.9-ogc3.1.fc44.x86_64-x86_64-with-glibc2.43",
+      "dotnet": "10.0.13",
+      "cpuPinned": 3,
+      "readyToRun": false,
+      "tieredPgo": false,
+      "samplesPerRound": 5,
+      "ansiIterationsPerSample": 10000,
+      "commandEntryIterationsPerSample": 100000
+    }
+  },
+  "rawRuns": {
+    "r1-baseline-ansi": {
+      "benchmark": "guest-memory-ansi-string-scan",
+      "runtimeAssembly": "BlitzCS.BinaryCompiler.Runtime.dll",
+      "runtimeSha256": "fda15d56a7db316e5edbc91e7e3d177cb8670f30492f657678f26e5b21c6bec0",
+      "dotnet": ".NET 10.0.13",
+      "cpu": 3,
+      "pinnedCpu": 3,
+      "samples": 5,
+      "warmupCallsPerLength": 20000,
+      "strings": [
+        {
+          "stringLength": 8,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            559.6,
+            509.3,
+            506.64,
+            509.47,
+            511.52
+          ],
+          "medianNsPerCall": 509.47,
+          "samplesAllocatedBytesPerCall": [
+            144,
+            144,
+            144,
+            144,
+            144
+          ],
+          "medianAllocatedBytesPerCall": 144,
+          "expectedChecksum": 4880000
+        },
+        {
+          "stringLength": 24,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            1027.63,
+            997.88,
+            999.73,
+            997.28,
+            997.36
+          ],
+          "medianNsPerCall": 997.88,
+          "samplesAllocatedBytesPerCall": [
+            280,
+            280,
+            280,
+            280,
+            280
+          ],
+          "medianAllocatedBytesPerCall": 280,
+          "expectedChecksum": 9840000
+        },
+        {
+          "stringLength": 128,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            1338.99,
+            1198.15,
+            1198.83,
+            1194.11,
+            1197.13
+          ],
+          "medianNsPerCall": 1198.15,
+          "samplesAllocatedBytesPerCall": [
+            824,
+            824,
+            824,
+            824,
+            824
+          ],
+          "medianAllocatedBytesPerCall": 824,
+          "expectedChecksum": 42080000
+        }
+      ]
+    },
+    "r1-baseline-command": {
+      "benchmark": "guest-command-entry-cost",
+      "pinnedCpu": 3,
+      "iterations": 100000,
+      "samples": 5,
+      "target": "same translated nop_fn (returns 1); guest-loop calls it N times and returns N",
+      "rows": [
+        {
+          "name": "cached-GuestFunction.Call",
+          "medianNsPerOperation": 363.796,
+          "samplesNsPerOperation": [
+            373.506,
+            363.796,
+            363.325,
+            364.044,
+            347.374
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "GuestModule.InvokeRva",
+          "medianNsPerOperation": 251.819,
+          "samplesNsPerOperation": [
+            258.202,
+            248.962,
+            251.819,
+            254.704,
+            246.821
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "guest-side-loop-calling-nop_fn",
+          "medianNsPerOperation": 1.471,
+          "samplesNsPerOperation": [
+            3.504,
+            1.471,
+            1.469,
+            1.47,
+            1.565
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "r1-candidate-ansi": {
+      "benchmark": "guest-memory-ansi-string-scan",
+      "runtimeAssembly": "BlitzCS.BinaryCompiler.Runtime.dll",
+      "runtimeSha256": "eb9c7ae4d9aea0f993190cfa986d2876ed39a2e1d0b6e1fb9f23f473d481a300",
+      "dotnet": ".NET 10.0.13",
+      "cpu": 3,
+      "pinnedCpu": 3,
+      "samples": 5,
+      "warmupCallsPerLength": 20000,
+      "strings": [
+        {
+          "stringLength": 8,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            285.61,
+            285.67,
+            288.3,
+            284.84,
+            284.37
+          ],
+          "medianNsPerCall": 285.61,
+          "samplesAllocatedBytesPerCall": [
+            40,
+            40,
+            40,
+            40,
+            40
+          ],
+          "medianAllocatedBytesPerCall": 40,
+          "expectedChecksum": 4880000
+        },
+        {
+          "stringLength": 24,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            320.61,
+            327.64,
+            321.52,
+            319.43,
+            321.32
+          ],
+          "medianNsPerCall": 321.32,
+          "samplesAllocatedBytesPerCall": [
+            72,
+            72,
+            72,
+            72,
+            72
+          ],
+          "medianAllocatedBytesPerCall": 72,
+          "expectedChecksum": 9840000
+        },
+        {
+          "stringLength": 128,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            535.88,
+            600.96,
+            506.64,
+            504.79,
+            510.25
+          ],
+          "medianNsPerCall": 510.25,
+          "samplesAllocatedBytesPerCall": [
+            280,
+            280,
+            280,
+            280,
+            280
+          ],
+          "medianAllocatedBytesPerCall": 280,
+          "expectedChecksum": 42080000
+        }
+      ]
+    },
+    "r1-candidate-command": {
+      "benchmark": "guest-command-entry-cost",
+      "pinnedCpu": 3,
+      "iterations": 100000,
+      "samples": 5,
+      "target": "same translated nop_fn (returns 1); guest-loop calls it N times and returns N",
+      "rows": [
+        {
+          "name": "cached-GuestFunction.Call",
+          "medianNsPerOperation": 524.907,
+          "samplesNsPerOperation": [
+            530.638,
+            518.826,
+            531.057,
+            524.907,
+            462.072
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "GuestModule.InvokeRva",
+          "medianNsPerOperation": 218.126,
+          "samplesNsPerOperation": [
+            224.032,
+            217.77,
+            218.126,
+            220.943,
+            217.725
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "guest-side-loop-calling-nop_fn",
+          "medianNsPerOperation": 1.508,
+          "samplesNsPerOperation": [
+            3.686,
+            1.508,
+            1.507,
+            1.507,
+            1.646
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "r2-baseline-ansi": {
+      "benchmark": "guest-memory-ansi-string-scan",
+      "runtimeAssembly": "BlitzCS.BinaryCompiler.Runtime.dll",
+      "runtimeSha256": "fda15d56a7db316e5edbc91e7e3d177cb8670f30492f657678f26e5b21c6bec0",
+      "dotnet": ".NET 10.0.13",
+      "cpu": 3,
+      "pinnedCpu": 3,
+      "samples": 5,
+      "warmupCallsPerLength": 20000,
+      "strings": [
+        {
+          "stringLength": 8,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            556.56,
+            510.13,
+            507.26,
+            508.88,
+            516.68
+          ],
+          "medianNsPerCall": 510.13,
+          "samplesAllocatedBytesPerCall": [
+            144,
+            144,
+            144,
+            144,
+            144
+          ],
+          "medianAllocatedBytesPerCall": 144,
+          "expectedChecksum": 4880000
+        },
+        {
+          "stringLength": 24,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            1034.85,
+            1005.62,
+            1003.63,
+            1006.19,
+            1009.72
+          ],
+          "medianNsPerCall": 1006.19,
+          "samplesAllocatedBytesPerCall": [
+            280,
+            280,
+            280,
+            280,
+            280
+          ],
+          "medianAllocatedBytesPerCall": 280,
+          "expectedChecksum": 9840000
+        },
+        {
+          "stringLength": 128,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            1563.41,
+            1205.16,
+            1205.43,
+            1197.25,
+            1207.96
+          ],
+          "medianNsPerCall": 1205.43,
+          "samplesAllocatedBytesPerCall": [
+            824,
+            824,
+            824,
+            824,
+            824
+          ],
+          "medianAllocatedBytesPerCall": 824,
+          "expectedChecksum": 42080000
+        }
+      ]
+    },
+    "r2-baseline-command": {
+      "benchmark": "guest-command-entry-cost",
+      "pinnedCpu": 3,
+      "iterations": 100000,
+      "samples": 5,
+      "target": "same translated nop_fn (returns 1); guest-loop calls it N times and returns N",
+      "rows": [
+        {
+          "name": "cached-GuestFunction.Call",
+          "medianNsPerOperation": 369.006,
+          "samplesNsPerOperation": [
+            378.587,
+            368.196,
+            369.006,
+            369.654,
+            313.465
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "GuestModule.InvokeRva",
+          "medianNsPerOperation": 231.623,
+          "samplesNsPerOperation": [
+            253.439,
+            231.208,
+            230.989,
+            233.22,
+            231.623
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "guest-side-loop-calling-nop_fn",
+          "medianNsPerOperation": 1.507,
+          "samplesNsPerOperation": [
+            3.744,
+            1.508,
+            1.507,
+            1.506,
+            1.506
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "r2-candidate-ansi": {
+      "benchmark": "guest-memory-ansi-string-scan",
+      "runtimeAssembly": "BlitzCS.BinaryCompiler.Runtime.dll",
+      "runtimeSha256": "eb9c7ae4d9aea0f993190cfa986d2876ed39a2e1d0b6e1fb9f23f473d481a300",
+      "dotnet": ".NET 10.0.13",
+      "cpu": 3,
+      "pinnedCpu": 3,
+      "samples": 5,
+      "warmupCallsPerLength": 20000,
+      "strings": [
+        {
+          "stringLength": 8,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            281.93,
+            280.26,
+            280.25,
+            282.81,
+            279.37
+          ],
+          "medianNsPerCall": 280.26,
+          "samplesAllocatedBytesPerCall": [
+            40,
+            40,
+            40,
+            40,
+            40
+          ],
+          "medianAllocatedBytesPerCall": 40,
+          "expectedChecksum": 4880000
+        },
+        {
+          "stringLength": 24,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            318.64,
+            319.9,
+            318.41,
+            318.68,
+            318.26
+          ],
+          "medianNsPerCall": 318.64,
+          "samplesAllocatedBytesPerCall": [
+            72,
+            72,
+            72,
+            72,
+            72
+          ],
+          "medianAllocatedBytesPerCall": 72,
+          "expectedChecksum": 9840000
+        },
+        {
+          "stringLength": 128,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            533.28,
+            600.46,
+            515.6,
+            505,
+            503.33
+          ],
+          "medianNsPerCall": 515.6,
+          "samplesAllocatedBytesPerCall": [
+            280,
+            280,
+            280,
+            280,
+            280
+          ],
+          "medianAllocatedBytesPerCall": 280,
+          "expectedChecksum": 42080000
+        }
+      ]
+    },
+    "r2-candidate-command": {
+      "benchmark": "guest-command-entry-cost",
+      "pinnedCpu": 3,
+      "iterations": 100000,
+      "samples": 5,
+      "target": "same translated nop_fn (returns 1); guest-loop calls it N times and returns N",
+      "rows": [
+        {
+          "name": "cached-GuestFunction.Call",
+          "medianNsPerOperation": 379.306,
+          "samplesNsPerOperation": [
+            380.91,
+            386.118,
+            379.306,
+            376.747,
+            293.599
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "GuestModule.InvokeRva",
+          "medianNsPerOperation": 226.775,
+          "samplesNsPerOperation": [
+            235.196,
+            220.499,
+            217.141,
+            229.204,
+            226.775
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "guest-side-loop-calling-nop_fn",
+          "medianNsPerOperation": 1.589,
+          "samplesNsPerOperation": [
+            3.745,
+            1.507,
+            1.507,
+            1.589,
+            2.193
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "r3-baseline-ansi": {
+      "benchmark": "guest-memory-ansi-string-scan",
+      "runtimeAssembly": "BlitzCS.BinaryCompiler.Runtime.dll",
+      "runtimeSha256": "fda15d56a7db316e5edbc91e7e3d177cb8670f30492f657678f26e5b21c6bec0",
+      "dotnet": ".NET 10.0.13",
+      "cpu": 3,
+      "pinnedCpu": 3,
+      "samples": 5,
+      "warmupCallsPerLength": 20000,
+      "strings": [
+        {
+          "stringLength": 8,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            555.27,
+            511.17,
+            508.6,
+            553.81,
+            511.58
+          ],
+          "medianNsPerCall": 511.58,
+          "samplesAllocatedBytesPerCall": [
+            144,
+            144,
+            144,
+            144,
+            144
+          ],
+          "medianAllocatedBytesPerCall": 144,
+          "expectedChecksum": 4880000
+        },
+        {
+          "stringLength": 24,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            1027.18,
+            1001.03,
+            1000.28,
+            1018.34,
+            1000.05
+          ],
+          "medianNsPerCall": 1001.03,
+          "samplesAllocatedBytesPerCall": [
+            280,
+            280,
+            280,
+            280,
+            280
+          ],
+          "medianAllocatedBytesPerCall": 280,
+          "expectedChecksum": 9840000
+        },
+        {
+          "stringLength": 128,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            1503.81,
+            1194.82,
+            1205.02,
+            1192.66,
+            1197.53
+          ],
+          "medianNsPerCall": 1197.53,
+          "samplesAllocatedBytesPerCall": [
+            824,
+            824,
+            824,
+            824,
+            824
+          ],
+          "medianAllocatedBytesPerCall": 824,
+          "expectedChecksum": 42080000
+        }
+      ]
+    },
+    "r3-baseline-command": {
+      "benchmark": "guest-command-entry-cost",
+      "pinnedCpu": 3,
+      "iterations": 100000,
+      "samples": 5,
+      "target": "same translated nop_fn (returns 1); guest-loop calls it N times and returns N",
+      "rows": [
+        {
+          "name": "cached-GuestFunction.Call",
+          "medianNsPerOperation": 359.919,
+          "samplesNsPerOperation": [
+            370.025,
+            360.06,
+            359.856,
+            359.919,
+            336.922
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "GuestModule.InvokeRva",
+          "medianNsPerOperation": 251.904,
+          "samplesNsPerOperation": [
+            255.774,
+            252.262,
+            250.615,
+            251.087,
+            251.904
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "guest-side-loop-calling-nop_fn",
+          "medianNsPerOperation": 1.507,
+          "samplesNsPerOperation": [
+            3.759,
+            1.579,
+            1.507,
+            1.506,
+            1.506
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "r3-candidate-ansi": {
+      "benchmark": "guest-memory-ansi-string-scan",
+      "runtimeAssembly": "BlitzCS.BinaryCompiler.Runtime.dll",
+      "runtimeSha256": "eb9c7ae4d9aea0f993190cfa986d2876ed39a2e1d0b6e1fb9f23f473d481a300",
+      "dotnet": ".NET 10.0.13",
+      "cpu": 3,
+      "pinnedCpu": 3,
+      "samples": 5,
+      "warmupCallsPerLength": 20000,
+      "strings": [
+        {
+          "stringLength": 8,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            287.26,
+            285.83,
+            290.75,
+            282.59,
+            284.01
+          ],
+          "medianNsPerCall": 285.83,
+          "samplesAllocatedBytesPerCall": [
+            40,
+            40,
+            40,
+            40,
+            40
+          ],
+          "medianAllocatedBytesPerCall": 40,
+          "expectedChecksum": 4880000
+        },
+        {
+          "stringLength": 24,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            326.5,
+            317.34,
+            320.55,
+            321.58,
+            344.92
+          ],
+          "medianNsPerCall": 321.58,
+          "samplesAllocatedBytesPerCall": [
+            72,
+            72,
+            72,
+            72,
+            72
+          ],
+          "medianAllocatedBytesPerCall": 72,
+          "expectedChecksum": 9840000
+        },
+        {
+          "stringLength": 128,
+          "iterationsPerSample": 10000,
+          "samplesNsPerCall": [
+            530.66,
+            596.27,
+            507.84,
+            505.78,
+            512.08
+          ],
+          "medianNsPerCall": 512.08,
+          "samplesAllocatedBytesPerCall": [
+            280,
+            280,
+            280,
+            280,
+            280
+          ],
+          "medianAllocatedBytesPerCall": 280,
+          "expectedChecksum": 42080000
+        }
+      ]
+    },
+    "r3-candidate-command": {
+      "benchmark": "guest-command-entry-cost",
+      "pinnedCpu": 3,
+      "iterations": 100000,
+      "samples": 5,
+      "target": "same translated nop_fn (returns 1); guest-loop calls it N times and returns N",
+      "rows": [
+        {
+          "name": "cached-GuestFunction.Call",
+          "medianNsPerOperation": 365.269,
+          "samplesNsPerOperation": [
+            374.898,
+            366.343,
+            365.269,
+            365.267,
+            264.933
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "GuestModule.InvokeRva",
+          "medianNsPerOperation": 215.535,
+          "samplesNsPerOperation": [
+            221.78,
+            215.027,
+            215.535,
+            214.971,
+            351.16
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "guest-side-loop-calling-nop_fn",
+          "medianNsPerOperation": 2.325,
+          "samplesNsPerOperation": [
+            4.989,
+            2.293,
+            2.325,
+            2.281,
+            2.389
+          ],
+          "medianAllocatedBytesPerOperation": 0,
+          "samplesAllocatedBytesPerOperation": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    }
+  },
+  "limits": [
+    "ReadyToRun and TieredPGO disabled for both runtime assemblies; tiered compilation used the .NET default.",
+    "String-reader changes combine SSE2 NUL scanning and single span-based Latin-1 decoding.",
+    "These microbenchmarks do not establish FPS or whole-game loading improvements.",
+    "Command-entry control paths show variation; all paths and samples are retained."
+  ]
+}

@@ -25,17 +25,7 @@ public sealed unsafe partial class GuestModule
 
     private nint ResolveRvaOffset(uint rva, string label)
     {
-        Dictionary<uint, uint> map;
-        lock (resourceLock)
-        {
-            if (addressMap is null)
-            {
-                addressMap = new Dictionary<uint, uint>(artifact.AddressMap.Count);
-                foreach (var m in artifact.AddressMap) addressMap.TryAdd(m.GuestRva, m.HostOffset);
-                foreach (var e in artifact.Exports) addressMap.TryAdd(e.GuestRva, e.HostOffset);
-            }
-            map = addressMap;
-        }
+        var map = GetAddressMap();
         if (!map.TryGetValue(rva, out var hostOffset))
             throw new GuestExportException($"The translated image has no translated entry at RVA 0x{rva:X} for '{label}'.");
         return hostMap + (nint)hostOffset;
@@ -44,19 +34,25 @@ public sealed unsafe partial class GuestModule
     public GuestCallResult InvokeRva(uint rva, string label, GuestReturn kind, ReadOnlySpan<uint> args, uint ecx = 0, uint edx = 0) =>
         Invoke(ResolveRvaOffset(rva, label), args, kind, ecx, edx);
 
-    public bool HasTranslatedRva(uint rva)
+    private Dictionary<uint, uint> GetAddressMap()
     {
+        var map = Volatile.Read(ref addressMap);
+        if (map is not null) return map;
         lock (resourceLock)
         {
             if (addressMap is null)
             {
-                addressMap = new Dictionary<uint, uint>(artifact.AddressMap.Count);
-                foreach (var m in artifact.AddressMap) addressMap.TryAdd(m.GuestRva, m.HostOffset);
-                foreach (var e in artifact.Exports) addressMap.TryAdd(e.GuestRva, e.HostOffset);
+                map = new Dictionary<uint, uint>(artifact.AddressMap.Count);
+                foreach (var m in artifact.AddressMap) map.TryAdd(m.GuestRva, m.HostOffset);
+                foreach (var e in artifact.Exports) map.TryAdd(e.GuestRva, e.HostOffset);
+                // Readers only see a fully built table; it remains immutable after publication.
+                Volatile.Write(ref addressMap, map);
             }
-            return addressMap.ContainsKey(rva);
+            return addressMap;
         }
     }
+
+    public bool HasTranslatedRva(uint rva) => GetAddressMap().ContainsKey(rva);
 
     internal TranslationArtifact Artifact => artifact;
 }

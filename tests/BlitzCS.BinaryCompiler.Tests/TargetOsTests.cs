@@ -74,15 +74,17 @@ public sealed class TargetOsTests
         // redirect, and two runtime stubs follow the imports (ImportStubLayout); the guest code is unchanged.
         // Re-pinned again, deliberately, for code generated at run time (compiler 0.14.0, docs/binary-dynamic-code.md): the miss routine gained the slow path that calls the
         // registry's miss handler before the kind 1 trap; nothing else changed.
+        // Re-pinned again for compiler 0.14.1: the miss routine checks and updates a per-artifact cached registry record before/after the full scan.
+        // Re-pinned for compiler 0.14.2: registry fallback now scans newest-first so MRU misses on late modules do not walk earlier records.
         var art = For("linux-sysv", profile).Artifact;
         var hash = Convert.ToHexString(SHA256.HashData(art.HostImage));
         Assert.Equal(profile == OptimizationProfile.Debug ? PinnedDebug : PinnedRelease, hash);
     }
 
-    private const string PinnedDebug = "CE9995DF85D05CE6CEBFD325A79FFD5110950627B8C7586F1CCCE5FCB1679A71", PinnedRelease = "DABE1FC35DBBEEBC78B867B7B7477FC04734BDF8FA7256245FBF985640F4091D";
+    private const string PinnedDebug = "2AEF4B5F90E4220A2C9ED454C80C5034AB21346F59CD134C2348B227E9991FA6", PinnedRelease = "221DD308B403F31FA333B3B2131A8042312843903D86FB3BE2C71F6CB11808B6";
 
 
-    private const string PinnedWinDebug = "E7ECF146044D4A4AD5C7BECD88D519AF63A3B8B3802507D9D924647F99FA619D", PinnedWinRelease = "0277213114D526F703EF5FE53B47AF5FAFEE59323BB0CEC35065BA789B90B6A6";
+    private const string PinnedWinDebug = "A0B6807BD9E19551E6BD3111B03924E41106B085A4952A695010DBE47B5C64B4", PinnedWinRelease = "CA5B2F8ADE6A4D3410971814A3427BEDBD1923E7691F5E14FD794FC3C3EE1520";
 
     [Theory]
     [InlineData(OptimizationProfile.Debug), InlineData(OptimizationProfile.Release)]
@@ -90,6 +92,8 @@ public sealed class TargetOsTests
     {
         // Pinned from the translator at commit 49eaa1b, before the dynamic stub pool existed (DynamicStubs = 0 must change nothing: same code, same layout); the linux-sysv pins above are the same check.
         // Re-pinned deliberately for guest SEH (format 6) and for the miss-handler slow path (compiler 0.14.0), the same changes as the linux-sysv pins.
+        // Re-pinned again for compiler 0.14.1: the miss routine checks and updates a per-artifact cached registry record before/after the full scan.
+        // Re-pinned for compiler 0.14.2: the registry fallback scans newest-first after an MRU miss.
         var hash = Convert.ToHexString(SHA256.HashData(For("windows-x64", profile).Artifact.HostImage));
         Assert.Equal(profile == OptimizationProfile.Debug ? PinnedWinDebug : PinnedWinRelease, hash);
     }

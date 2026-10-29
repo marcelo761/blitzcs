@@ -322,14 +322,24 @@ internal sealed partial class X64CodeGen
     /// <summary>
     /// The miss path of the dispatch (host offset 0). Entered with r9d = guest VA and the guest flags live (the flag-preserving dispatch jumps here),
     /// so the flags are saved with pushfq on the guest stack (RSP is the guest ESP; the 8 bytes below it are free) and restored before the jump.
-    /// Walks the registry records published by the module set: a record matches when VA - guestBase is below its bound; its table must be live and the
-    /// entry non-zero. On a match r12/r13 become the target module's code base and dispatch table (r14 call context and r15 TEB are shared by the whole thread
+    /// Checks the module's cached record, then walks published registry records newest first. A record matches when VA - guestBase is below its bound;
+    /// its table must be live and the entry non-zero. On a match r12/r13 become the target module's code base and dispatch table (r14 call context and r15 TEB are shared by the whole thread
     /// and stay) and execution continues in the target module. Everything else leaves through <paramref name="miss"/> (the kind 1 trap), clobbering only r8, r10, r11.
     /// </summary>
     private void EmitForeignDispatch(ulong miss)
     {
-        var loop = E.NewLabel(); var next = E.NewLabel();
+        var loop = E.NewLabel(); var next = E.NewLabel(); var scan = E.NewLabel(); var found = E.NewLabel();
         A(Instruction.Create(Code.Pushfq));
+        // Each module remembers its last foreign record. Records never move or get reused;
+        // recheck the bound on every hit so retirement/retranslation falls back to the walk.
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R10, new MemoryOperand(Register.RIP, (long)dataBase + ModuleRegistryLayout.CachedRecordCellOffset, 8)));
+        A(Instruction.Create(Code.Test_rm64_r64, Register.R10, Register.R10));
+        Jcc(ConditionCode.e, scan);
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R9D));
+        A(Instruction.Create(Code.Sub_r32_rm32, Register.R8D, M(Register.R10, RecGuestBase)));
+        A(Instruction.Create(Code.Cmp_r32_rm32, Register.R8D, M(Register.R10, RecBound)));
+        Jcc(ConditionCode.b, found);
+        E.Place(scan);
         A(Instruction.Create(Code.Mov_r64_rm64, Register.R10, new MemoryOperand(Register.RIP, (long)dataBase + RegistryCellOffset, 8)));
         A(Instruction.Create(Code.Test_rm64_r64, Register.R10, Register.R10));
         Jcc(ConditionCode.e, miss);
@@ -337,26 +347,29 @@ internal sealed partial class X64CodeGen
         A(Instruction.Create(Code.Shl_rm32_imm8, Register.R11D, (byte)5));
         A(Instruction.Create(Code.Lea_r64_m, Register.R11, M(Register.R10, Register.R11, 1, RegistryHeaderSize)));   // end of the published records
         A(Instruction.Create(Code.Add_rm64_imm8, Register.R10, RegistryHeaderSize));
+        A(Instruction.Create(Code.Xchg_rm64_r64, Register.R10, Register.R11));             // cursor = end, lower bound = first record
         E.Place(loop);
         A(Instruction.Create(Code.Cmp_r64_rm64, Register.R10, Register.R11));
-        Jcc(ConditionCode.ae, miss);
+        Jcc(ConditionCode.be, miss);
+        A(Instruction.Create(Code.Sub_rm64_imm8, Register.R10, RegistryRecordSize));       // newest live units tend to be the next dynamic target
         A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R9D));
         A(Instruction.Create(Code.Sub_r32_rm32, Register.R8D, M(Register.R10, RecGuestBase)));
         A(Instruction.Create(Code.Cmp_r32_rm32, Register.R8D, M(Register.R10, RecBound)));   // unsigned: also rejects va < guestBase; a retired record has bound 0
         Jcc(ConditionCode.ae, next);
+        E.Place(found);
         A(Instruction.Create(Code.Mov_r64_rm64, Register.R11, M(Register.R10, RecTable)));
         A(Instruction.Create(Code.Test_rm64_r64, Register.R11, Register.R11));
         Jcc(ConditionCode.e, miss);
         A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, M(Register.R11, Register.R8, 4)));
         A(Instruction.Create(Code.Test_rm32_r32, Register.R8D, Register.R8D));
         Jcc(ConditionCode.e, miss);                                                       // inside the module but not translated code
+        A(Instruction.Create(Code.Mov_rm64_r64, new MemoryOperand(Register.RIP, (long)dataBase + ModuleRegistryLayout.CachedRecordCellOffset, 8), Register.R10));
         A(Instruction.Create(Code.Mov_r64_rm64, Register.R12, M(Register.R10, RecHostBase)));
         A(Instruction.Create(Code.Mov_r64_rm64, Register.R13, Register.R11));
         A(Instruction.Create(Code.Lea_r64_m, Register.R8, M(Register.R12, Register.R8, 1)));
         A(Instruction.Create(Code.Popfq));
         A(Instruction.Create(Code.Jmp_rm64, Register.R8));
         E.Place(next);
-        A(Instruction.Create(Code.Add_rm64_imm8, Register.R10, RegistryRecordSize));
         Jmp(loop);
     }
 

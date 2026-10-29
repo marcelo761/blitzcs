@@ -10,7 +10,7 @@ namespace BlitzCS.BinaryCompiler.Runtime;
 internal sealed unsafe partial class GuestProcessEnvironment : IDisposable
 {
     /// <summary>Records in the module registry. A record is never reused (a stale reader can then never see a different module in its slot).</summary>
-    internal const int RegistryCapacity = 1024;
+    internal const int RegistryCapacity = 65536;
     /// <summary>Indices of the implicit-TLS pointer array (one page of 4-byte slots).</summary>
     private const int MaxTlsModules = 1024;
 
@@ -34,6 +34,20 @@ internal sealed unsafe partial class GuestProcessEnvironment : IDisposable
     private readonly ThreadLocal<TebBlock?> threadTeb = new(() => null);
     private readonly List<TlsModule> tlsModules = [];
     private int activeThreads;
+    private StableMemoryReadGate? stableReads;
+
+    internal StableMemoryReadGate? StableReads => Volatile.Read(ref stableReads);
+
+    internal void ConfigureStableReads(string sourceSha256)
+    {
+        if (!VerifiedBankReader.IsSupportedImage(sourceSha256)) return;
+        lock (gate)
+        {
+            // Admission must be configured before any module can execute or expose its memory.
+            if (!disposed && modules.Count == 0 && stableReads is null)
+                Volatile.Write(ref stableReads, new StableMemoryReadGate());
+        }
+    }
 
     internal GuestProcessEnvironment(bool ownedBySet)
     {
@@ -59,8 +73,25 @@ internal sealed unsafe partial class GuestProcessEnvironment : IDisposable
         public readonly nint Map = map;
         /// <summary>Nesting of guest calls on this thread across all modules of the process (0 = the thread is outside guest code).</summary>
         public int Depth;
+        internal StableMemoryReadGate.WriteLease MemoryWriter;
+        internal bool MemoryWriterHeld;
+        internal int MemoryWriterSuspensions;
         public uint Address => (uint)Map;
         ~TebBlock() => owner.ReleaseTeb(Map);
+    }
+
+    internal sealed class MemoryWriterSuspension : IDisposable
+    {
+        private GuestProcessEnvironment? owner;
+        private readonly TebBlock teb;
+
+        internal MemoryWriterSuspension(GuestProcessEnvironment owner, TebBlock teb)
+        {
+            this.owner = owner;
+            this.teb = teb;
+        }
+
+        public void Dispose() => Interlocked.Exchange(ref owner, null)?.ResumeMemoryWriter(teb);
     }
 
     private sealed record TlsModule(GuestModule Module, int Index, nint Template, uint TemplateSize, nuint TotalSize);
@@ -111,6 +142,7 @@ internal sealed unsafe partial class GuestProcessEnvironment : IDisposable
     /// </summary>
     internal int Publish(uint guestBase, uint bound, nint hostBase, nint table)
     {
+        using var mutation = EnterMemoryMutation();
         lock (gate)
         {
             var slot = (int)*(uint*)registry;
@@ -130,6 +162,7 @@ internal sealed unsafe partial class GuestProcessEnvironment : IDisposable
     internal void Retire(int slot, string name, uint guestBase, uint bound)
     {
         if (slot < 0) return;
+        using var mutation = EnterMemoryMutation();
         lock (gate)
         {
             var rec = registry + ModuleRegistryLayout.HeaderSize + slot * ModuleRegistryLayout.RecordSize;
@@ -142,6 +175,7 @@ internal sealed unsafe partial class GuestProcessEnvironment : IDisposable
     /// <summary>Like <see cref="Retire"/> for a record that a newer one replaces (no "unloaded" entry is remembered for its range).</summary>
     private void RetireReplaced(int slot)
     {
+        using var mutation = EnterMemoryMutation();
         lock (gate)
         {
             var rec = registry + ModuleRegistryLayout.HeaderSize + slot * ModuleRegistryLayout.RecordSize;
@@ -165,8 +199,75 @@ internal sealed unsafe partial class GuestProcessEnvironment : IDisposable
 
     // ---- thread accounting (unload safety) ----
 
-    internal void ThreadEntered() => Interlocked.Increment(ref activeThreads);
-    internal void ThreadLeft() => Interlocked.Decrement(ref activeThreads);
+    internal void ThreadEntered()
+    {
+        EnterMemoryWriter(threadTeb.Value!);
+        Interlocked.Increment(ref activeThreads);
+    }
+
+    internal void ThreadLeft()
+    {
+        Interlocked.Decrement(ref activeThreads);
+        ExitMemoryWriter(threadTeb.Value!);
+    }
+
+    /// <summary>Temporarily admits bounded host reads while this thread is parked in a known nonalertable wait.</summary>
+    internal MemoryWriterSuspension? SuspendMemoryWriterForHostWait()
+    {
+        var teb = threadTeb.Value;
+        if (StableReads is null || teb is null || teb.Depth == 0 || !teb.MemoryWriterHeld) return null;
+        ExitMemoryWriter(teb);
+        teb.MemoryWriterSuspensions++;
+        return new MemoryWriterSuspension(this, teb);
+    }
+
+    /// <summary>Nested guest callbacks during a suspended wait temporarily restore the writer admission.</summary>
+    internal bool EnterNestedGuestCallDuringWait(TebBlock teb)
+    {
+        if (teb.MemoryWriterSuspensions == 0 || teb.MemoryWriterHeld || StableReads is null) return false;
+        EnterMemoryWriter(teb);
+        return true;
+    }
+
+    /// <summary>Restores the paused state when a callback invoked during the wait returns.</summary>
+    internal void LeaveNestedGuestCallDuringWait(TebBlock teb)
+    {
+        if (teb.MemoryWriterSuspensions > 0) ExitMemoryWriter(teb);
+    }
+
+    private void ResumeMemoryWriter(TebBlock teb)
+    {
+        try { EnterMemoryWriter(teb); }
+        finally { teb.MemoryWriterSuspensions--; }
+    }
+
+    private void EnterMemoryWriter(TebBlock teb)
+    {
+        if (StableReads is not { } gate) return;
+        teb.MemoryWriter = gate.EnterWrite();
+        teb.MemoryWriterHeld = true;
+    }
+
+    /// <summary>Gates a host mutation unless this thread already owns the process guest-writer lease.</summary>
+    internal StableMemoryReadGate.WriteLease EnterMemoryMutation()
+    {
+        if (StableReads is not { } gate) return default;
+        try
+        {
+            var teb = threadTeb.IsValueCreated ? threadTeb.Value : null;
+            if (teb?.MemoryWriterHeld == true) return default;
+        }
+        catch (ObjectDisposedException) { return default; }
+        return gate.EnterWrite();
+    }
+
+    private static void ExitMemoryWriter(TebBlock teb)
+    {
+        if (!teb.MemoryWriterHeld) return;
+        teb.MemoryWriter.Dispose();
+        teb.MemoryWriter = default;
+        teb.MemoryWriterHeld = false;
+    }
 
     /// <summary>Number of threads other than the caller that are inside guest code of any module of this process.</summary>
     internal int OtherActiveThreads()

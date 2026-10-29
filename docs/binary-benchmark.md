@@ -6,6 +6,9 @@ profiling, which optimizations were made, and where the "within 1 percent" goal 
 
 Raw data (all distributions, every run, hardware/OS information): [`docs/evidence/m21-binary-benchmark.json`](evidence/m21-binary-benchmark.json).
 
+For the SCP application result (226 FPS native x86 versus 55 FPS reported for BRE x64), measured bridge activity,
+and the limits of extrapolating these microbenchmarks, see the [BRE application cost baseline](binary-runtime-cost.md).
+
 ## What is compared
 
 * **Baseline ("original x86")**: one C library (`tools/x86_oracle/bench/bench_lib.c`, `gcc -m32 -O2`) is compiled once. The very
@@ -235,3 +238,202 @@ Wall time (`--samples 9 --cpu 3 --target-ms 150`, a loaded desktop, overhead = t
 | ind | 15.3 % | 16.9 % | 15.5 % |
 
 The spread between two runs of the same build is as large as the change, so no effect is claimed beyond "no extra instructions on a hit".
+
+
+### Foreign dispatch with many modules (compiler 0.14.1)
+
+The per-module MRU cache removes the registry walk when repeated foreign targets belong to the last matched module.
+The opt-in benchmark loads a consumer first and a provider last, calls the final provider through a guest function pointer,
+and validates the checksum before and during measurement. Calls return through the provider's foreign dispatch too.
+This measures the complete guest invocation, including managed call overhead, rather than just the emitted lookup instructions.
+
+```bash
+DOTNET_TieredCompilation=0 dotnet run -c Release --project benchmarks/BlitzCS.BinaryCompiler.Bench -- --registry-dispatch --registry-iterations 100000 --samples 9 --cpu 3
+```
+
+Paired measurements on Linux x64, pinned to CPU 3, 100,000 calls per sample and nine samples:
+
+| Registry records | Linear scan, median ns/call | MRU cache, median ns/call |
+|---|---:|---:|
+| 2 | 210.1 | 198.6 |
+| 17 | 206.8 | 211.0 |
+| 65 | 243.4 | 222.9 |
+| 257 | 342.6 | 224.2 |
+| 1025 | 802.2 | 225.3 |
+
+At 1,025 records the complete invocation is about 3.6 times faster (72% less time). A preceding paired run measured
+782.2 → 207.9 ns/call at that size, confirming that the improvement exceeds the observed variance. Small-registry
+results fluctuate, so no general speedup is claimed there. This steady-state workload favors the one-entry cache;
+alternating targets from different modules can still require linear scans. These numbers do not establish the game's total loading time.
+Full distributions for the table are in [the registry cache evidence](evidence/m21-registry-dispatch-cache.json).
+
+
+### Newest-first fallback for changing foreign targets (compiler 0.14.2)
+
+A one-entry cache misses when calls alternate between modules or continually enter newly translated units.
+The fallback now snapshots the published registry count and scans from the newest record toward the oldest.
+It still visits every record for an absent target; this favors recent modules rather than guaranteeing constant-time lookup.
+
+```bash
+DOTNET_TieredCompilation=0 dotnet run -c Release --project benchmarks/BlitzCS.BinaryCompiler.Bench -- --registry-dispatch-alternating-late --registry-iterations 10000 --samples 5 --cpu 3
+```
+
+This workload alternates function-pointer calls between the final two providers and checks the result of each call.
+Paired Linux x64 measurements, pinned to CPU 3, include complete guest invocation overhead:
+
+| Registry records | MRU + oldest-first, median ns/call | MRU + newest-first, median ns/call |
+|---|---:|---:|
+| 3 | 205.37 | 221.66 |
+| 17 | 217.04 | 214.54 |
+| 65 | 252.31 | 215.17 |
+| 257 | 404.10 | 213.30 |
+| 1025 | 1016.28 | 208.81 |
+
+At 1,025 records this workload takes about 4.9 times less time. The smallest registry does not improve.
+Targets near the beginning can take longer on a cache miss, so this is a workload-specific improvement.
+These measurements do not establish total application loading time.
+[Full distributions](evidence/m21-registry-newest-first.json).
+
+
+### Repeated managed guest-memory validation
+
+`GuestMemory.Find` remembers the index of its last matching own region. Each lookup resolves that index against
+its current immutable region-array snapshot, checks the complete requested range, and checks the region's current
+read/write permissions. A removal or index shift cannot retain a removed region object. The measurements in this section isolate the lookaside with the original linear own/peer fallback. Zero-length
+boundary queries retain the original path. The indexed fallback described below additionally improves cache misses. This relies on the existing
+nonoverlapping live mappings, whose platform reservations reject address conflicts.
+
+A Linux x64 harness loaded a small guest module, held 512, 2,048, or 5,000 actual `GuestMemory.Allocate(4096)`
+buffers, then repeatedly read or wrote a UInt32 in the oldest and newest buffers. Each measurement contains
+100,000 operations per sample and three samples, with default .NET tiering. Correct values were checked.
+
+| Held buffers | Newest read before, median ns | Newest read after, median ns |
+|---|---:|---:|
+| 512 | 533 | 40 |
+| 2048 | 2101 | 40 |
+
+At 5,000 buffers, newest-buffer writes fell from 21,097 to 42 ns. Oldest-buffer reads remained about 36–47 ns.
+In this intermediate configuration, unmapped-address exceptions still scanned the regions and peer lookups were unchanged. These repeated-own-region
+measurements do not establish game loading time or identify a previously unsymbolized native CPU sample.
+The same workload in a self-contained Windows x64 harness under Proton/Wine measured newest reads of
+544 → 49 ns (512 buffers), 3,030 → 41 ns (2,048), and 10,589 → 41 ns (5,000). Newest writes at 5,000
+buffers measured 8,250 → 44 ns. Oldest-region accesses stayed near 41–45 ns at that size. The zero-buffer
+case increased from 58 → 75 ns for reads and 84 → 130 ns for writes; unmapped-address exceptions at 5,000
+buffers increased from 10.2 → 13.3 µs. The hint improves repeated successful late-region lookups, not every workload.
+Windows runs used default tiered compilation with `DOTNET_TieredPGO=0`.
+
+Tests cover permission changes (including unreadable pages), removal/index shifts, replacement allocations, and concurrent
+access to distinct buffers. [Full samples](evidence/m21-guestmemory-region-cache.json).
+
+
+### Indexed validation for changing regions and peer pointers
+
+Positive-length `GuestMemory.Find` queries use a sorted region snapshot on a lookaside miss, including lookups
+in peer modules. Binary search finds the last range starting at or before the requested address; the entire range
+must fit, and current read/write permissions are checked before access. Live mappings are nonoverlapping.
+
+The insertion-order and sorted arrays are published together through one immutable snapshot. Add inserts into the
+sorted array and appends to the ordered array; removal updates both, under the existing mutation lock. These
+mutations copy one additional reference array, retaining O(N) mutation cost. Queries of zero length keep the
+insertion-order behavior, including its boundary rules. Existing `FindRegion` metadata queries retain their original path.
+The change addresses varied accesses that repeatedly miss a one-region lookaside, particularly own-to-peer pointers.
+
+
+A paired self-contained Windows x64 benchmark under Proton/Wine loaded two linked modules, each holding the
+same number of 4 KiB guest buffers. The same executable ran with the linear-fallback and indexed runtimes.
+Each row measures 10,000 reads per sample, three samples, after a 10,000-read warm-up; tiered compilation and
+Tiered PGO were disabled. Values were checked for correctness.
+
+| Buffers per module | Alternating oldest/newest own, before → after ns/read | Alternating own/peer newest, before → after ns/read | Repeated peer newest, before → after ns/read |
+|---|---:|---:|---:|
+| 512 | 317 → 70 | 622 → 71 | 1252 → 90 |
+| 2048 | 1331 → 73 | 3769 → 76 | 7746 → 97 |
+| 5000 | 4625 → 77 | 9009 → 80 | 18015 → 103 |
+
+At 5,000 buffers per module, repeated peer reads took about 174 times less time. This workload tests the lookup
+cost, not total application loading. The `FindCovering` helper implements the midpoint-based range search.
+[Full paired samples](evidence/m21-guestmemory-indexed.json).
+
+
+An end-to-end New Game validation in SCP – Containment Breach (unmodified BASIC sources, Windows x64 package
+under Proton/Wine) reached the continue prompt in 26:01 with the linear fallback and 3:47 with indexed validation.
+Actual first-person 3D scenes were verified at 26:24 and 4:01 after Start, including prompt confirmation; camera
+movement visibly changed the scene, and neither run logged a runtime exception. These are single observed runs
+with different random seeds, not a controlled same-seed benchmark or a steady-state frame-rate result.
+[Validation timings and limits](evidence/m21-scpcb-indexed-loading.json).
+
+
+### Command entry and bounded SSE2 string scans
+
+`GuestModule.InvokeRva` publishes its RVA lookup dictionary once, after initialization under the existing resource lock. Subsequent readers use the immutable published table without taking that lock. Module lifetime, stack checks and callback handling retain their existing guards. `BinaryCommandExport` uses a stack buffer for up to 32 argument words, with the existing heap-buffer path for larger calls. Each slot is filled before invocation.
+
+`GuestMemory.ReadAnsiString` scans for NUL in 16-byte blocks using SSE2 equality and byte masks. A vector load requires the complete window to fit a readable guest region and the allowed length. Scalar reads handle the boundary and preserve the first failing address. Potential 32-bit address wrap uses the original byte-wise path. Latin-1 span decoding replaces character-by-character string construction. SSE2-disabled hosts retain scalar scanning; x87 extended-precision behavior is preserved. Tests cover alignments, terminator lanes, multiple vector blocks, high bytes, inclusive length limits, unreadable pages, disposed mappings and concurrent first address-map initialization.
+
+The reproducible modes are:
+
+```sh
+DOTNET_ReadyToRun=0 COMPlus_ReadyToRun=0 DOTNET_TieredPGO=0 \
+  dotnet run -c Release --project benchmarks/BlitzCS.BinaryCompiler.Bench -- \
+  --ansi-string-scan --cpu 3 --samples 5 --iterations 10000
+
+DOTNET_ReadyToRun=0 COMPlus_ReadyToRun=0 DOTNET_TieredPGO=0 \
+  dotnet run -c Release --project benchmarks/BlitzCS.BinaryCompiler.Bench -- \
+  --command-entry-cost --cpu 3 --samples 5 --command-entry-iterations 100000
+```
+
+For paired measurements, build the harness once and invoke it with `--no-build`, replacing only its Runtime assembly between runs. The string mode reports the hash of the loaded assembly. The same harness ran three alternating baseline/candidate rounds on a pinned i5-10400F Linux core, with five samples per round. ReadyToRun was disabled for both assemblies so the Windows-published baseline could load on Linux; TieredPGO was disabled and tiered compilation used the .NET default. These settings and the raw samples are part of the evidence.
+
+| String length, bytes | Baseline median ns/read | Revised median ns/read | Allocated bytes/read, before → after |
+|---|---:|---:|---:|
+| 8 | 510 | 286 | 144 → 40 |
+| 24 | 1001 | 321 | 280 → 72 |
+| 128 | 1198 | 512 | 824 → 280 |
+
+The complete reader used 44–68% less time in these samples. This includes both the vector scan and changed decoding. The synthetic RVA-entry median changed from 252 to 218 ns/call; the pre-bound control varied from 364 to 379 ns/call and the guest-side loop from 1.51 to 1.59 ns/iteration. These results isolate small runtime paths and do not establish a whole-game loading or frame-rate improvement. [Full paired samples and assembly identities](evidence/m21-command-entry-sse2.json).
+
+### Repeated INI parsing and command boundaries
+
+An isolated parser fixture performed 288 queries against an 18,834-byte INI, producing 2,870,012 `PeekByte` and 2,793,014 `Chr` calls. The parser repeatedly scans a cached bank from its beginning. Small input size therefore does not imply little CPU work. Native x86 and translated x64 produced the same counters and checksum; their command boundary costs differed substantially.
+
+| Configuration | Median query pass, ms |
+|---|---:|
+| Native x86 release | 809 |
+| Translated x64 reference | 15,537 |
+| Earlier experimental direct string bindings | 7,046 |
+| Final guarded x64, normal bindings | 545 |
+
+The earlier direct-string experiment used an explicit catalog with strict Unicode validation; it remains experimental. The final result instead uses the unchanged normal generated bindings. Guarded ASCII implementations handle `Left`, `Right`, `Mid`, `Upper`, `Lower`, `Trim`, `Instr`, `Asc` and `Len`. Non-ASCII input, invalid arguments and unverified cases retain native dispatch. Embedded NUL remains native for range/case/trim operations without independent native evidence; the verified `Len`, `Mid`, `Instr` and `Asc` cases preserve it.
+
+Three final alternating native/x64 rounds measured native query times of 817/804/809 ms and optimized times of 544/545/572 ms. The optimized median used **32.63% less elapsed time than native x86** and 96.49% less than the earlier translated reference. Each run produced the same counters and checksum. This establishes negative elapsed overhead for this isolated workload, with normal bindings; it does not establish zero overhead for every command, full-game loading or rendering. Bank loading and section enumeration were excluded from the timer; counters and the checksum were included. [Fixture identities, protocol and samples](evidence/m21-ini-command-cost.json).
+
+The verified runtime specialization keeps the normal bindings. `Chr` reuses 256 strings decoded by the command bridge's own CP1252 encoding. Its result references permanent managed strings, requiring no guest-memory lifetime pin. `PeekByte` can reuse a native-validated bank identity, payload and bounds while a process-wide mutation epoch remains unchanged. A short read lease pins the payload against guest execution, host writes, protection changes and teardown, replacing a redundant module lifetime lock on that hit path. Any uncertain case takes the native command path, including a thread without initialized guest state, a changed epoch, invalid bounds or an unrecognized runtime image. The specialization is restricted to an exact source-image SHA-256 and known command RVAs; successful fingerprint checks are reused only for the same module instance.
+
+Guest writers remain concurrent. Nonalertable host waits release only the waiting thread's writer admission and restore it before guest execution resumes; nested callbacks reacquire admission. A guarded host write already covered by that thread's guest-writer lease needs no second writer transition. The distinction matters: redundant nested transitions originally invalidated every bank snapshot, adding validation calls without saving any translated reads. Tests cover writer/read exclusion, nested callbacks, interrupted admission, mutation invalidation, released payloads, fresh threads and teardown.
+
+
+### Allocation-free array indexing in generated game code
+
+Generated accesses to BASIC arrays of rank one or two now pass indices as individual arguments rather than allocating an `int[]` for each read or write. The storage helper retains per-axis bounds checks, source-location diagnostics, and left-to-right, single evaluation of index expressions. Higher ranks retain the general indexing path; dimensioning is unchanged.
+
+The Release-compiled regression `FixedRankArrayAccessAvoidsPerAccessIndexArrayAllocations` warms both helpers, then measures two 100,000-iteration read/write loops with `GC.GetAllocatedBytesForCurrentThread`. Before specialization each loop allocated 6,400,032 bytes; after specialization both allocate zero bytes, with checksum 6,600,000 unchanged. Separate tests cover index evaluation order, bounds diagnostics and the higher-rank fallback. This establishes removal of temporary index arrays, not a measured whole-game FPS improvement.
+
+
+### Optional runtime and COM profiling
+
+Set `BLITZCS_PROFILE_COMMAND_PATH` to an output JSON filename to record command counts, inclusive/self elapsed ticks and bounded frame windows. The first top-level `Flip` establishes the frame baseline; only its owning thread contributes frame intervals. Allocation deltas include instrumentation, and process-wide GC collection deltas do not measure GC pause duration. Set `BLITZCS_PROFILE_COM_PATH` separately to record adapted COM calls, native-inclusive time, scratch allocations and guest-to-host copy bytes. Native-inclusive time can include nested calls; do not add overlapping intervals as independent CPU time. Reports use Stopwatch timestamps and UTC anchors for correlation and retain bounded recent windows.
+
+Profiling changes execution cost. Compare optimizations with these variables unset, using the same executable, assets, scene, warmup and timing budget. Use instrumented runs to locate work and count operations rather than to report production FPS. For an external instruction-pointer sample, `BLITZCS_PROFILE_COMMAND_METADATA_ONLY=1` together with the command output path exports module identities and guest/host translation maps while leaving command/frame timing disabled. Metadata contains virtual addresses for the captured process instance; it is not a portable symbol address table.
+
+
+### Direct COM input copies without intermediate arrays
+
+Input marshalling previously called `ReadBytes` to allocate a managed array, then copied it into isolated native scratch memory. `NativeScope.CopyFromGuest` reads into the native scratch span directly. It retains a private copy for the host call, preserves zero-filled allocation behavior, frees scratch memory on read failure, and leaves output copy-back rules unchanged. GUIDs, input/in-out structures, counted arrays, vertex inputs and clear rectangles use the direct path. The important render path is `DrawIndexedPrimitiveVB`: its counted **index** array contains 16-bit indices, rather than vertex data. The procedural fixture's 141,312 triangles account for 847,872 index bytes per frame.
+
+The public fixture [render-grid.bb](../benchmarks/fixtures/render-grid.bb) renders 64 independently transformed spheres at 800×600, warms 120 frames, then times `UpdateWorld`, `RenderWorld` and `Flip 0` for at least ten seconds and 600 frames. Triangle counts and pixel samples are checked outside the timed interval. The same executable ran six alternating baseline/candidate samples with profiling disabled and competing builds/tests held.
+
+| Pair | FPS across three runs | Median frame time |
+|---|---|---:|
+| Baseline | 1,926 / 1,928 / 1,935 | 0.518807 ms |
+| Direct-input candidate | 2,524 / 2,495 / 2,445 | 0.400737 ms |
+
+The candidate median has about **29% more FPS and 23% less frame time**. All six runs produced 141,312 triangles, 14 non-background pixel samples and the same pixel checksum. This synthetic result validates the candidate pair for this workload; it does not predict the game's frame rate. An earlier single native-x86 control produced 3,248 FPS, so the candidate still does not establish negative overhead for this rendering workload. [Protocol, assembly hashes and all six samples](evidence/m21-com-input-copy.json).

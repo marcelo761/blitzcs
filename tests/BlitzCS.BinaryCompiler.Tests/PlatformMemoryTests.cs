@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using BlitzCS.BinaryCompiler.Runtime;
+using BlitzCS.BinaryCompiler.Tests.Support;
 using Xunit;
 
 namespace BlitzCS.BinaryCompiler.Tests;
@@ -50,6 +51,46 @@ public sealed class PlatformMemoryTests
             Assert.Equal(maps.Length, maps.Distinct().Count());
         }
         finally { foreach (var m in maps) P.Free(m, length); }
+    }
+
+    [WindowsOnlyFact("the allocation hint and exact VirtualAlloc collision policy are Windows-specific")]
+    public void MapLow_stale_hint_falls_back_without_overwriting_and_reuses_a_freed_hole()
+    {
+        var length = (nuint)P.PageSize;
+        var granularity = (nint)P.AllocationGranularity;
+        nint first = 0, blocker = 0, fallback = 0, reused = 0;
+        try
+        {
+            first = P.MapLow(length, out var firstError);
+            Assert.True(first != 0, $"Initial MapLow failed with OS error {firstError}.");
+
+            // Occupy the allocator's next sequential hint externally so MapLow must exercise its scan fallback.
+            var staleHint = first + granularity;
+            blocker = P.MapFixed(staleHint, length, out var blockerError);
+            Assert.True(blocker == staleHint, $"MapFixed at stale hint 0x{staleHint:X} failed with OS error {blockerError}.");
+            Marshal.WriteInt32(blocker, 0, 0x13579BDF);
+
+            fallback = P.MapLow(length, out var fallbackError);
+            Assert.True(fallback != 0, $"MapLow fallback failed with OS error {fallbackError}.");
+            Assert.NotEqual(first, fallback);
+            Assert.NotEqual(blocker, fallback);
+            Assert.Equal(0x13579BDF, Marshal.ReadInt32(blocker)); // collision was not overwritten
+
+            var freedAddress = fallback;
+            P.Free(fallback, length);
+            fallback = 0;
+            reused = P.MapLow(length, out var reuseError);
+            Assert.True(reused != 0, $"MapLow could not reuse its freed hole; OS error {reuseError}.");
+            Assert.Equal(freedAddress, reused);
+            Assert.Equal(0x13579BDF, Marshal.ReadInt32(blocker));
+        }
+        finally
+        {
+            P.Free(reused, length);
+            P.Free(fallback, length);
+            P.Free(blocker, length);
+            P.Free(first, length);
+        }
     }
 
     [Fact]

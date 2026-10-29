@@ -84,7 +84,7 @@ public sealed record TranslationArtifact(
     int CodeSize,
     uint DispatchTableOffset,   // offset (in HostImage) of uint32[] indexed by (guestRva) -> host offset, 0 = not translated
     uint ImportThunkTableOffset,// offset of uint64[] (one per PeImport, same order) the loader fills with managed function pointers
-    uint ContextOffset,         // legacy: offset of an unused 64-byte area in the RW data area (the live context is per call, see EnterGuest)
+    uint ContextOffset,         // offset of the 64-byte module registry/cache area in RW data (the live context is per call, see EnterGuest)
     uint EnterGuestOffset,      // host routine, SysV: ulong EnterGuest(ulong hostTarget /*rdi*/, uint guestEsp /*esi*/, ulong callContext /*rdx*/) -> eax; Win64: the same with rcx/edx/r8 (and RDI, RSI, XMM6, XMM7, XMM15 preserved too). callContext points to a zeroed 128-byte caller-owned block: [0]=saved native RSP, [16]=trap kind (u32, 1=untranslated target, 2=rejected instruction, 3=fs: offset outside the TEB, 4=int 29h fast fail with the ECX code at [8], 5=named deferred fault of a segment-register or far-pointer load), [24]=trap guest VA, [32]=import fault flag, [40]=guest TEB base (u64, copied into R15 for the whole call; see docs/binary-teb-contract.md), [48]=EDX out, [56]=capture request (2=ST0, 4=XMM0), [64..74)=ST0 raw 80-bit, [80]=ST0 as double, [88]=ST0 as float, [96..112)=XMM0, [112]=status out (1=x87 stack not empty on entry, 2=unbalanced on return, 4=ST0 empty), [116..128)=saved/current x87 CW and MXCSR. It is kept in R14 for the whole call, so calls on different threads (and nested calls) never share state.
     uint ExitGuestRva,          // synthetic guest RVA (>= SizeOfImage, covered by the dispatch table); loader places it as the outermost return address
     uint ImportStubBaseRva,     // synthetic guest RVA of import stub 0; stub i is at ImportStubBaseRva + 16*i; the loader writes ImageBase+that into IAT slot i
@@ -124,6 +124,8 @@ public static class ImportStubLayout
 public static class ModuleRegistryLayout
 {
     public const uint CellOffset = 0;
+    /// <summary>Per-artifact RW context cell containing the last matching registry record pointer (zero initially). The record's live bound and table are checked on every hit.</summary>
+    public const uint CachedRecordCellOffset = 8;
     public const int HeaderSize = 16, RecordSize = 32, GuestBase = 0, Bound = 4, HostBase = 8, Table = 16;
     /// <summary>Header offset of the u64 miss handler (0 = none): native <c>uint handler(registry, guestVa, callContext)</c> that the miss routine calls when no record translates
     /// the target, before it traps (dynamic code, docs/binary-dynamic-code.md). Non-zero = a record that translates the address has been published; the walk is repeated.</summary>
@@ -144,7 +146,7 @@ public sealed record BinaryCompilerOptions(OptimizationProfile Profile = Optimiz
     /// <summary>Upper bound of <see cref="DynamicStubs"/> (each stub costs 16 bytes of guest address space and about 70 bytes of host code; 4096 stubs = 64 KiB stay inside the 64 KiB gap the module base allocator keeps between modules).</summary>
     public const int MaxDynamicStubs = 4096;
 
-    public const string CompilerVersion = "0.14.0";
+    public const string CompilerVersion = "0.14.2";
 }
 
 /// <summary>Target OS/ABI identifiers. Artifacts are target specific: the runtime routines (EnterGuest, import stubs) follow the host calling convention, and the loader refuses a mismatching artifact.</summary>

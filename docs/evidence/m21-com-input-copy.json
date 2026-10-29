@@ -1,0 +1,173 @@
+{
+  "fixture": "benchmarks/fixtures/render-grid.bb",
+  "fixture_sha256": "ef2e36821f5e13249bbf7fdf5b01602cf7552d14fc04ffc1c02a03d40e872c9a",
+  "executable_sha256": "fdcf37f5101d58fed341423a8c9fce0df0492c6d42b92407e398e2cfab7fe86d",
+  "resolution": "800x600 windowed",
+  "flip": "0",
+  "duration_ms": 10000,
+  "profiler_environment": "disabled",
+  "sequence": [
+    "baseline-1",
+    "candidate-1",
+    "baseline-2",
+    "candidate-2",
+    "baseline-3",
+    "candidate-3"
+  ],
+  "pairs": {
+    "baseline": {
+      "runtime_sha256": "d4d9b8d641abda00dcc93e90cf90cd5f5f7c2466cbd3fe094fda8725ad14ae33",
+      "win32_sha256": "ed765cc9bb5cd8c1dd77c5f51fa0f58786d810bba04cdd34aa68a17903dca942"
+    },
+    "candidate": {
+      "runtime_sha256": "b415bc788e8576856e04ec3e16cf4ca17734d9b33220e944ecdd5e6a9177a111",
+      "win32_sha256": "043a373584da6423b216eb4d48e121725a9091a6d476455a89196b8057d02850"
+    }
+  },
+  "runs": [
+    {
+      "sequence": 1,
+      "pair": "baseline",
+      "repeat": 1,
+      "fps": 1926,
+      "frames": 19265,
+      "elapsed_ms": 10000,
+      "mean_frame_ms": 0.519076,
+      "triangles_first": 141312,
+      "triangles_last": 141312,
+      "non_background_pixels": 14,
+      "pixel_sum": 263543850
+    },
+    {
+      "sequence": 2,
+      "pair": "candidate",
+      "repeat": 1,
+      "fps": 2524,
+      "frames": 25239,
+      "elapsed_ms": 10000,
+      "mean_frame_ms": 0.396212,
+      "triangles_first": 141312,
+      "triangles_last": 141312,
+      "non_background_pixels": 14,
+      "pixel_sum": 263543850
+    },
+    {
+      "sequence": 3,
+      "pair": "baseline",
+      "repeat": 2,
+      "fps": 1928,
+      "frames": 19275,
+      "elapsed_ms": 10000,
+      "mean_frame_ms": 0.518807,
+      "triangles_first": 141312,
+      "triangles_last": 141312,
+      "non_background_pixels": 14,
+      "pixel_sum": 263543850
+    },
+    {
+      "sequence": 4,
+      "pair": "candidate",
+      "repeat": 2,
+      "fps": 2495,
+      "frames": 24954,
+      "elapsed_ms": 10000,
+      "mean_frame_ms": 0.400737,
+      "triangles_first": 141312,
+      "triangles_last": 141312,
+      "non_background_pixels": 14,
+      "pixel_sum": 263543850
+    },
+    {
+      "sequence": 5,
+      "pair": "baseline",
+      "repeat": 3,
+      "fps": 1935,
+      "frames": 19346,
+      "elapsed_ms": 10000,
+      "mean_frame_ms": 0.516903,
+      "triangles_first": 141312,
+      "triangles_last": 141312,
+      "non_background_pixels": 14,
+      "pixel_sum": 263543850
+    },
+    {
+      "sequence": 6,
+      "pair": "candidate",
+      "repeat": 3,
+      "fps": 2445,
+      "frames": 24453,
+      "elapsed_ms": 10000,
+      "mean_frame_ms": 0.408948,
+      "triangles_first": 141312,
+      "triangles_last": 141312,
+      "non_background_pixels": 14,
+      "pixel_sum": 263543850
+    }
+  ],
+  "environment": {
+    "cpu": "Intel Core i5-10400F",
+    "host_os": "Linux",
+    "guest_target": "Windows x64",
+    "graphics": "WineD3D/OpenGL under Proton 11",
+    "warmup_frames": 120,
+    "minimum_measured_frames": 600,
+    "concurrency": "Serial timing; sibling builds/tests held",
+    "DOTNET_TieredPGO": "0",
+    "DOTNET_gcServer": "0",
+    "display": ":0",
+    "frame_limiter": "Flip 0; no fixture limiter"
+  },
+  "limits": [
+    "Synthetic procedural render workload, not full-game FPS.",
+    "Profiler-capable baseline and candidate measured with profiling disabled.",
+    "Candidate also includes metadata-only profiler support; default-disabled runtime metadata collection does not run in these measurements.",
+    "Single earlier native x86 sample is not part of these six alternating runs.",
+    "Reported FPS is rounded by the BASIC fixture; frames/elapsed_ms retain the measured count."
+  ],
+  "managed_program_sha256": "bc2e17486d7894c5f3b53e0b7066e20dc7245498fb1d7eb95e859aaafc5ed12a",
+  "runtimeconfig_sha256": "561eb3f02387719390b619ba15b1b27266d689f03f06b11f462a66cff326526e",
+  "binarycompiler_sha256": "05d9625e442d45ab1a30243d0d8f361d28a18eed99ca032282e04d0ec2df75b0",
+  "instruction_pointer_sample": {
+    "mode": "Candidate with command metadata-only output; COM profiling disabled",
+    "duration_seconds": 8,
+    "samples": 1095,
+    "threads": 26,
+    "attach_failures": 0,
+    "lost": 0,
+    "overflow": 0,
+    "known_mapping_samples": {
+      "WineD3D": 292,
+      "libgallium": 119,
+      "Wine_opengl32": 14,
+      "translated_runtime_image": 84,
+      "memfd_wine_mapping_unresolved": 187,
+      "anonymous_unresolved": 149
+    },
+    "limits": [
+      "A single procedural-scene sample, not a game capture.",
+      "Unresolved anonymous/memfd mappings must not be labeled managed code without additional evidence.",
+      "Counts across sampled threads are not frame durations or an exclusive CPU-time decomposition."
+    ]
+  },
+  "final_published_pair": {
+    "runtime_sha256": "b415bc788e8576856e04ec3e16cf4ca17734d9b33220e944ecdd5e6a9177a111",
+    "win32_sha256": "bd2df9a8f9696f386fd108e1f4c322273229bbb0c9f530e1b83f6e23cd46f0c0",
+    "difference_from_timed_candidate": "Cold ProcessExit callback guard after profiler disposal; hot copy path unchanged. Final pair not used for six reported timing runs."
+  },
+  "validation": {
+    "compiler_passed": 331,
+    "runtime_passed": 542,
+    "runtime_skipped": 11,
+    "win32_passed": 352,
+    "win32_skipped": 47,
+    "failed": 0
+  },
+  "animation_probe": {
+    "status": "No valid timing comparison",
+    "asset_sha256": "7376a662ca046cb77c323840155a9faab5cc2f1e28a13965b46409d12637bef4",
+    "native_x86_anim_length": 1470,
+    "x64_pair": "baseline",
+    "x64_result": "LoadAnimMesh returned 0 on two attempts; candidate not timed",
+    "classification": "Existing native-versus-baseline loading difference; root cause not established."
+  }
+}

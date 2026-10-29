@@ -74,6 +74,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         this.artifact = artifact;
         this.options = options;
         env = environment;
+        env.ConfigureStableReads(artifact.SourceSha256);
         Name = name;
         Memory = new GuestMemory(this);
     }
@@ -137,6 +138,9 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     /// <summary>The module whose guest code is running on this thread, for imports that need memory access.</summary>
     public static GuestModule? Current => current;
+
+    /// <summary>Temporarily releases this thread's process writer lease while a nonalertable host wait is parked.</summary>
+    internal IDisposable? SuspendMemoryWriterForHostWait() => env?.SuspendMemoryWriterForHostWait();
 
     public static GuestModule Load(TranslationArtifact artifact, PeImage image, IGuestImportResolver imports, GuestModuleOptions? options = null) =>
         Load(artifact, image, imports, options, null, null);
@@ -278,6 +282,7 @@ public sealed unsafe partial class GuestModule : IDisposable
         registrySlot = env.Publish(artifact.GuestImageBase, registryBound, hostMap, hostMap + (nint)artifact.DispatchTableOffset);
         PlatformMemory.Current.Protect(hostMap, (nuint)artifact.CodeSize, MemoryProtection.ReadExecute);
         DynamicCodeGuard.AddHostCode(hostMap, (nuint)artifact.CodeSize);
+        RuntimeCommandProfiler.Instance?.RegisterModule(Name, artifact, (ulong)(nuint)hostMap);
 
         imageEntryRva = image.EntryPointRva; imageIsDll = image.IsDll;
         // 4. TLS callbacks (DLL_PROCESS_ATTACH), then DllMain(hinst, DLL_PROCESS_ATTACH, 0)
@@ -459,9 +464,11 @@ public sealed unsafe partial class GuestModule : IDisposable
                 *(uint*)(callContext + 8) = ecx; // CtxEcxIn / CtxEdxIn: register arguments of thiscall and fastcall
                 *(uint*)(callContext + 12) = edx;
                 *(uint*)(callContext + 56) = kind switch { GuestReturn.St0 => 2u, GuestReturn.Xmm0 => 4u, St0IfPresent => 2u, _ => 0u };
+                var nestedWaitWriter = teb.Depth != 0 && env.EnterNestedGuestCallDuringWait(teb);
+                if (teb.Depth == 0) env.ThreadEntered();
                 current = this;
                 state.Depth++;
-                if (teb.Depth++ == 0) env.ThreadEntered();
+                teb.Depth++;
                 var savedContext = state.CallContext;
                 state.CallContext = callContext;
                 state.CallLow = stack.Low; state.CallTop = esp;
@@ -473,6 +480,7 @@ public sealed unsafe partial class GuestModule : IDisposable
                     state.CallLow = savedCallLow; state.CallTop = savedCallTop;
                     if (--teb.Depth == 0) env.ThreadLeft();
                     else if (outermost) { *(uint*)(teb.Map + (nint)TebStackBase) = savedStackBase; *(uint*)(teb.Map + (nint)TebStackLimit) = savedStackLimit; }
+                    if (nestedWaitWriter) env.LeaveNestedGuestCallDuringWait(teb);
                 }
 
                 var abi = *(uint*)(callContext + 112);
@@ -618,6 +626,7 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     internal void ReleaseBuffer(GuestBuffer buffer, nint map, nuint length)
     {
+        using var mutation = env.EnterMemoryMutation();
         lock (resourceLock)
         {
             if (!buffers.Remove(buffer)) return; // the module already freed it
@@ -631,19 +640,26 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     internal void EnterCall()
     {
-        lifetime.EnterReadLock();
-        if (disposed)
+        var state = threadState.Value!;
+        // A nested call on the same thread is already protected by the outer read lease.
+        // Keep Holds as the recursion depth used by disposal, but avoid recursively
+        // entering ReaderWriterLockSlim for every bridge callback and memory helper.
+        if (state.Holds == 0)
         {
-            lifetime.ExitReadLock();
-            throw new ObjectDisposedException(nameof(GuestModule), "The guest module has been disposed.");
+            lifetime.EnterReadLock();
+            if (disposed)
+            {
+                lifetime.ExitReadLock();
+                throw new ObjectDisposedException(nameof(GuestModule), "The guest module has been disposed.");
+            }
         }
-        threadState.Value!.Holds++;
+        state.Holds++;
     }
 
     internal void ExitCall()
     {
-        threadState.Value!.Holds--;
-        lifetime.ExitReadLock();
+        var state = threadState.Value!;
+        if (--state.Holds == 0) lifetime.ExitReadLock();
     }
 
     public void Dispose() => TryDispose(Timeout.Infinite);
@@ -691,6 +707,7 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     private void Teardown()
     {
+        using var mutation = env.EnterMemoryMutation();
         if (registrySlot >= 0) env.Retire(registrySlot, Name, artifact.GuestImageBase, registryBound);   // dead before the host image goes away
         registrySlot = -1;
         env.UnregisterTls(this);

@@ -1,0 +1,25 @@
+{
+  "application": "SCP - Containment Breach, unmodified BASIC sources",
+  "platform": "Windows x64 package under Proton/Wine",
+  "comparison": "One observed New Game run per runtime; different randomly generated seeds; not a controlled same-seed benchmark",
+  "timingOrigin": "New Game Start click; scene time includes confirmation of the final continue prompt",
+  "before": {
+    "memoryLookup": "own-region lookaside with linear fallback",
+    "secondsToLoadingPrompt": 1561,
+    "secondsToVerified3DScene": 1584
+  },
+  "after": {
+    "memoryLookup": "own-region lookaside with indexed own/peer fallback",
+    "secondsToLoadingPrompt": 227,
+    "secondsToVerified3DScene": 241
+  },
+  "verification": [
+    "Visible first-person 3D room and HUD",
+    "Multiple frames and camera movement visibly changed the scene",
+    "No runtime exception in stderr"
+  ],
+  "limitations": [
+    "Single run per variant with different seeds",
+    "Does not isolate all loading costs or establish steady-state frame rate"
+  ]
+}

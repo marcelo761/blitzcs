@@ -208,6 +208,7 @@ internal sealed unsafe partial class GuestProcessEnvironment
     internal int InvalidateDynamicCode(uint address, uint length)
     {
         if (length == 0) return 0;
+        using var mutation = EnterMemoryMutation();
         var end = (ulong)address + length;
         var ps = (uint)PlatformMemory.Current.PageSize;
         lock (dynamicGate)

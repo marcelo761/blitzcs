@@ -1,0 +1,173 @@
+{
+  "workload": "Alternating function-pointer calls to the final two registry modules, forcing per-consumer MRU misses",
+  "platform": "Linux x64",
+  "tieredCompilation": false,
+  "baselineCompilerVersion": "0.14.1",
+  "newestFirstCompilerVersion": "0.14.2",
+  "baseline": {
+    "benchmark": "foreign-dispatch-alternating-last-two-records-mru-misses",
+    "pinnedCpu": 3,
+    "iterationsPerSample": 10000,
+    "samples": 5,
+    "rows": [
+      {
+        "registryRecords": 3,
+        "targetRecord": "last two (2, 3)",
+        "iterationsPerSample": 10000,
+        "samples": 5,
+        "expectedChecksum": 50005000,
+        "medianNsPerCall": 205.37,
+        "samplesNsPerCall": [
+          205.37,
+          201.93,
+          205.62,
+          199.61,
+          206.78
+        ]
+      },
+      {
+        "registryRecords": 17,
+        "targetRecord": "last two (16, 17)",
+        "iterationsPerSample": 10000,
+        "samples": 5,
+        "expectedChecksum": 50005000,
+        "medianNsPerCall": 217.04,
+        "samplesNsPerCall": [
+          255.69,
+          215.63,
+          217.04,
+          223.67,
+          215.47
+        ]
+      },
+      {
+        "registryRecords": 65,
+        "targetRecord": "last two (64, 65)",
+        "iterationsPerSample": 10000,
+        "samples": 5,
+        "expectedChecksum": 50005000,
+        "medianNsPerCall": 252.31,
+        "samplesNsPerCall": [
+          295.54,
+          251.57,
+          252.31,
+          256.71,
+          248.55
+        ]
+      },
+      {
+        "registryRecords": 257,
+        "targetRecord": "last two (256, 257)",
+        "iterationsPerSample": 10000,
+        "samples": 5,
+        "expectedChecksum": 50005000,
+        "medianNsPerCall": 404.1,
+        "samplesNsPerCall": [
+          410.3,
+          404.1,
+          405.19,
+          403.39,
+          403.24
+        ]
+      },
+      {
+        "registryRecords": 1025,
+        "targetRecord": "last two (1024, 1025)",
+        "iterationsPerSample": 10000,
+        "samples": 5,
+        "expectedChecksum": 50005000,
+        "medianNsPerCall": 1016.28,
+        "samplesNsPerCall": [
+          1016.28,
+          1018.93,
+          1014.61,
+          1024.74,
+          1016.25
+        ]
+      }
+    ]
+  },
+  "newestFirst": {
+    "benchmark": "foreign-dispatch-alternating-last-two-records-mru-misses",
+    "pinnedCpu": 3,
+    "iterationsPerSample": 10000,
+    "samples": 5,
+    "rows": [
+      {
+        "registryRecords": 3,
+        "targetRecord": "last two (2, 3)",
+        "iterationsPerSample": 10000,
+        "samples": 5,
+        "expectedChecksum": 50005000,
+        "medianNsPerCall": 221.66,
+        "samplesNsPerCall": [
+          316.21,
+          215.8,
+          222.91,
+          220.72,
+          221.66
+        ]
+      },
+      {
+        "registryRecords": 17,
+        "targetRecord": "last two (16, 17)",
+        "iterationsPerSample": 10000,
+        "samples": 5,
+        "expectedChecksum": 50005000,
+        "medianNsPerCall": 214.54,
+        "samplesNsPerCall": [
+          226.19,
+          214.54,
+          311.15,
+          212.5,
+          214.07
+        ]
+      },
+      {
+        "registryRecords": 65,
+        "targetRecord": "last two (64, 65)",
+        "iterationsPerSample": 10000,
+        "samples": 5,
+        "expectedChecksum": 50005000,
+        "medianNsPerCall": 215.17,
+        "samplesNsPerCall": [
+          212.45,
+          327.11,
+          218.09,
+          215.17,
+          213.51
+        ]
+      },
+      {
+        "registryRecords": 257,
+        "targetRecord": "last two (256, 257)",
+        "iterationsPerSample": 10000,
+        "samples": 5,
+        "expectedChecksum": 50005000,
+        "medianNsPerCall": 213.3,
+        "samplesNsPerCall": [
+          227.62,
+          213.3,
+          308.49,
+          211.72,
+          213.1
+        ]
+      },
+      {
+        "registryRecords": 1025,
+        "targetRecord": "last two (1024, 1025)",
+        "iterationsPerSample": 10000,
+        "samples": 5,
+        "expectedChecksum": 50005000,
+        "medianNsPerCall": 208.81,
+        "samplesNsPerCall": [
+          214.73,
+          209.78,
+          208.81,
+          208.51,
+          207.66
+        ]
+      }
+    ]
+  }
+}

@@ -10,9 +10,12 @@ using Iced.Intel;
 // M21 benchmark: translated PE32 (x64 AOT) vs the SAME machine code running natively as a static ELF32 on the IA-32 compat mode.
 // usage: dotnet run -c Release -- [--samples 15] [--cpu 3] [--target-ms 150] [--only name,name] [--out file.json] [--reuse-n previous.json]
 //                                 [--artifacts dir] [--disasm export] [--cold-child cacheDir dll]
+if (args.Contains("--ansi-string-scan", StringComparer.Ordinal)) return AnsiStringBench.Run(args);
 var opt = Options.Parse(args);
 if (opt.ColdChild is not null) return ColdChild(opt);
 if (opt.Stress is not null) return Stress(opt.Stress);
+if (opt.RegistryDispatch) return RegistryDispatchBench(opt.Cpu, opt.Samples, opt.RegistryIterations, opt.RegistryAlternatingLate);
+if (opt.CommandEntryCost) return CommandEntryCostBench(opt.Cpu, opt.Samples, opt.CommandEntryIterations);
 var repo = FindRepo();
 var artifacts = opt.Artifacts ?? Path.Combine(Path.GetTempPath(), "blitzcs-m21-bench");
 Directory.CreateDirectory(artifacts);
@@ -164,6 +167,165 @@ static int Stress(string[] dlls)
         catch (Exception e) { failures++; Console.WriteLine($"{Path.GetFileName(dll),-40} EXCEPTION {e.GetType().Name}: {e.Message}"); }
     }
     return failures == 0 ? 0 : 1;
+}
+
+// End-to-end foreign-dispatch benchmark. The consumer is first and the target is
+// last; the initial call takes the full scan, then steady-state calls exercise the MRU cache.
+static int RegistryDispatchBench(int cpu, int samples, int iterations, bool alternatingLate)
+{
+    var pinned = Affinity.Pin(cpu);
+    int[] providers = alternatingLate ? [2, 16, 64, 256, 1024] : [1, 16, 64, 256, 1024];
+    var rows = new List<object>();
+    foreach (var providerCount in providers)
+    {
+        var consumerBytes = new BenchPeBuilder()
+            .WithCode([0xFF, 0x74, 0x24, 0x08, 0xFF, 0x54, 0x24, 0x08, 0x83, 0xC4, 0x04, 0xC3])
+            .Export("callptr", 0).Relocate(BenchPeBuilder.DataRva).Build();
+        var providerBytes = new BenchPeBuilder()
+            .WithCode([0x8B, 0x44, 0x24, 0x04, 0x40, 0xC3])
+            .Export("target", 0).Relocate(BenchPeBuilder.DataRva).Build();
+        var consumer = PeReader.Read(consumerBytes);
+        var provider = PeReader.Read(providerBytes);
+        var modules = new List<(string Name, PeImage Image)> { ("consumer", consumer) };
+        var fillerCount = alternatingLate ? providerCount - 2 : providerCount;
+        for (var i = 0; i < fillerCount; i++) modules.Add(($"provider{i:D4}", provider));
+        if (alternatingLate)
+        {
+            modules.Add(("provider-late-a", provider));
+            modules.Add(("provider-late-b", provider));
+        }
+        var bases = ModuleBaseAllocator.Allocate(modules);
+        var artifacts = new List<(string Name, TranslationArtifact Artifact, PeImage Image)>();
+        for (var i = 0; i < modules.Count; i++)
+        {
+            var image = modules[i].Image.Rebase(bases[i].Base);
+            var artifact = BlitzCS.BinaryCompiler.CodeGen.X64Translator.Translate(
+                modules[i].Image,
+                new BinaryCompilerOptions(OptimizationProfile.Release, LoadBase: bases[i].Base),
+                $"registry-dispatch-{providerCount}-{i}");
+            if (artifact.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+                throw new InvalidOperationException($"translation failed for {modules[i].Name}: {string.Join("; ", artifact.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Message))}");
+            artifacts.Add((modules[i].Name, artifact, image));
+        }
+        using var set = new GuestModuleSet();
+        foreach (var m in artifacts) set.Add(m.Name + ".dll", m.Artifact, m.Image, ExportConventions.AllCdecl);
+        set.LoadAll();
+        var call = set["consumer"].Bind("callptr", GuestCallingConvention.Cdecl, 2);
+        var last = artifacts[^1].Artifact;
+        var targetAddress = last.GuestImageBase + last.Exports.Single(e => e.Name == "target").GuestRva;
+        var alternateTargetAddress = alternatingLate
+            ? artifacts[^2].Artifact.GuestImageBase + artifacts[^2].Artifact.Exports.Single(e => e.Name == "target").GuestRva
+            : targetAddress;
+        uint RunBatch()
+        {
+            uint sum = 0;
+            for (uint i = 0; i < iterations; i++)
+            {
+                var address = alternatingLate && (i & 1) == 0 ? alternateTargetAddress : targetAddress;
+                sum = unchecked(sum + call.Call(address, i));
+            }
+            return sum;
+        }
+
+        var expected = unchecked((uint)((long)iterations * (iterations + 1) / 2));
+        if (RunBatch() != expected) throw new InvalidOperationException($"registry dispatch checksum mismatch at {providerCount + 1} records");
+        _ = RunBatch(); // warm-up
+        var nsPerCall = new List<double>();
+        for (var sample = 0; sample < samples; sample++)
+        {
+            var sw = Stopwatch.StartNew();
+            var checksum = RunBatch();
+            sw.Stop();
+            if (checksum != expected) throw new InvalidOperationException("registry dispatch checksum changed during timing");
+            nsPerCall.Add(sw.Elapsed.TotalNanoseconds / iterations);
+        }
+        rows.Add(new { registryRecords = providerCount + 1, targetRecord = alternatingLate ? $"last two ({providerCount}, {providerCount + 1})" : (object)(providerCount + 1), iterationsPerSample = iterations, samples, expectedChecksum = expected, medianNsPerCall = Dist.Of(nsPerCall).Median, samplesNsPerCall = nsPerCall });
+        Console.Error.WriteLine($"registry records={providerCount + 1,4}  median={Dist.Of(nsPerCall).Median,9:F1} ns/call");
+    }
+    var benchmark = alternatingLate ? "foreign-dispatch-alternating-last-two-records-mru-misses" : "foreign-dispatch-last-record-steady-state-cache";
+    Console.WriteLine(JsonSerializer.Serialize(new { benchmark, pinnedCpu = pinned ? cpu : (int?)null, iterationsPerSample = iterations, samples, rows }, new JsonSerializerOptions { WriteIndented = true }));
+    return 0;
+}
+
+// Isolates the public guest-call entry paths with the same tiny translated target:
+// a pre-bound GuestFunction, RVA lookup on every call, and a guest-side loop that
+// amortizes the managed->guest entry over many translated calls.
+static int CommandEntryCostBench(int cpu, int samples, int iterations)
+{
+    var pinned = Affinity.Pin(cpu);
+    // nop_fn returns 1; guest_loop calls it count times and returns count.
+    byte[] code =
+    [
+        0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3,
+        0x8B, 0x4C, 0x24, 0x04, 0x31, 0xD2, 0x85, 0xC9, 0x74, 0x0A,
+        0xE8, 0xEB, 0xFF, 0xFF, 0xFF, 0x01, 0xC2, 0x49, 0x75, 0xF6, 0x89, 0xD0, 0xC3,
+    ];
+    var bytes = new BenchPeBuilder().WithCode(code).Export("nop_fn", 0).Export("guest_loop", 6).Build();
+    var image = PeReader.Read(bytes);
+    var artifact = BlitzCS.BinaryCompiler.CodeGen.X64Translator.Translate(
+        image, new BinaryCompilerOptions(OptimizationProfile.Release), "command-entry-cost");
+    var errors = artifact.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+    if (errors.Length != 0) throw new InvalidOperationException("translation failed: " + string.Join("; ", errors.Select(e => e.Message)));
+
+    using var module = GuestModule.Load(artifact, image, new DictionaryGuestImportResolver(), new GuestModuleOptions { RunEntryPoint = false });
+    var cached = module.Bind("nop_fn", GuestCallingConvention.Cdecl, 0);
+    var loop = module.Bind("guest_loop", GuestCallingConvention.Cdecl, 1);
+    var rva = BenchPeBuilder.TextRva;
+
+    uint CachedBatch(int count)
+    {
+        uint sum = 0;
+        for (var i = 0; i < count; i++) sum = unchecked(sum + cached.Call());
+        return sum;
+    }
+    uint RvaBatch(int count)
+    {
+        uint sum = 0;
+        for (var i = 0; i < count; i++) sum = unchecked(sum + module.InvokeRva(rva, "nop_fn", GuestReturn.Eax, ReadOnlySpan<uint>.Empty).Eax);
+        return sum;
+    }
+
+    var expected = unchecked((uint)iterations);
+    if (CachedBatch(100) != 100 || RvaBatch(100) != 100 || loop.Call(100) != 100)
+        throw new InvalidOperationException("entry-path checksum mismatch before timing");
+    for (var i = 0; i < 20_000; i++) { _ = cached.Call(); _ = module.InvokeRva(rva, "nop_fn", GuestReturn.Eax, ReadOnlySpan<uint>.Empty); }
+    _ = loop.Call(100_000);
+
+    object Measure(string name, Func<int, uint> body)
+    {
+        var elapsedNs = new List<double>(samples);
+        var allocatedBytes = new List<double>(samples);
+        for (var sample = 0; sample < samples; sample++)
+        {
+            var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            var start = Stopwatch.GetTimestamp();
+            var checksum = body(iterations);
+            var elapsed = Stopwatch.GetElapsedTime(start);
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+            if (checksum != expected) throw new InvalidOperationException($"{name} checksum mismatch: {checksum} != {expected}");
+            elapsedNs.Add(elapsed.TotalNanoseconds / iterations);
+            allocatedBytes.Add(allocated / (double)iterations);
+        }
+        return new { name, medianNsPerOperation = Dist.Of(elapsedNs).Median, samplesNsPerOperation = elapsedNs,
+            medianAllocatedBytesPerOperation = Dist.Of(allocatedBytes).Median, samplesAllocatedBytesPerOperation = allocatedBytes };
+    }
+
+    var rows = new object[]
+    {
+        Measure("cached-GuestFunction.Call", CachedBatch),
+        Measure("GuestModule.InvokeRva", RvaBatch),
+        Measure("guest-side-loop-calling-nop_fn", count => loop.Call((uint)count)),
+    };
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        benchmark = "guest-command-entry-cost",
+        pinnedCpu = pinned ? cpu : (int?)null,
+        iterations,
+        samples,
+        target = "same translated nop_fn (returns 1); guest-loop calls it N times and returns N",
+        rows,
+    }, new JsonSerializerOptions { WriteIndented = true }));
+    return 0;
 }
 
 static int ColdChild(Options o)
@@ -544,11 +706,11 @@ internal static class Meta
     };
 }
 
-internal sealed record Options(int Samples, int Cpu, double TargetMs, HashSet<string>? Only, string? Out, string? Artifacts, string? Disasm, string? ColdChild, string? ColdChildDll, Dictionary<string, uint>? ReuseN, string[]? Stress)
+internal sealed record Options(int Samples, int Cpu, double TargetMs, HashSet<string>? Only, string? Out, string? Artifacts, string? Disasm, string? ColdChild, string? ColdChildDll, Dictionary<string, uint>? ReuseN, string[]? Stress, bool RegistryDispatch, bool RegistryAlternatingLate, int RegistryIterations, bool CommandEntryCost, int CommandEntryIterations)
 {
     public static Options Parse(string[] a)
     {
-        int samples = 15, cpu = 3; double target = 150; HashSet<string>? only = null; string? @out = null, art = null, dis = null, cc = null, ccd = null; Dictionary<string, uint>? reuse = null; string[]? stress = null;
+        int samples = 15, cpu = 3, registryIterations = 100_000, commandEntryIterations = 100_000; double target = 150; HashSet<string>? only = null; string? @out = null, art = null, dis = null, cc = null, ccd = null; Dictionary<string, uint>? reuse = null; string[]? stress = null; bool registryDispatch = false, registryAlternatingLate = false, commandEntryCost = false;
         for (var i = 0; i < a.Length; i++)
             switch (a[i])
             {
@@ -561,12 +723,17 @@ internal sealed record Options(int Samples, int Cpu, double TargetMs, HashSet<st
                 case "--disasm": dis = a[++i]; break;
                 case "--cold-child": cc = a[++i]; ccd = a[++i]; break;
                 case "--translate-stress": stress = a[(i + 1)..]; i = a.Length; break;
+                case "--registry-dispatch": registryDispatch = true; break;
+                case "--registry-dispatch-alternating-late": registryDispatch = true; registryAlternatingLate = true; break;
+                case "--registry-iterations": registryIterations = int.Parse(a[++i], CultureInfo.InvariantCulture); break;
+                case "--command-entry-cost": commandEntryCost = true; break;
+                case "--command-entry-iterations": commandEntryIterations = int.Parse(a[++i], CultureInfo.InvariantCulture); break;
                 case "--reuse-n":
                     using (var doc = JsonDocument.Parse(File.ReadAllText(a[++i])))
                         reuse = doc.RootElement.GetProperty("workloads").EnumerateArray().ToDictionary(w => w.GetProperty("name").GetString()!, w => w.GetProperty("n").GetUInt32());
                     break;
                 default: throw new ArgumentException("unknown argument " + a[i]);
             }
-        return new(samples, cpu, target, only, @out, art, dis, cc, ccd, reuse, stress);
+        return new(samples, cpu, target, only, @out, art, dis, cc, ccd, reuse, stress, registryDispatch, registryAlternatingLate, registryIterations, commandEntryCost, commandEntryIterations);
     }
 }

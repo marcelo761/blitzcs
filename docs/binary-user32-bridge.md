@@ -71,9 +71,13 @@ GetDeviceState, GetDeviceData, properties).
 Not bridged (named faults): palettes, overlays, private data, strided draw calls (`DrawPrimitiveStrided`, `DrawIndexedPrimitiveStrided`, `ProcessVerticesStrided`, whose
 `D3DDRAWPRIMITIVESTRIDEDDATA` layout contains 6 pointers), force feedback, action maps, `d3dxof.dll!DirectXFileCreate`.
 
+Complex attached surface chains keep guest references under their root. Root destruction releases the attached surfaces before releasing the root's native COM proxy; reversing that order can release child interfaces after their native parent has already destroyed them.
+
 **Surface and Vertex Buffer Lock**: guest Lock = host Lock (held until the guest unlocks, as on Windows) + a shadow in guest memory with the host's pitch (for surfaces) or buffer
 size (`D3DVERTEXBUFFERDESC.dwNumVertices * FvfStride(dwFVF)` for vertex buffers), filled from the locked bytes unless DDLOCK_WRITEONLY; guest Unlock = bytes copied back unless
-DDLOCK_READONLY + host Unlock. Surface formats without whole bytes per pixel are refused by name.
+DDLOCK_READONLY + host Unlock. RGB surfaces use the reported scanline pitch. Whole-surface DXT1–DXT5 locks require `DDSD_LINEARSIZE` and copy that many compressed bytes unchanged as one contiguous span; the union at offset 16 is a total size, not a row pitch. The bridge validates at least `ceil(width/4) * ceil(height/4)` blocks (8 bytes for DXT1, 16 for DXT2–DXT5), including one block for a tiny mip level. Partial compressed locks, unknown FOURCC values and sub-byte RGB formats are refused by name; a rejected native lock is unlocked before the error propagates.
+
+The layout follows Microsoft's [DDSURFACEDESC2 contract](https://learn.microsoft.com/windows/win32/api/ddraw/ns-ddraw-ddsurfacedesc2) and [DDS block layout](https://learn.microsoft.com/windows/win32/direct3ddds/dx-graphics-dds-pguide). A DXT5 1024×1024 native lock under Wine reports FOURCC `DXT5`, flags `0xA1007` and a linear size of 1,048,576 bytes. The bridge preserves that descriptor while replacing its 64-bit surface pointer with the guest shadow. Portable fake-COM tests cover compressed round trips, tiny mips, read/write-only directions, malformed sizes and unlock-on-rejection.
 
 ## Other APIs added with the bridge
 

@@ -1,0 +1,587 @@
+{
+  "workload": "Repeated GuestMemory.ReadUInt32/WriteUInt32 on oldest and newest of held 4096-byte GuestMemory allocations; unmapped reads throw GuestMemoryException",
+  "tieredCompilation": "default (DOTNET_TieredCompilation unset)",
+  "baseline": {
+    "host": "Unix 7.2.9.3",
+    "targetOs": "linux-sysv",
+    "heldGuestBufferSize": 4096,
+    "setupMs": 27752.1626,
+    "iterationsPerSample": 100000,
+    "samples": 3,
+    "rows": [
+      {
+        "workload": "zero",
+        "heldGuestBuffers": 0,
+        "readOldestMedianNs": 74.346,
+        "readOldestSamplesNs": [
+          74.649,
+          73.883,
+          74.346
+        ],
+        "readNewestMedianNs": 74.346,
+        "readNewestSamplesNs": [
+          74.649,
+          73.883,
+          74.346
+        ],
+        "writeOldestMedianNs": 133.627,
+        "writeOldestSamplesNs": [
+          134.398,
+          133.627,
+          133.16
+        ],
+        "writeNewestMedianNs": 133.627,
+        "writeNewestSamplesNs": [
+          134.398,
+          133.627,
+          133.16
+        ],
+        "unmappedReadFailureMedianNs": 1808.284,
+        "unmappedReadFailureSamplesNs": [
+          1971.812,
+          1808.284,
+          1791.971
+        ]
+      },
+      {
+        "workload": "held-512",
+        "heldGuestBuffers": 512,
+        "readOldestMedianNs": 46.756,
+        "readOldestSamplesNs": [
+          46.726,
+          47.332,
+          46.756
+        ],
+        "readNewestMedianNs": 533.198,
+        "readNewestSamplesNs": [
+          522.678,
+          533.198,
+          537.227
+        ],
+        "writeOldestMedianNs": 42.978,
+        "writeOldestSamplesNs": [
+          43.359,
+          42.978,
+          42.97
+        ],
+        "writeNewestMedianNs": 554.353,
+        "writeNewestSamplesNs": [
+          552.929,
+          565.314,
+          554.353
+        ],
+        "unmappedReadFailureMedianNs": 2547.983,
+        "unmappedReadFailureSamplesNs": [
+          2547.571,
+          2564.614,
+          2547.983
+        ]
+      },
+      {
+        "workload": "held-2048",
+        "heldGuestBuffers": 2048,
+        "readOldestMedianNs": 37.112,
+        "readOldestSamplesNs": [
+          37.112,
+          37.037,
+          37.413
+        ],
+        "readNewestMedianNs": 2100.86,
+        "readNewestSamplesNs": [
+          2057.532,
+          2100.86,
+          2140.881
+        ],
+        "writeOldestMedianNs": 42.677,
+        "writeOldestSamplesNs": [
+          42.712,
+          42.599,
+          42.677
+        ],
+        "writeNewestMedianNs": 2105.804,
+        "writeNewestSamplesNs": [
+          2105.804,
+          2151.741,
+          2093.155
+        ],
+        "unmappedReadFailureMedianNs": 5378.311,
+        "unmappedReadFailureSamplesNs": [
+          5378.311,
+          5385.397,
+          5351.896
+        ]
+      },
+      {
+        "workload": "held-5000",
+        "heldGuestBuffers": 5000,
+        "readOldestMedianNs": 37.589,
+        "readOldestSamplesNs": [
+          37.589,
+          37.153,
+          37.644
+        ],
+        "writeOldestMedianNs": 42.9,
+        "writeOldestSamplesNs": [
+          42.686,
+          44.744,
+          42.9
+        ],
+        "unmappedReadFailureMedianNs": 11845.016,
+        "unmappedReadFailureSamplesNs": [
+          12003.949,
+          11845.016,
+          11704.821
+        ],
+        "writeNewestMedianNs": 21096.738,
+        "writeNewestSamplesNs": [
+          20864.692,
+          21096.738,
+          21118.341
+        ]
+      }
+    ]
+  },
+  "cached": {
+    "host": "Unix 7.2.9.3",
+    "targetOs": "linux-sysv",
+    "heldGuestBufferSize": 4096,
+    "setupMs": 9780.5293,
+    "iterationsPerSample": 100000,
+    "samples": 3,
+    "rows": [
+      {
+        "workload": "zero",
+        "heldGuestBuffers": 0,
+        "readOldestMedianNs": 59.387,
+        "readOldestSamplesNs": [
+          65.068,
+          59.387,
+          59
+        ],
+        "readNewestMedianNs": 59.387,
+        "readNewestSamplesNs": [
+          65.068,
+          59.387,
+          59
+        ],
+        "writeOldestMedianNs": 116.735,
+        "writeOldestSamplesNs": [
+          116.387,
+          116.735,
+          117.721
+        ],
+        "writeNewestMedianNs": 116.735,
+        "writeNewestSamplesNs": [
+          116.387,
+          116.735,
+          117.721
+        ],
+        "unmappedReadFailureMedianNs": 1789.832,
+        "unmappedReadFailureSamplesNs": [
+          2028.26,
+          1789.832,
+          1774.436
+        ]
+      },
+      {
+        "workload": "held-512",
+        "heldGuestBuffers": 512,
+        "readOldestMedianNs": 40.999,
+        "readOldestSamplesNs": [
+          50.28,
+          40.999,
+          39.952
+        ],
+        "readNewestMedianNs": 39.956,
+        "readNewestSamplesNs": [
+          39.984,
+          39.956,
+          39.855
+        ],
+        "writeOldestMedianNs": 56.222,
+        "writeOldestSamplesNs": [
+          56.222,
+          56.064,
+          56.514
+        ],
+        "writeNewestMedianNs": 55.856,
+        "writeNewestSamplesNs": [
+          55.856,
+          55.745,
+          56.029
+        ],
+        "unmappedReadFailureMedianNs": 2483.742,
+        "unmappedReadFailureSamplesNs": [
+          2483.742,
+          2500.364,
+          2467.42
+        ]
+      },
+      {
+        "workload": "held-2048",
+        "heldGuestBuffers": 2048,
+        "readOldestMedianNs": 40.216,
+        "readOldestSamplesNs": [
+          41.419,
+          40.216,
+          39.623
+        ],
+        "readNewestMedianNs": 40.372,
+        "readNewestSamplesNs": [
+          40.372,
+          40.23,
+          40.392
+        ],
+        "writeOldestMedianNs": 56.23,
+        "writeOldestSamplesNs": [
+          56.23,
+          56.768,
+          55.793
+        ],
+        "writeNewestMedianNs": 56.589,
+        "writeNewestSamplesNs": [
+          58.525,
+          55.931,
+          56.589
+        ],
+        "unmappedReadFailureMedianNs": 5651.598,
+        "unmappedReadFailureSamplesNs": [
+          5647.877,
+          5651.598,
+          5685.448
+        ]
+      },
+      {
+        "workload": "held-5000",
+        "heldGuestBuffers": 5000,
+        "readOldestMedianNs": 35.768,
+        "readOldestSamplesNs": [
+          35.91,
+          35.768,
+          35.107
+        ],
+        "readNewestMedianNs": 35.545,
+        "readNewestSamplesNs": [
+          37.03,
+          35.248,
+          35.545
+        ],
+        "writeOldestMedianNs": 42.943,
+        "writeOldestSamplesNs": [
+          41.692,
+          42.943,
+          43.282
+        ],
+        "writeNewestMedianNs": 41.582,
+        "writeNewestSamplesNs": [
+          41.582,
+          41.479,
+          41.73
+        ],
+        "unmappedReadFailureMedianNs": 13424.828,
+        "unmappedReadFailureSamplesNs": [
+          13424.828,
+          13458.407,
+          13405.921
+        ]
+      }
+    ]
+  },
+  "windows": {
+    "runtime": "Microsoft Windows NT 10.0.19045.0 under Proton/Wine",
+    "selfContained": true,
+    "tiering": "DOTNET_TieredPGO=0; DOTNET_TieredCompilation unset/default",
+    "baseline": {
+      "host": "Microsoft Windows NT 10.0.19045.0",
+      "targetOs": "windows-x64",
+      "heldGuestBufferSize": 4096,
+      "setupMs": 19784.8969,
+      "iterationsPerSample": 100000,
+      "samples": 3,
+      "rows": [
+        {
+          "workload": "zero",
+          "heldGuestBuffers": 0,
+          "readOldestMedianNs": 58.336,
+          "readOldestSamplesNs": [
+            58.894,
+            58.336,
+            58.095
+          ],
+          "readNewestMedianNs": 58.336,
+          "readNewestSamplesNs": [
+            58.894,
+            58.336,
+            58.095
+          ],
+          "writeOldestMedianNs": 84.388,
+          "writeOldestSamplesNs": [
+            88.265,
+            83.916,
+            84.388
+          ],
+          "writeNewestMedianNs": 84.388,
+          "writeNewestSamplesNs": [
+            88.265,
+            83.916,
+            84.388
+          ],
+          "unmappedReadFailureMedianNs": 1570.157,
+          "unmappedReadFailureSamplesNs": [
+            1501.995,
+            1768.117,
+            1570.157
+          ]
+        },
+        {
+          "workload": "held-512",
+          "heldGuestBuffers": 512,
+          "readOldestMedianNs": 43.654,
+          "readOldestSamplesNs": [
+            45.676,
+            43.236,
+            43.654
+          ],
+          "readNewestMedianNs": 544.192,
+          "readNewestSamplesNs": [
+            538.325,
+            544.192,
+            552.746
+          ],
+          "writeOldestMedianNs": 46.225,
+          "writeOldestSamplesNs": [
+            45.44,
+            48.05,
+            46.225
+          ],
+          "writeNewestMedianNs": 549.538,
+          "writeNewestSamplesNs": [
+            545.25,
+            552.472,
+            549.538
+          ],
+          "unmappedReadFailureMedianNs": 2285.702,
+          "unmappedReadFailureSamplesNs": [
+            2285.702,
+            2282.092,
+            2310.124
+          ]
+        },
+        {
+          "workload": "held-2048",
+          "heldGuestBuffers": 2048,
+          "readOldestMedianNs": 41.49,
+          "readOldestSamplesNs": [
+            42.591,
+            41.49,
+            41.448
+          ],
+          "readNewestMedianNs": 3030.328,
+          "readNewestSamplesNs": [
+            3081.623,
+            2989.678,
+            3030.328
+          ],
+          "writeOldestMedianNs": 44.63,
+          "writeOldestSamplesNs": [
+            44.63,
+            44.659,
+            44.567
+          ],
+          "writeNewestMedianNs": 3009.565,
+          "writeNewestSamplesNs": [
+            3004.182,
+            3009.565,
+            3019.545
+          ],
+          "unmappedReadFailureMedianNs": 5985.858,
+          "unmappedReadFailureSamplesNs": [
+            5985.858,
+            5914.871,
+            5991.186
+          ]
+        },
+        {
+          "workload": "held-5000",
+          "heldGuestBuffers": 5000,
+          "readOldestMedianNs": 41.959,
+          "readOldestSamplesNs": [
+            41.982,
+            41.959,
+            41.396
+          ],
+          "readNewestMedianNs": 10588.971,
+          "readNewestSamplesNs": [
+            10588.971,
+            9621.854,
+            14284.15
+          ],
+          "writeOldestMedianNs": 45.183,
+          "writeOldestSamplesNs": [
+            45.183,
+            45.085,
+            49.832
+          ],
+          "writeNewestMedianNs": 8250.499,
+          "writeNewestSamplesNs": [
+            12857.331,
+            8250.499,
+            7509.888
+          ],
+          "unmappedReadFailureMedianNs": 10161.224,
+          "unmappedReadFailureSamplesNs": [
+            9942.252,
+            10161.224,
+            10183.975
+          ]
+        }
+      ]
+    },
+    "cached": {
+      "host": "Microsoft Windows NT 10.0.19045.0",
+      "targetOs": "windows-x64",
+      "heldGuestBufferSize": 4096,
+      "setupMs": 9449.0285,
+      "iterationsPerSample": 100000,
+      "samples": 3,
+      "rows": [
+        {
+          "workload": "zero",
+          "heldGuestBuffers": 0,
+          "readOldestMedianNs": 74.808,
+          "readOldestSamplesNs": [
+            75.087,
+            74.513,
+            74.808
+          ],
+          "readNewestMedianNs": 74.808,
+          "readNewestSamplesNs": [
+            75.087,
+            74.513,
+            74.808
+          ],
+          "writeOldestMedianNs": 129.784,
+          "writeOldestSamplesNs": [
+            129.784,
+            128.958,
+            129.914
+          ],
+          "writeNewestMedianNs": 129.784,
+          "writeNewestSamplesNs": [
+            129.784,
+            128.958,
+            129.914
+          ],
+          "unmappedReadFailureMedianNs": 1573.019,
+          "unmappedReadFailureSamplesNs": [
+            1618.277,
+            1573.019,
+            1540.668
+          ]
+        },
+        {
+          "workload": "held-512",
+          "heldGuestBuffers": 512,
+          "readOldestMedianNs": 49.155,
+          "readOldestSamplesNs": [
+            49.155,
+            49.301,
+            48.941
+          ],
+          "readNewestMedianNs": 49.077,
+          "readNewestSamplesNs": [
+            48.801,
+            49.077,
+            49.123
+          ],
+          "writeOldestMedianNs": 59.227,
+          "writeOldestSamplesNs": [
+            59.297,
+            59.227,
+            59.217
+          ],
+          "writeNewestMedianNs": 59.705,
+          "writeNewestSamplesNs": [
+            59.705,
+            59.155,
+            60.074
+          ],
+          "unmappedReadFailureMedianNs": 2252.121,
+          "unmappedReadFailureSamplesNs": [
+            2252.121,
+            2299.441,
+            2240.732
+          ]
+        },
+        {
+          "workload": "held-2048",
+          "heldGuestBuffers": 2048,
+          "readOldestMedianNs": 42.149,
+          "readOldestSamplesNs": [
+            42.363,
+            41.895,
+            42.149
+          ],
+          "readNewestMedianNs": 41.019,
+          "readNewestSamplesNs": [
+            41.656,
+            41.019,
+            40.971
+          ],
+          "writeOldestMedianNs": 43.489,
+          "writeOldestSamplesNs": [
+            43.489,
+            49.147,
+            43.415
+          ],
+          "writeNewestMedianNs": 43.38,
+          "writeNewestSamplesNs": [
+            43.432,
+            43.379,
+            43.38
+          ],
+          "unmappedReadFailureMedianNs": 5483.34,
+          "unmappedReadFailureSamplesNs": [
+            5431.851,
+            5483.34,
+            5576.792
+          ]
+        },
+        {
+          "workload": "held-5000",
+          "heldGuestBuffers": 5000,
+          "readOldestMedianNs": 41.452,
+          "readOldestSamplesNs": [
+            41.452,
+            41.257,
+            41.811
+          ],
+          "readNewestMedianNs": 41.127,
+          "readNewestSamplesNs": [
+            41.086,
+            41.127,
+            41.19
+          ],
+          "writeOldestMedianNs": 43.37,
+          "writeOldestSamplesNs": [
+            43.588,
+            43.258,
+            43.37
+          ],
+          "writeNewestMedianNs": 43.513,
+          "writeNewestSamplesNs": [
+            43.547,
+            43.513,
+            43.369
+          ],
+          "unmappedReadFailureMedianNs": 13288.772,
+          "unmappedReadFailureSamplesNs": [
+            13234.868,
+            13434.685,
+            13288.772
+          ]
+        }
+      ]
+    }
+  }
+}

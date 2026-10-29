@@ -8,7 +8,8 @@ namespace BlitzCS.BinaryCompiler.CodeGen;
 ///
 /// HostImage layout: [code][0xCC padding to a 4096 multiple][RW data]. RW data = GuestContext (64 bytes) at ContextOffset,
 /// uint64 import thunk table, a 16-byte aligned clamp vector, and the uint32 dispatch table.
-/// GuestContext: [0] saved native RSP, [8] reserved, [16] trap kind (0 none, 1 untranslated branch target,
+/// GuestContext: [0] module registry pointer, [8] cached foreign registry record pointer; remaining bytes reserved.
+/// Trap state lives in the separate per-call context: [0] saved native RSP, [16] trap kind (0 none, 1 untranslated branch target,
 /// 2 unsupported/undecodable instruction), [24] guest address of the trap (VA). When a trap fires EnterGuest returns 0 and the
 /// loader should inspect these fields. Host offset 0 is the trap routine, so zero dispatch entries trap.
 /// Translated code embeds guest addresses as constants: the guest image must be mapped at GuestImageBase.

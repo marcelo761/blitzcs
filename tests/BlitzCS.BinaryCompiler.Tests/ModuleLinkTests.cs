@@ -117,6 +117,27 @@ public sealed class ModuleLinkTests
     }
 
     [Fact]
+    public void GuestMemoryLookup_FallsBackFromOwnCachedRegionToPeerAndWritesPeerMemory()
+    {
+        using var set = Set(out _);
+        set.LoadAll();
+        var consumer = set["a"].Memory;
+        var owner = set["b"].Memory;
+        using var own = consumer.Allocate(4096);
+        using var peer = owner.Allocate(4096);
+        own.Write(0, BitConverter.GetBytes(0x12345678u));
+        peer.Write(0, BitConverter.GetBytes(0x87654321u));
+
+        for (var i = 0; i < 100; i++)
+        {
+            Assert.Equal(0x12345678u, consumer.ReadUInt32(own.Address)); // warm and retain the own-region index
+            Assert.Equal(0x87654321u, consumer.ReadUInt32(peer.Address)); // peer regions must remain searchable after an own hit
+        }
+        consumer.WriteUInt32(peer.Address, 0xA5A5A5A5u);
+        Assert.Equal(0xA5A5A5A5u, owner.ReadUInt32(peer.Address));
+    }
+
+    [Fact]
     public void DependencyDllMainRunsFirst_AndEachModuleHasItsOwnDataButOneProcessBlock()
     {
         using var set = Set(out _);

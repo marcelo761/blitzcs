@@ -502,6 +502,12 @@ public sealed class BinaryCommandExport
     private readonly uint rva;
     private readonly string name;
     private readonly int argumentCount;
+    private readonly bool bankReadCandidate;
+    private readonly bool asciiStringCandidate;
+    private readonly bool asciiIntCandidate;
+    private readonly bool chrCandidate;
+    private GuestModule? verifiedModule;
+    private VerifiedBankReader? bankReader;
 
     internal BinaryCommandExport(BinaryLibrary library, uint rva, string name, int argumentCount)
     {
@@ -509,12 +515,76 @@ public sealed class BinaryCommandExport
         this.rva = rva;
         this.name = name;
         this.argumentCount = argumentCount;
+        bankReadCandidate = rva == 0x30030 && argumentCount == 2 && name == "PeekByte";
+        asciiStringCandidate = VerifiedRuntimeStrings.IsAsciiStringCommand(rva, name, argumentCount);
+        asciiIntCandidate = VerifiedRuntimeStrings.IsAsciiIntCommand(rva, name, argumentCount);
+        chrCandidate = rva == VerifiedRuntimeStrings.ChrRva && name == "Chr" && argumentCount == 1;
     }
 
-    public uint Call(params ReadOnlySpan<BinaryArgument> arguments) => Run(GuestReturn.Eax, arguments).Eax;
-    public float CallSingle(params ReadOnlySpan<BinaryArgument> arguments) => Run(GuestReturn.St0, arguments).St0Single;
+    private bool IsVerifiedModule(GuestModule module)
+    {
+        if (ReferenceEquals(Volatile.Read(ref verifiedModule), module)) return true;
+        if (!VerifiedBankReader.IsSupportedImage(module.Artifact.SourceSha256)) return false;
+        // The source fingerprint is immutable for this module instance.
+        Volatile.Write(ref verifiedModule, module);
+        return true;
+    }
+
+    public uint Call(params ReadOnlySpan<BinaryArgument> arguments)
+    {
+        var profiler = RuntimeCommandProfiler.Instance;
+        if (profiler is null) return CallCore(arguments);
+        using var sample = profiler.Begin(name);
+        return CallCore(arguments);
+    }
+
+    private uint CallCore(ReadOnlySpan<BinaryArgument> arguments)
+    {
+        if (asciiIntCandidate && arguments.Length == argumentCount &&
+            VerifiedRuntimeStrings.TryAsciiInt(library.EnsureBlitz3dRuntime(), name, arguments, out var integer))
+            return unchecked((uint)integer);
+        if (!bankReadCandidate || arguments.Length != 2 || arguments[0].IsText || arguments[1].IsText)
+            return Run(GuestReturn.Eax, arguments).Eax;
+        var module = library.EnsureBlitz3dRuntime();
+        if (module.Environment.StableReads is null || !IsVerifiedModule(module))
+            return Run(GuestReturn.Eax, arguments).Eax;
+        var reader = Volatile.Read(ref bankReader);
+        if (reader is null)
+        {
+            reader = new VerifiedBankReader();
+            reader = Interlocked.CompareExchange(ref bankReader, reader, null) ?? reader;
+        }
+        if (reader.TryRead(module, arguments[0].Bits, arguments[1].Bits, out var value)) return value;
+        value = Run(GuestReturn.Eax, arguments).Eax;
+        reader.Remember(module, arguments[0].Bits);
+        return value;
+    }
+    public float CallSingle(params ReadOnlySpan<BinaryArgument> arguments)
+    {
+        var profiler = RuntimeCommandProfiler.Instance;
+        if (profiler is null) return Run(GuestReturn.St0, arguments).St0Single;
+        using var sample = profiler.Begin(name);
+        return Run(GuestReturn.St0, arguments).St0Single;
+    }
     public string CallString(params ReadOnlySpan<BinaryArgument> arguments)
     {
+        var profiler = RuntimeCommandProfiler.Instance;
+        if (profiler is null) return CallStringCore(arguments);
+        using var sample = profiler.Begin(name);
+        return CallStringCore(arguments);
+    }
+
+    private string CallStringCore(ReadOnlySpan<BinaryArgument> arguments)
+    {
+        if (asciiStringCandidate && arguments.Length == argumentCount &&
+            VerifiedRuntimeStrings.TryAsciiString(library.EnsureBlitz3dRuntime(), name, arguments, out var asciiText))
+            return asciiText;
+        if (chrCandidate && arguments.Length == 1 && !arguments[0].IsText && !arguments[0].IsFloat && !arguments[0].IsPointer)
+        {
+            var module = library.EnsureBlitz3dRuntime();
+            if (IsVerifiedModule(module) && VerifiedRuntimeStrings.TryCachedChr(module, arguments[0].Bits, out var cached))
+                return cached;
+        }
         var eax = Run(GuestReturn.Eax, arguments).Eax;
         if (eax == 0) return "";
         var mod = library.EnsureBlitz3dRuntime();
@@ -544,7 +614,7 @@ public sealed class BinaryCommandExport
         List<GuestBuffer>? buffers = null;
         try
         {
-            var words = new uint[arguments.Length];
+            Span<uint> words = arguments.Length <= 32 ? stackalloc uint[arguments.Length] : new uint[arguments.Length];
             for (var i = 0; i < arguments.Length; i++)
             {
                 if (!arguments[i].IsText)
