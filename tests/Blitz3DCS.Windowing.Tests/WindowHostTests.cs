@@ -161,14 +161,70 @@ public sealed class WindowHostTests
         Assert.Throws<ObjectDisposedException>(() => host.KeyDown(30));
     }
 
+    [Fact]
+    public void Native_window_handle_is_delegated_to_backend()
+    {
+        var expected = (nint)0x12345678;
+        using var host = new WindowHost(new FakeBackend { NativeWindowHandle = expected });
+
+        Assert.Equal(expected, host.GetWin32WindowHandle());
+    }
+
+    [Fact]
+    public void Backend_without_a_native_handle_fails_explicitly()
+    {
+        using var host = new WindowHost(new HandlelessBackend());
+
+        Assert.Throws<PlatformNotSupportedException>(() => host.GetWin32WindowHandle());
+    }
+
+    [Fact]
+    public void Native_window_handle_obeys_thread_and_disposal_affinity()
+    {
+        var host = new WindowHost(new FakeBackend { NativeWindowHandle = (nint)0x1234 });
+        Exception? error = null;
+        var thread = new Thread(() => { try { _ = host.GetWin32WindowHandle(); } catch (Exception ex) { error = ex; } });
+        thread.Start(); thread.Join();
+        Assert.IsType<InvalidOperationException>(error);
+
+        host.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => host.GetWin32WindowHandle());
+    }
+
+    [Fact]
+    public void Window_mutation_methods_forward_to_backend_on_the_owner_thread()
+    {
+        var backend = new FakeBackend();
+        using var host = new WindowHost(backend);
+
+        host.SetTitle("SCP runtime");
+        host.SetSize(640, 480);
+        host.Hide();
+        host.Show();
+        host.HidePointer();
+        host.ShowPointer();
+
+        Assert.Equal("SCP runtime", backend.Title);
+        Assert.Equal((640, 480), backend.Size);
+        Assert.Equal(1, backend.HideCalls);
+        Assert.Equal(1, backend.ShowCalls);
+        Assert.Equal(1, backend.HidePointerCalls);
+        Assert.Equal(1, backend.ShowPointerCalls);
+    }
+
     private sealed class FakeBackend : IWindowBackend
     {
         public int ClientWidth => 160;
         public int ClientHeight => 120;
         public bool HasFocus => true;
+        public nint NativeWindowHandle;
         public int Pumps, Disposals;
         public uint? Translation;
         public (float X,float Y) Warp;
+        public string? Title;
+        public (int Width, int Height) Size;
+        public int ShowCalls, HideCalls;
+        public int ShowPointerCalls, HidePointerCalls;
         public Queue<WindowInputEvent> Events { get; } = new();
         public void PumpEvents(Action<WindowInputEvent> dispatch)
         {
@@ -178,6 +234,26 @@ public sealed class WindowHostTests
         public void WarpMouse(float x, float y) => Warp = (x,y);
         public uint TranslateScanCode(int scanCode, bool shift, bool ctrl, bool alt) => Translation ??
             (scanCode is 4 or 5 ? (uint)(scanCode + (shift ? 'A' : 'a') - 4) : 0);
+        public nint GetWin32WindowHandle() => NativeWindowHandle;
+        public void SetTitle(string title) => Title = title;
+        public void SetSize(int width, int height) => Size = (width, height);
+        public void Show() => ShowCalls++;
+        public void Hide() => HideCalls++;
+        public void ShowPointer() => ShowPointerCalls++;
+        public void HidePointer() => HidePointerCalls++;
         public void Dispose() => Disposals++;
+    }
+
+    private sealed class HandlelessBackend : IWindowBackend
+    {
+        public int ClientWidth => 1;
+        public int ClientHeight => 1;
+        public bool HasFocus => false;
+        public void PumpEvents(Action<WindowInputEvent> dispatch) { }
+        public void WarpMouse(float x, float y) { }
+        public uint TranslateScanCode(int scanCode, bool shift, bool ctrl, bool alt) => 0;
+        public void ShowPointer() { }
+        public void HidePointer() { }
+        public void Dispose() { }
     }
 }

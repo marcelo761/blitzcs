@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 
 namespace Blitz3DCS.Windowing;
 
+public readonly record struct SdlDisplayModeInfo(int Width, int Height);
+
 public enum WindowInputEventKind
 {
     KeyDown, KeyUp, MouseMove, MouseDown, MouseUp, MouseWheel,
@@ -26,6 +28,7 @@ public sealed class SdlWindowBackend : IWindowBackend
     private readonly int _threadId = Environment.CurrentManagedThreadId;
     private nint _window;
     private bool _pumping;
+    private const string Win32HwndProperty = "SDL.window.win32.hwnd";
     private const uint Subsystems = 0x20 | 0x4000; // SDL_INIT_VIDEO | SDL_INIT_EVENTS
 
     public uint WindowId { get { CheckAccess(); return _windowId; } }
@@ -38,7 +41,9 @@ public sealed class SdlWindowBackend : IWindowBackend
 
     static SdlWindowBackend() => NativeLibrary.SetDllImportResolver(typeof(SdlWindowBackend).Assembly, ResolveLibrary);
 
-    public SdlWindowBackend(int width, int height, string title)
+    public SdlWindowBackend(int width, int height, string title) : this(width, height, title, hidden: false) { }
+
+    internal SdlWindowBackend(int width, int height, string title, bool hidden)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
@@ -49,7 +54,7 @@ public sealed class SdlWindowBackend : IWindowBackend
             if (!Native.SDL_InitSubSystem(Subsystems)) throw Error("Initialize SDL video/events");
             try
             {
-                _window = Native.SDL_CreateWindow(title, width, height, 0);
+                _window = Native.SDL_CreateWindow(title, width, height, hidden ? 0x8UL : 0UL);
                 if (_window == 0) throw Error("Create SDL window");
                 _windowId = Native.SDL_GetWindowID(_window);
                 if (_windowId == 0) throw Error("Get SDL window ID");
@@ -129,6 +134,93 @@ public sealed class SdlWindowBackend : IWindowBackend
         Native.SDL_WarpMouseInWindow(_window, x, y);
     }
 
+    public void SetTitle(string title)
+    {
+        CheckAccess();
+        ArgumentNullException.ThrowIfNull(title);
+        if (!Native.SDL_SetWindowTitle(_window, title)) throw Error("Set SDL window title");
+    }
+
+    public void SetSize(int width, int height)
+    {
+        CheckAccess();
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        if (!Native.SDL_SetWindowSize(_window, width, height)) throw Error("Set SDL window size");
+        if (!Native.SDL_GetWindowSize(_window, out _width, out _height)) throw Error("Get SDL window size");
+    }
+
+    public void Show()
+    {
+        CheckAccess();
+        if (!Native.SDL_ShowWindow(_window)) throw Error("Show SDL window");
+    }
+
+    public void Hide()
+    {
+        CheckAccess();
+        if (!Native.SDL_HideWindow(_window)) throw Error("Hide SDL window");
+    }
+
+    public void ShowPointer()
+    {
+        CheckAccess();
+        if (!Native.SDL_ShowCursor()) throw Error("Show SDL cursor");
+    }
+
+    public void HidePointer()
+    {
+        CheckAccess();
+        if (!Native.SDL_HideCursor()) throw Error("Hide SDL cursor");
+    }
+
+    /// <summary>Returns real fullscreen modes for SDL's primary display, preserving SDL's order.</summary>
+    public static SdlDisplayModeInfo[] GetPrimaryDisplayModes()
+    {
+        lock (LifecycleLock)
+        {
+            if (!Native.SDL_InitSubSystem(0x20)) throw Error("Initialize SDL video for display query");
+            nint modes = 0;
+            try
+            {
+                var display = Native.SDL_GetPrimaryDisplay();
+                if (display == 0) throw Error("Get SDL primary display");
+                modes = Native.SDL_GetFullscreenDisplayModes(display, out var count);
+                if (modes == 0) throw Error("Get SDL fullscreen display modes");
+                if (count < 0 || count > 16_384) throw new InvalidOperationException($"SDL returned an invalid display mode count: {count}.");
+                var result = new SdlDisplayModeInfo[count];
+                for (var i = 0; i < count; i++)
+                {
+                    var mode = Marshal.ReadIntPtr(modes, checked(i * IntPtr.Size));
+                    if (mode == 0) throw new InvalidOperationException($"SDL returned a null display mode at index {i}.");
+                    var nativeMode = Marshal.PtrToStructure<NativeDisplayMode>(mode);
+                    if (nativeMode.Width <= 0 || nativeMode.Height <= 0)
+                        throw new InvalidOperationException($"SDL returned an invalid display mode at index {i}: {nativeMode.Width}x{nativeMode.Height}.");
+                    result[i] = new(nativeMode.Width, nativeMode.Height);
+                }
+                return result;
+            }
+            finally
+            {
+                if (modes != 0) Native.SDL_free(modes);
+                Native.SDL_QuitSubSystem(0x20);
+            }
+        }
+    }
+
+    /// <summary>Returns SDL's native HWND property without changing ownership of the SDL window.</summary>
+    public nint GetWin32WindowHandle()
+    {
+        CheckAccess();
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("SDL exposes a Win32 HWND only on Windows.");
+        var properties = Native.SDL_GetWindowProperties(_window);
+        if (properties == 0) throw Error("Get SDL window properties");
+        var hwnd = Native.SDL_GetPointerProperty(properties, Win32HwndProperty, 0);
+        if (hwnd == 0) throw new InvalidOperationException("SDL did not provide the native Win32 HWND for this window.");
+        return hwnd;
+    }
+
     public void StartTextInput()
     {
         CheckAccess();
@@ -163,6 +255,20 @@ public sealed class SdlWindowBackend : IWindowBackend
     private void CheckAccess() { CheckThread(); ObjectDisposedException.ThrowIf(_window == 0, this); }
     private static InvalidOperationException Error(string operation) =>
         new($"{operation}: {Marshal.PtrToStringUTF8(Native.SDL_GetError()) ?? "Unknown SDL3 error."}");
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeDisplayMode
+    {
+        public uint DisplayId;
+        public uint Format;
+        public int Width;
+        public int Height;
+        public float PixelDensity;
+        public float RefreshRate;
+        public int RefreshRateNumerator;
+        public int RefreshRateDenominator;
+        public nint Internal;
+    }
 
     private static nint ResolveLibrary(string name, Assembly assembly, DllImportSearchPath? path)
     {
@@ -217,6 +323,28 @@ public sealed class SdlWindowBackend : IWindowBackend
         public static extern void SDL_DestroyWindow(nint window);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         public static extern uint SDL_GetWindowID(nint window);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        public static extern uint SDL_GetWindowProperties(nint window);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        public static extern nint SDL_GetPointerProperty(uint properties, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint defaultValue);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_SetWindowTitle(nint window, [MarshalAs(UnmanagedType.LPUTF8Str)] string title);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_SetWindowSize(nint window, int width, int height);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_ShowWindow(nint window);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_HideWindow(nint window);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_ShowCursor();
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_HideCursor();
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        public static extern uint SDL_GetPrimaryDisplay();
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        public static extern nint SDL_GetFullscreenDisplayModes(uint display, out int count);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void SDL_free(nint memory);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         public static extern ulong SDL_GetWindowFlags(nint window);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]

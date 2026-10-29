@@ -27,6 +27,20 @@ public sealed class SdlWindowBackendTests
     }
 
     [Fact]
+    public void Windows_native_handle_probe_is_opt_in()
+    {
+        if (!OperatingSystem.IsWindows() || Environment.GetEnvironmentVariable("BLITZCS_TEST_SDL_WINDOW_NATIVE_HWND") != "1") return;
+        using var backend = new SdlWindowBackend(160, 120, "BlitzCS HWND probe");
+        var hwnd = backend.GetWin32WindowHandle();
+        Assert.NotEqual(0, hwnd);
+        Assert.True(IsWindow(hwnd));
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindow(nint hwnd);
+
+    [Fact]
     public async Task Dummy_driver_validates_native_event_routing_lifecycle_and_audio_independence()
     {
         await RunChild("dummy", null);
@@ -99,9 +113,26 @@ internal static class BackendProbe
             }
             RunProbe();
             RunHostProbe();
+            RunLegacyInputHostProbe();
             return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+    }
+
+    private static void RunLegacyInputHostProbe()
+    {
+        Assert.Throws<InvalidOperationException>(() => _ = LegacyInput.CurrentWindow);
+        LegacyInput.OpenWindow(64, 64, "BlitzCS shared-window probe");
+        var expected = LegacyInput.CurrentWindow;
+        Assert.NotNull(expected);
+        if (!OperatingSystem.IsWindows())
+            Assert.Throws<PlatformNotSupportedException>(() => expected.GetWin32WindowHandle());
+        Exception? wrongThread = null;
+        var thread = new Thread(() => { try { _ = LegacyInput.CurrentWindow; } catch (Exception ex) { wrongThread = ex; } });
+        thread.Start(); thread.Join();
+        Assert.IsType<InvalidOperationException>(wrongThread);
+        LegacyInput.CloseWindow();
+        Assert.Throws<InvalidOperationException>(() => _ = LegacyInput.CurrentWindow);
     }
 
     private static void RunHostProbe()

@@ -8,6 +8,13 @@ internal interface IWindowBackend : IDisposable
     void PumpEvents(Action<WindowInputEvent> dispatch);
     void WarpMouse(float x, float y);
     uint TranslateScanCode(int scanCode, bool shift, bool ctrl, bool alt);
+    nint GetWin32WindowHandle() => throw new PlatformNotSupportedException("This window backend does not expose a Win32 HWND.");
+    void SetTitle(string title) => throw new NotSupportedException("This window backend cannot change the window title.");
+    void SetSize(int width, int height) => throw new NotSupportedException("This window backend cannot resize the window.");
+    void Show() => throw new NotSupportedException("This window backend cannot show the window.");
+    void Hide() => throw new NotSupportedException("This window backend cannot hide the window.");
+    void ShowPointer() => throw new NotSupportedException("This window backend cannot show the pointer.");
+    void HidePointer() => throw new NotSupportedException("This window backend cannot hide the pointer.");
 }
 
 /// <summary>Owns a window and the polling keyboard/mouse behavior of legacy windowed mode 2.</summary>
@@ -23,6 +30,9 @@ public sealed class WindowHost : IDisposable
 
     public WindowHost(int width, int height, string title) : this(new SdlWindowBackend(width, height, title)) { }
 
+    internal static WindowHost CreateHiddenApplicationWindow(string title) =>
+        new(new SdlWindowBackend(1, 1, title, hidden: true));
+
     internal WindowHost(IWindowBackend backend)
     {
         _backend = backend;
@@ -34,6 +44,29 @@ public sealed class WindowHost : IDisposable
     public bool HasFocus { get { CheckAccess(); return _hasFocus; } }
     public int ClientWidth { get { CheckAccess(); return _backend.ClientWidth; } }
     public int ClientHeight { get { CheckAccess(); return _backend.ClientHeight; } }
+
+    /// <summary>Returns this window's native HWND for a Windows renderer sharing the SDL-owned window.</summary>
+    public nint GetWin32WindowHandle() { CheckAccess(); return _backend.GetWin32WindowHandle(); }
+
+    public void SetTitle(string title)
+    {
+        CheckAccess();
+        ArgumentNullException.ThrowIfNull(title);
+        _backend.SetTitle(title);
+    }
+
+    public void SetSize(int width, int height)
+    {
+        CheckAccess();
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        _backend.SetSize(width, height);
+    }
+
+    public void Show() { CheckAccess(); _backend.Show(); }
+    public void Hide() { CheckAccess(); _backend.Hide(); }
+    public void ShowPointer() { CheckAccess(); _backend.ShowPointer(); }
+    public void HidePointer() { CheckAccess(); _backend.HidePointer(); }
 
     public void PumpEvents() { CheckAccess(); _backend.PumpEvents(_dispatch); }
     public int KeyDown(int scan) { PumpEvents(); return _input.KeyDown(scan); }
