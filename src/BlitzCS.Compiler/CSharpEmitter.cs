@@ -245,8 +245,15 @@ internal static class CSharpEmitter
     private static string EmitVectorAccess(IrVectorAccess access) =>
         $"{EmitExpression(access.Owner)}.Element({EmitExpression(access.Index)}, {Quote(access.Location)})";
 
-    private static string EmitArrayAccess(IrArrayAccess access) =>
-        $"{access.Storage}.Element(new int[] {{ {string.Join(", ", access.Indices.Select(EmitExpression))} }}, {Quote(access.Location)})";
+    private static string EmitArrayAccess(IrArrayAccess access)
+    {
+        var indices = string.Join(", ", access.Indices.Select(EmitExpression));
+        return access.Indices.Count switch
+        {
+            1 or 2 => $"{access.Storage}.Element({indices}, {Quote(access.Location)})",
+            _ => $"{access.Storage}.Element(new int[] {{ {indices} }}, {Quote(access.Location)})"
+        };
+    }
 
     private static string EmitCall(IrCall call)
     {

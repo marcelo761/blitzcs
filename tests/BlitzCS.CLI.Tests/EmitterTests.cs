@@ -65,6 +65,30 @@ public sealed class EmitterTests : IDisposable
         Assert.Equal("", await stderr);
     }
 
+    [Fact]
+    public async Task EmittedReleaseAssemblyPreservesLineNumbersInStackTrace()
+    {
+        var output = Path.Combine(directory, "release_stack.dll");
+        DotNetEmitter.Emit("""
+            #line 42 "game.bb"
+            throw new System.InvalidOperationException("runtime failure");
+            """, output, optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Release);
+        var start = new ProcessStartInfo(DotNetHost())
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        start.ArgumentList.Add(output);
+        using var process = Process.Start(start)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.NotEqual(0, process.ExitCode);
+        var err = await stderr;
+        Assert.Contains("game.bb", err);
+        Assert.Contains("42", err);
+    }
+
     private static string DotNetHost() =>
         Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
 

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using BlitzCS.BinaryCompiler;
+using BlitzCS.BinaryCompiler.Runtime;
 using BlitzCS.Compiler;
 using Xunit;
 
@@ -6,7 +8,8 @@ namespace BlitzCS.CLI.Tests;
 
 public sealed class WorkstreamCTests : IDisposable
 {
-    private const string SdkRuntimePath = "/tmp/claude-1000/dyn-sdk.9EHv0N/Blitz3D-V1.118/bin/runtime.dll";
+    private static string SdkRuntimePath => Path.Combine(Environment.GetEnvironmentVariable(SdkRuntimeFactAttribute.Variable)
+        ?? throw new InvalidOperationException(SdkRuntimeFactAttribute.Variable + " is not set"), "bin", "runtime.dll");
     private readonly string directory = Path.Combine(Path.GetTempPath(), "blitzcs-ws-c-" + Guid.NewGuid().ToString("N"));
 
     public WorkstreamCTests()
@@ -58,6 +61,34 @@ public sealed class WorkstreamCTests : IDisposable
         Assert.True(decl.IsWin32SystemDll);
     }
 
+    [Fact]
+    public void UserLibResolver_GeneratesNativePointerLeaseOnlyWhenWin32RuntimeIsSelected()
+    {
+        var declsPath = Path.Combine(directory, "native-ptr.decls");
+        File.WriteAllText(declsPath, """
+            .lib "user32.dll"
+            GetClientRect%(hwnd%, rect*)
+            SetWindowLong%(hwnd%, index%, value%)
+            """);
+        var declarations = UserLibResolver.ParseDeclsFile(declsPath, directory);
+
+        var nativeSource = UserLibResolver.GenerateDirectNativeBindingsSource(
+            declarations,
+            "runtime.dll",
+            NativeBlitzCommandLibrary.SupportedRuntimeSha256);
+
+        Assert.Contains("NativeBlitzCommandLibrary.For(typeof(DirectUserLibs).Assembly, \"runtime.dll\"", nativeSource);
+        Assert.Contains("using var p1 = NativeLibrary.Pointer(a1);", nativeSource);
+        Assert.Contains("PInvoke_0(a0, unchecked((int)p1.Address))", nativeSource);
+        Assert.Contains("p1.Complete();", nativeSource);
+        Assert.Contains("PInvoke_1(a0, a1, a2)", nativeSource);
+
+        var ordinarySource = UserLibResolver.GenerateDirectNativeBindingsSource(declarations);
+        Assert.DoesNotContain("NativeBlitzCommandLibrary", ordinarySource);
+        Assert.DoesNotContain("NativeLibrary.Pointer", ordinarySource);
+        Assert.Contains("PInvoke_0(a0, a1)", ordinarySource);
+    }
+
     [Theory]
     [InlineData("user32.dll")]
     [InlineData("kernel32.dll")]
@@ -78,11 +109,9 @@ public sealed class WorkstreamCTests : IDisposable
         Assert.Equal(dllName, decls[0].Win32SystemDllName);
     }
 
-    [Fact]
+    [SdkRuntimeFact]
     public void Blitz3dRuntimeExtractor_ExtractsAllCommandsFromSdkRuntime()
     {
-        if (!File.Exists(SdkRuntimePath)) return;
-
         var commands = Blitz3dRuntimeExtractor.ExtractCommands(SdkRuntimePath);
         Assert.True(commands.Count >= 521);
 
@@ -103,16 +132,18 @@ public sealed class WorkstreamCTests : IDisposable
         Assert.Equal([ExternalValueType.Float], sin.ParameterTypes);
     }
 
-    [Fact]
+    [SdkRuntimeFact]
     public void ExternalCatalog_LoadsBlitz3dRuntime_FiltersReservedKeywordsAndRegistersSignatures()
     {
-        if (!File.Exists(SdkRuntimePath)) return;
+        var user32Decls = Path.Combine(directory, "user32-x64.decls");
+        File.WriteAllText(user32Decls, ".lib \"user32.dll\"\nGetClientRect%(hwnd%, lpRect*) : \"GetClientRect\"\n");
 
         var catalogPath = Path.Combine(directory, "catalog.json");
         File.WriteAllText(catalogPath, JsonSerializer.Serialize(new
         {
             blitz3dRuntime = SdkRuntimePath,
             binaryTarget = "windows-x64",
+            userlibs = new[] { user32Decls },
             functions = Array.Empty<object>()
         }));
 
@@ -124,12 +155,91 @@ public sealed class WorkstreamCTests : IDisposable
         Assert.Contains(result.Functions.Functions, f => f.Name.Equals("Graphics3D", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Functions.Functions, f => f.Name.Equals("CreateCamera", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Functions.Functions, f => f.Name.Equals("MilliSecs", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Functions.Functions, f => f.Name.Equals("GetClientRect", StringComparison.OrdinalIgnoreCase));
 
         Assert.NotNull(result.BinaryBindings);
         var gfxBinding = result.BinaryBindings.FirstOrDefault(b => b.BasicName == "Graphics3D");
         Assert.NotNull(gfxBinding);
         Assert.NotNull(gfxBinding.CommandRva);
         Assert.True(gfxBinding.CommandRva > 0);
+        Assert.Null(gfxBinding.NativeCommandSha256);
+        Assert.Contains(result.BinaryLibraries!, path => Path.GetFullPath(path) == Path.GetFullPath(SdkRuntimePath));
+        var generated = BinaryBindingGenerator.Source(result.BinaryBindings, result.LibrarySpecs!);
+        Assert.Contains("BinaryLibrary.For(typeof(Registry).Assembly, \"runtime.dll\"", generated);
+        Assert.Contains("BinaryLibrary.MarshalArgument(Lib, mem, global::BlitzCS.BinaryCompiler.Runtime.BinaryArgument.FromPointer(a1)", generated);
+        Assert.DoesNotContain("NativeBlitzCommandLibrary.For", generated);
+    }
+
+    [SdkRuntimeFact]
+    public void ExternalCatalog_Win32RuntimeCommandsUseNativeRvaBindings()
+    {
+        var fmodPath = Path.Combine(directory, "fmod.dll");
+        File.Copy(SdkRuntimePath, fmodPath);
+        var fmodDecls = Path.Combine(directory, "fmod.decls");
+        File.WriteAllText(fmodDecls, ".lib \"fmod.dll\"\nFmodInit%()\n");
+        var user32Decls = Path.Combine(directory, "user32.decls");
+        File.WriteAllText(user32Decls, ".lib \"user32.dll\"\nGetClientRect%(hwnd%, lpRect*) : \"GetClientRect\"\n");
+
+        var catalogPath = Path.Combine(directory, "catalog-win32.json");
+        File.WriteAllText(catalogPath, JsonSerializer.Serialize(new
+        {
+            blitz3dRuntime = SdkRuntimePath,
+            userlibs = new[] { fmodDecls, user32Decls },
+            binaryLibraries = new object[]
+            {
+                new { path = SdkRuntimePath, win32 = true },
+                new { path = fmodPath, win32 = true, unpack = true }
+            },
+            functions = Array.Empty<object>()
+        }));
+
+        using var result = ExternalCatalog.Load(catalogPath, "Win32");
+
+        Assert.Contains(result.Functions.Functions, f => f.Name.Equals("Graphics3D", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Functions.Functions, f => f.Name.Equals("FmodInit", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Functions.Functions, f => f.Name.Equals("GetClientRect", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.NativeLibraries, path => Path.GetFullPath(path) == Path.GetFullPath(SdkRuntimePath));
+        Assert.Contains(result.NativeLibraries, path => Path.GetFullPath(path) == Path.GetFullPath(fmodPath));
+        Assert.Empty(result.BinaryLibraries ?? []);
+        Assert.Empty(result.LibrarySpecs ?? []);
+        var graphics = Assert.Single(result.BinaryBindings!, b => b.BasicName == "Graphics3D");
+        Assert.NotNull(graphics.NativeCommandSha256);
+        Assert.Equal(NativeBlitzCommandLibrary.SupportedRuntimeSha256, graphics.NativeCommandSha256);
+
+        var generated = BinaryBindingGenerator.Source(result.BinaryBindings!, result.LibrarySpecs!);
+        Assert.Contains("NativeBlitzCommandLibrary.For(typeof(Registry).Assembly, \"runtime.dll\"", generated);
+        Assert.Contains("NativeBlitzCommandExport C", generated);
+        Assert.DoesNotContain("BinaryLibrary.For", generated);
+    }
+
+    [Fact]
+    public void BinaryBindingGeneratorKeepsTranslatedRuntimeRvaCallsForWin64()
+    {
+        var binding = new BinaryBinding("Graphics3D", "runtime.dll", "", GuestCallingConvention.Cdecl,
+            [ExternalValueType.Integer], ExternalValueType.Void) { CommandRva = 0x1234 };
+        var generated = BinaryBindingGenerator.Source([binding], [new BinaryLibrarySpec("runtime.dll")]);
+
+        Assert.Contains("BinaryLibrary.For(typeof(Registry).Assembly, \"runtime.dll\"", generated);
+        Assert.Contains("BinaryCommandExport C0 = Lib.Command(0x1234u, \"Graphics3D\", 1)", generated);
+        Assert.DoesNotContain("NativeBlitzCommandLibrary.For", generated);
+    }
+
+    [SdkRuntimeFact]
+    public void ExternalCatalog_Win32RejectsUnverifiedNativeBlitzRuntime()
+    {
+        var alteredRuntime = Path.Combine(directory, "runtime-altered.dll");
+        var image = File.ReadAllBytes(SdkRuntimePath);
+        image[^1] ^= 1;
+        File.WriteAllBytes(alteredRuntime, image);
+        var catalogPath = Path.Combine(directory, "catalog-unverified.json");
+        File.WriteAllText(catalogPath, JsonSerializer.Serialize(new
+        {
+            blitz3dRuntime = alteredRuntime,
+            functions = Array.Empty<object>()
+        }));
+
+        var error = Assert.Throws<ArgumentException>(() => ExternalCatalog.Load(catalogPath, "Win32"));
+        Assert.Contains("unsupported SHA-256", error.Message);
     }
 
     [Fact]
@@ -155,11 +265,9 @@ public sealed class WorkstreamCTests : IDisposable
         Assert.DoesNotContain(result.NativeLibraries, lib => Path.GetFileName(lib).Equals("user32.dll", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
+    [SdkRuntimeFact]
     public void ExternalCatalog_Win32SystemDllUserlib_BindsViaSharedWin32OnWin64()
     {
-        if (!File.Exists(SdkRuntimePath)) return;
-
         var declsPath = Path.Combine(directory, "user32.decls");
         File.WriteAllText(declsPath, """
             .lib "user32.dll"
@@ -185,11 +293,9 @@ public sealed class WorkstreamCTests : IDisposable
         Assert.True(mb.FromUserLib);
     }
 
-    [Fact]
+    [SdkRuntimeFact]
     public void ExternalCatalog_UserlibStringReturn_DoesNotThrowUnsupported()
     {
-        if (!File.Exists(SdkRuntimePath)) return;
-
         var declsPath = Path.Combine(directory, "str.decls");
         File.WriteAllText(declsPath, """
             .lib "user32.dll"
@@ -214,11 +320,9 @@ public sealed class WorkstreamCTests : IDisposable
         Assert.True(binding.FromUserLib);
     }
 
-    [Fact]
+    [SdkRuntimeFact]
     public void BinaryTranslationStep_TranslatesBlitz3dRuntimeWithoutErrors()
     {
-        if (!File.Exists(SdkRuntimePath)) return;
-
         var catalogPath = Path.Combine(directory, "catalog.json");
         File.WriteAllText(catalogPath, JsonSerializer.Serialize(new
         {
@@ -253,11 +357,9 @@ public sealed class WorkstreamCTests : IDisposable
         Assert.Equal("msvcrt.dll", normalizedNoExt);
     }
 
-    [Fact]
+    [SdkRuntimeFact]
     public void ExternalCatalog_ResolvesUndecoratedUserLibAsStdcall()
     {
-        if (!File.Exists(SdkRuntimePath)) return;
-
         var declsPath = Path.Combine(directory, "undecorated.decls");
         File.WriteAllText(declsPath, $"""
             .lib "{SdkRuntimePath}"
@@ -277,5 +379,22 @@ public sealed class WorkstreamCTests : IDisposable
         var binding = result.BinaryBindings?.FirstOrDefault(b => b.BasicName == "UndecoratedFunc");
         Assert.NotNull(binding);
         Assert.Equal(BlitzCS.BinaryCompiler.GuestCallingConvention.Stdcall, binding.Convention);
+    }
+}
+
+/// <summary>
+/// [Fact] for a test that needs the extracted Blitz3D SDK: <c>BLITZCS_BLITZ3D_DIR</c> names the SDK root that contains <c>bin/runtime.dll</c>.
+/// SKIPPED with the reason when it is not there, instead of returning early and reporting a meaningless PASS.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method)]
+internal sealed class SdkRuntimeFactAttribute : FactAttribute
+{
+    public const string Variable = "BLITZCS_BLITZ3D_DIR";
+
+    public SdkRuntimeFactAttribute()
+    {
+        var dir = Environment.GetEnvironmentVariable(Variable);
+        if (string.IsNullOrEmpty(dir)) Skip = $"{Variable} is not set (point it at the extracted Blitz3D SDK root, the directory that contains bin/runtime.dll)";
+        else if (!File.Exists(Path.Combine(dir, "bin", "runtime.dll"))) Skip = $"{Variable}='{dir}' has no bin/runtime.dll";
     }
 }

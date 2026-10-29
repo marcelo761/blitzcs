@@ -61,25 +61,14 @@ internal static class ApplicationPublisher
                 }
                 """;
             DotNetEmitter.Emit(generated + Environment.NewLine + startup, assemblyPath, "BlitzProgram", catalog.Functions.ReferencePaths,
-                catalog.NativeLibraries, inputs);
+                catalog.NativeLibraries, inputs, Microsoft.CodeAnalysis.OptimizationLevel.Release);
             binaries.Publish(output);
             // Publish a shell to obtain the SDK's apphost, runtimeconfig and dependency graph.
             // Keep the original Roslyn assembly: generated binding assemblies can reference runtime
             // implementation types, which cannot be recompiled against SDK reference-pack facades.
             File.WriteAllText(Path.Combine(stage, "PublishEntry.cs"),
                 "internal static class BlitzProgram { public static void Main() {} }");
-            var properties = new XElement("PropertyGroup",
-                new XElement("TargetFramework", "net10.0"),
-                new XElement("LangVersion", "14.0"),
-                new XElement("OutputType", graphical ? "WinExe" : "Exe"),
-                new XElement("AssemblyName", name),
-                new XElement("StartupObject", "BlitzProgram"),
-                new XElement("EnableDefaultItems", "false"),
-                new XElement("GenerateAssemblyInfo", "false"),
-                new XElement("UseAppHost", "true"),
-                new XElement("SelfContained", "true"),
-                new XElement("PublishTrimmed", "false"),
-                new XElement("PublishSingleFile", "false"));
+            var properties = CreatePropertyGroup(name, graphical);
             var items = new XElement("ItemGroup",
                 new XElement("Compile", new XAttribute("Include", "PublishEntry.cs")));
             foreach (var file in Directory.EnumerateFiles(stage))
@@ -170,4 +159,23 @@ internal static class ApplicationPublisher
         }
         finally { Directory.Delete(workspace, recursive: true); }
     }
+
+    internal static XElement CreatePropertyGroup(string name, bool graphical) =>
+        new("PropertyGroup",
+            new XElement("TargetFramework", "net10.0"),
+            new XElement("LangVersion", "14.0"),
+            new XElement("OutputType", graphical ? "WinExe" : "Exe"),
+            new XElement("AssemblyName", name),
+            new XElement("StartupObject", "BlitzProgram"),
+            new XElement("EnableDefaultItems", "false"),
+            new XElement("GenerateAssemblyInfo", "false"),
+            new XElement("UseAppHost", "true"),
+            new XElement("SelfContained", "true"),
+            new XElement("PublishTrimmed", "false"),
+            new XElement("PublishSingleFile", "false"),
+            new XElement("PublishReadyToRun", "true"),
+            new XElement("TieredPGO", "true"),
+            new XElement("InvariantGlobalization", "true"),
+            new XElement("ConcurrentGarbageCollection", "true"),
+            new XElement("ServerGarbageCollection", "false"));
 }

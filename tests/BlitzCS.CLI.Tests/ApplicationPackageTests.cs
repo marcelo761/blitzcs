@@ -245,6 +245,20 @@ public sealed class ApplicationPackageTests
         public void Dispose() => Directory.Delete(WorkingDirectory, recursive: true);
     }
 
+    [Fact]
+    public void PublisherPropertyGroupIncludesPerformanceAndRuntimeFlags()
+    {
+        var group = ApplicationPublisher.CreatePropertyGroup("game", false);
+        Assert.Equal("true", group.Element("PublishReadyToRun")?.Value);
+        Assert.Equal("true", group.Element("TieredPGO")?.Value);
+        Assert.Equal("true", group.Element("InvariantGlobalization")?.Value);
+        Assert.Equal("true", group.Element("ConcurrentGarbageCollection")?.Value);
+        Assert.Equal("false", group.Element("ServerGarbageCollection")?.Value);
+        Assert.Equal("true", group.Element("SelfContained")?.Value);
+        Assert.Equal("false", group.Element("PublishTrimmed")?.Value);
+        Assert.Equal("false", group.Element("PublishSingleFile")?.Value);
+    }
+
     private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 
     private sealed class PublishFactAttribute : FactAttribute

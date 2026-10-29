@@ -30,6 +30,22 @@ internal sealed class __BlitzArray<T>
         catch (System.OutOfMemoryException) { throw Error(location, "insufficient memory for these dimensions."); }
         lengths = sizes;
     }
+    internal ref T Element(int index, string location)
+    {
+        if (data is null) throw Error(location, "array has not been dimensioned.");
+        if (index < 0 || index >= lengths[0])
+            throw Error(location, $"index {index} on axis 1 is outside 0..{lengths[0] - 1}.");
+        return ref data[index];
+    }
+    internal ref T Element(int index0, int index1, string location)
+    {
+        if (data is null) throw Error(location, "array has not been dimensioned.");
+        if (index0 < 0 || index0 >= lengths[0])
+            throw Error(location, $"index {index0} on axis 1 is outside 0..{lengths[0] - 1}.");
+        if (index1 < 0 || index1 >= lengths[1])
+            throw Error(location, $"index {index1} on axis 2 is outside 0..{lengths[1] - 1}.");
+        return ref data[index0 + index1 * lengths[0]];
+    }
     internal ref T Element(int[] indices, string location)
     {
         if (data is null) throw Error(location, "array has not been dimensioned.");

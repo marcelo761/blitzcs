@@ -17,6 +17,8 @@ internal sealed record BinaryBinding(string BasicName, string LibraryPath, strin
     internal IReadOnlyList<bool>? PointerParameters { get; init; }
     internal int? ExportArgCount { get; init; }
     internal uint? CommandRva { get; init; }
+    /// <summary>SHA-256 of a verified native 32-bit Blitz3D runtime command library.</summary>
+    internal string? NativeCommandSha256 { get; init; }
     internal string? Win32SystemDll { get; init; }
     internal bool FromUserLib { get; init; }
 
@@ -118,8 +120,18 @@ internal static class BinaryBindingGenerator
         for (var l = 0; l < libraries.Count; l++)
         {
             text.Append($"public static class Library{l}\n{{\n");
-            text.Append($"    private static readonly {rt}BinaryLibrary Lib = Registry.L{IndexOfSpec(specs, libraries[l])};\n");
             var members = bindings.Where(b => b.LibraryPath == libraries[l]).ToArray();
+            var nativeCommands = members.Where(b => b.NativeCommandSha256 is not null).ToArray();
+            if (nativeCommands.Length > 0)
+            {
+                if (nativeCommands.Length != members.Length || nativeCommands.Any(b => b.NativeCommandSha256 != nativeCommands[0].NativeCommandSha256))
+                    throw new InvalidOperationException($"Library '{Path.GetFileName(libraries[l])}' mixes native Blitz3D commands with another binding type or runtime version.");
+                text.Append($"    private static readonly {rt}NativeBlitzCommandLibrary Lib = {rt}NativeBlitzCommandLibrary.For(typeof(Registry).Assembly, {Literal(Path.GetFileName(libraries[l]))}, {Literal(nativeCommands[0].NativeCommandSha256!)});\n");
+            }
+            else
+            {
+                text.Append($"    private static readonly {rt}BinaryLibrary Lib = Registry.L{IndexOfSpec(specs, libraries[l])};\n");
+            }
             for (var m = 0; m < members.Length; m++)
             {
                 var b = members[m];
@@ -136,7 +148,8 @@ internal static class BinaryBindingGenerator
 
                 if (b.CommandRva is { } rva)
                 {
-                    text.Append($"    private static readonly {rt}BinaryCommandExport C{m} = Lib.Command(0x{rva:X}u, {Literal(b.BasicName)}, {b.Parameters.Count});\n");
+                    var commandType = b.NativeCommandSha256 is null ? "BinaryCommandExport" : "NativeBlitzCommandExport";
+                    text.Append($"    private static readonly {rt}{commandType} C{m} = Lib.Command(0x{rva:X}u, {Literal(b.BasicName)}, {b.Parameters.Count});\n");
                     var parameters = string.Join(", ", b.Parameters.Select((p, i) => $"{ClrType(p)} a{i}"));
                     var cmdArgs = string.Join(", ", b.Parameters.Select((p, i) =>
                     {

@@ -1,6 +1,8 @@
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 using BlitzCS.BinaryCompiler;
+using BlitzCS.BinaryCompiler.Runtime;
 using BlitzCS.Compiler;
 
 namespace BlitzCS.CLI;
@@ -15,7 +17,8 @@ internal static class ExternalCatalog
 
     internal static ExternalCatalogResult Load(string catalogPath, string? target = null, bool isPackageBuild = false)
     {
-        catalogPath = Path.GetFullPath(catalogPath);
+        var selection = RuntimeCatalogSelector.Resolve(catalogPath, target);
+        catalogPath = selection.CatalogPath;
         using var document = JsonDocument.Parse(File.ReadAllText(catalogPath));
         var root = document.RootElement;
         var functions = new List<ExternalFunction>();
@@ -52,8 +55,23 @@ internal static class ExternalCatalog
         var directUserLibDecls = new List<UserLibFunctionDeclaration>();
         var bcsbreUserLibDecls = new List<UserLibFunctionDeclaration>();
         var compilationTarget = BinaryTranslationStep.ResolveCompilationTarget(binaryTarget, target);
+        var nativeRuntimeCommands = blitz3dRuntime is not null && compilationTarget == CompilationTarget.Win32;
+        string? nativeRuntimeSha256 = null;
         if (blitz3dRuntime is not null)
-            TargetCapabilities.ValidateLegacyBinaryForRecompilation(blitz3dRuntime, compilationTarget, isPackageBuild);
+        {
+            if (nativeRuntimeCommands)
+            {
+                nativeRuntimeSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(blitz3dRuntime))).ToLowerInvariant();
+                if (!string.Equals(nativeRuntimeSha256, NativeBlitzCommandLibrary.SupportedRuntimeSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException($"Blitz3D runtime '{Path.GetFileName(blitz3dRuntime)}' has unsupported SHA-256 '{nativeRuntimeSha256}' for native Win32 command calls; supported runtime SHA-256 is '{NativeBlitzCommandLibrary.SupportedRuntimeSha256}'.");
+                if (!nativeLibraries.Any(path => PathEquals(path, blitz3dRuntime)))
+                    nativeLibraries = [.. nativeLibraries, blitz3dRuntime];
+            }
+            else
+            {
+                TargetCapabilities.ValidateLegacyBinaryForRecompilation(blitz3dRuntime, compilationTarget, isPackageBuild);
+            }
+        }
         foreach (var group in userLibDecls.GroupBy(d => d.LibraryPath, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
         {
             if (group.First().IsWin32SystemDll)
@@ -82,7 +100,8 @@ internal static class ExternalCatalog
             }
         }
         var binaryItems = items.Where(item => item.TryGetProperty("binary", out var binary) && binary.ValueKind != JsonValueKind.Null).ToArray();
-        var specs = ReadLibrarySpecs(root, binaryItems, bcsbreUserLibDecls, catalogDirectory, compilationTarget, isPackageBuild, blitz3dRuntime);
+        var specs = ReadLibrarySpecs(root, binaryItems, bcsbreUserLibDecls, directUserLibDecls, catalogDirectory, compilationTarget, isPackageBuild,
+            nativeRuntimeCommands ? null : blitz3dRuntime, nativeRuntimeCommands ? blitz3dRuntime : null);
         var binaryLibraries = specs.Select(spec => spec.Path).ToArray();
         var explicitBinaryBindings = binaryItems.Select(item => ReadBinding(item, catalogDirectory, specs, compilationTarget, isPackageBuild)).ToArray();
         var userLibBinaryBindings = bcsbreUserLibDecls.Select(decl => ResolveUserLibBinaryBinding(decl, specs, compilationTarget, isPackageBuild)).ToArray();
@@ -110,7 +129,8 @@ internal static class ExternalCatalog
                     LibraryDefaultCdecl: false)
                 {
                     CommandRva = cmd.Rva,
-                    FromUserLib = false
+                    FromUserLib = false,
+                    NativeCommandSha256 = nativeRuntimeCommands ? nativeRuntimeSha256 : null
                 });
             }
         }
@@ -126,7 +146,11 @@ internal static class ExternalCatalog
                 if (binaryBindings.Length > 0)
                     bindingAssembly = BinaryBindingGenerator.Generate(binaryBindings, specs, staging.Path);
                 if (directUserLibDecls.Count > 0)
-                    directUserLibAssembly = UserLibResolver.GenerateDirectNativeBindings(directUserLibDecls, staging.Path);
+                    directUserLibAssembly = UserLibResolver.GenerateDirectNativeBindings(
+                        directUserLibDecls,
+                        staging.Path,
+                        nativeRuntimeCommands ? Path.GetFileName(blitz3dRuntime!) : null,
+                        nativeRuntimeCommands ? nativeRuntimeSha256 : null);
             }
             catch { staging.Dispose(); throw; }
         }
@@ -230,7 +254,7 @@ internal static class ExternalCatalog
                 functions.Add(new ExternalFunction(decl.BasicName, method));
             }
         }
-        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs, binaryTarget);
+        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs, binaryTarget, selection.CatalogInputs);
         }
         catch { staging?.Dispose(); throw; }
         finally { context.Dispose(); }
@@ -347,7 +371,10 @@ internal static class ExternalCatalog
     /// Merges the <c>binaryLibraries</c> entries with the libraries named by function bindings (implicit entries with defaults), rejects duplicate files
     /// and duplicate output file names, and runs the opt-in preprocessors (<c>unpack</c>).
     /// </summary>
-    private static List<BinaryLibrarySpec> ReadLibrarySpecs(JsonElement root, JsonElement[] binaryItems, IReadOnlyList<UserLibFunctionDeclaration> bcsbreUserLibDecls, string catalogDirectory, CompilationTarget compilationTarget, bool isPackageBuild, string? blitz3dRuntime = null)
+    private static List<BinaryLibrarySpec> ReadLibrarySpecs(JsonElement root, JsonElement[] binaryItems,
+        IReadOnlyList<UserLibFunctionDeclaration> bcsbreUserLibDecls, IReadOnlyList<UserLibFunctionDeclaration> directUserLibDecls,
+        string catalogDirectory, CompilationTarget compilationTarget, bool isPackageBuild, string? blitz3dRuntime = null,
+        string? nativeBlitz3dRuntime = null)
     {
         var specs = new List<BinaryLibrarySpec>();
         if (blitz3dRuntime is not null)
@@ -358,6 +385,18 @@ internal static class ExternalCatalog
             foreach (var entry in entries.EnumerateArray())
             {
                 var spec = BinaryLibrarySpec.Parse(entry, catalogDirectory);
+                var isWin32NativeDependency = compilationTarget == CompilationTarget.Win32
+                    && directUserLibDecls.Any(decl => PathEquals(decl.LibraryPath, spec.Path));
+                if (nativeBlitz3dRuntime is not null && PathEquals(spec.Path, nativeBlitz3dRuntime)
+                    || isWin32NativeDependency && !binaryItems.Any(item =>
+                    {
+                        var binary = item.GetProperty("binary");
+                        return binary.ValueKind == JsonValueKind.Object
+                            && binary.TryGetProperty("library", out var library)
+                            && library.ValueKind == JsonValueKind.String
+                            && PathEquals(Path.GetFullPath(library.GetString()!, catalogDirectory), spec.Path);
+                    }))
+                    continue;
                 var existing = specs.FindIndex(candidate => PathEquals(candidate.Path, spec.Path));
                 if (existing >= 0)
                 {
@@ -508,7 +547,8 @@ internal sealed record ExternalCatalogResult(
     IReadOnlyList<BinaryBinding>? BinaryBindings = null,
     IDisposable? Staging = null,
     IReadOnlyList<BinaryLibrarySpec>? LibrarySpecs = null,
-    string? BinaryTarget = null) : IDisposable
+    string? BinaryTarget = null,
+    IReadOnlyList<string>? CatalogInputs = null) : IDisposable
 {
     public void Dispose() => Staging?.Dispose();
 }

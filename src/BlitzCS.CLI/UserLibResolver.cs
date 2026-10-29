@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using BlitzCS.BinaryCompiler;
+using BlitzCS.BinaryCompiler.Runtime;
 using BlitzCS.Compiler;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -164,13 +165,53 @@ internal static partial class UserLibResolver
 
     internal static string GenerateDirectNativeBindings(
         IReadOnlyList<UserLibFunctionDeclaration> declarations,
-        string stagingDirectory)
+        string stagingDirectory,
+        string? nativeRuntimeFileName = null,
+        string? nativeRuntimeSha256 = null)
     {
+        var sourceText = GenerateDirectNativeBindingsSource(declarations, nativeRuntimeFileName, nativeRuntimeSha256);
+        var trusted = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? "")
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => MetadataReference.CreateFromFile(p))
+            .ToList();
+        if (nativeRuntimeFileName is not null)
+            trusted.Add(MetadataReference.CreateFromFile(typeof(NativeBlitzCommandLibrary).Assembly.Location));
+
+        var syntaxTree = CSharpSyntaxTree.ParseText(sourceText, new CSharpParseOptions(LanguageVersion.CSharp12));
+        var compilation = CSharpCompilation.Create(
+            "BlitzCS.NativeUserLibBindings",
+            [syntaxTree],
+            trusted,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, optimizationLevel: OptimizationLevel.Release));
+
+        var output = Path.Combine(stagingDirectory, "BlitzCS.NativeUserLibBindings.dll");
+        var emit = compilation.Emit(output);
+        if (!emit.Success)
+        {
+            var message = string.Join(Environment.NewLine, emit.Diagnostics.Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error));
+            throw new InvalidOperationException("Direct native userlib binding generation failed:" + Environment.NewLine + message);
+        }
+
+        return output;
+    }
+
+    internal static string GenerateDirectNativeBindingsSource(
+        IReadOnlyList<UserLibFunctionDeclaration> declarations,
+        string? nativeRuntimeFileName = null,
+        string? nativeRuntimeSha256 = null)
+    {
+        if ((nativeRuntimeFileName is null) != (nativeRuntimeSha256 is null))
+            throw new ArgumentException("Native runtime filename and SHA-256 must be supplied together.");
+
         var source = new StringBuilder();
         source.AppendLine("using System.Runtime.InteropServices;");
         source.AppendLine("namespace BlitzCS.NativeUserLibBindings;");
         source.AppendLine("public static class DirectUserLibs");
         source.AppendLine("{");
+        if (nativeRuntimeFileName is not null)
+        {
+            source.AppendLine($"    private static readonly global::BlitzCS.BinaryCompiler.Runtime.NativeBlitzCommandLibrary NativeLibrary = global::BlitzCS.BinaryCompiler.Runtime.NativeBlitzCommandLibrary.For(typeof(DirectUserLibs).Assembly, \"{Escape(Path.GetFileName(nativeRuntimeFileName))}\", \"{Escape(nativeRuntimeSha256!)}\");");
+        }
 
         for (var i = 0; i < declarations.Count; i++)
         {
@@ -191,32 +232,42 @@ internal static partial class UserLibResolver
             if (decl.ReturnType == ExternalValueType.String)
                 source.AppendLine("    [return: MarshalAs(UnmanagedType.LPStr)]");
             source.AppendLine($"    private static extern {returnType} PInvoke_{i}({paramList});");
-            source.AppendLine($"    public static {returnType} {BinaryBindingGenerator.MethodName(decl.BasicName)}({ string.Join(", ", decl.ParameterTypes.Select((t, idx) => $"{CsType(t)} a{idx}")) }) => PInvoke_{i}({argList});");
+            var pointers = nativeRuntimeFileName is null
+                ? Array.Empty<int>()
+                : decl.PointerParameters?.Select((isPointer, index) => (isPointer, index)).Where(item => item.isPointer).Select(item => item.index).ToArray() ?? [];
+            var wrapperName = BinaryBindingGenerator.MethodName(decl.BasicName);
+            var wrapperParams = string.Join(", ", decl.ParameterTypes.Select((t, idx) => $"{CsType(t)} a{idx}"));
+            if (pointers.Length == 0)
+            {
+                source.AppendLine($"    public static {returnType} {wrapperName}({wrapperParams}) => PInvoke_{i}({argList});");
+                continue;
+            }
+
+            var pinvokeArgs = string.Join(", ", decl.ParameterTypes.Select((_, idx) => pointers.Contains(idx)
+                ? $"unchecked((int)p{idx}.Address)"
+                : $"a{idx}"));
+            source.AppendLine($"    public static {returnType} {wrapperName}({wrapperParams})");
+            source.AppendLine("    {");
+            foreach (var pointer in pointers)
+                source.AppendLine($"        using var p{pointer} = NativeLibrary.Pointer(a{pointer});");
+            if (decl.ReturnType == ExternalValueType.Void)
+            {
+                source.AppendLine($"        PInvoke_{i}({pinvokeArgs});");
+                foreach (var pointer in pointers)
+                    source.AppendLine($"        p{pointer}.Complete();");
+            }
+            else
+            {
+                source.AppendLine($"        var result = PInvoke_{i}({pinvokeArgs});");
+                foreach (var pointer in pointers)
+                    source.AppendLine($"        p{pointer}.Complete();");
+                source.AppendLine("        return result;");
+            }
+            source.AppendLine("    }");
         }
 
         source.AppendLine("}");
-
-        var trusted = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(p => MetadataReference.CreateFromFile(p))
-            .ToList();
-
-        var syntaxTree = CSharpSyntaxTree.ParseText(source.ToString(), new CSharpParseOptions(LanguageVersion.CSharp12));
-        var compilation = CSharpCompilation.Create(
-            "BlitzCS.NativeUserLibBindings",
-            [syntaxTree],
-            trusted,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, optimizationLevel: OptimizationLevel.Release));
-
-        var output = Path.Combine(stagingDirectory, "BlitzCS.NativeUserLibBindings.dll");
-        var emit = compilation.Emit(output);
-        if (!emit.Success)
-        {
-            var message = string.Join(Environment.NewLine, emit.Diagnostics.Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error));
-            throw new InvalidOperationException("Direct native userlib binding generation failed:" + Environment.NewLine + message);
-        }
-
-        return output;
+        return source.ToString();
     }
 
     private static string StripComment(string line)

@@ -86,7 +86,7 @@ public static class CliApplication
                     destination = Path.Combine(Path.GetDirectoryName(destination) ?? ".", name);
                 }
                 ApplicationPublisher.Build(code, destination, name, applicationTarget, packageCatalog,
-                    args.Length == 4 ? inputs.Append(args[3]) : inputs, output, error, assets, graphical);
+                    inputs.Concat(packageCatalog.CatalogInputs ?? []), output, error, assets, graphical);
                 return 0;
             }
             if (packageOutput is not null || assets is not null || graphical)
@@ -105,7 +105,7 @@ public static class CliApplication
             var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions, out var sourceInputs);
             DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram",
                 referencePaths: catalog.Functions.ReferencePaths, nativeLibraryPaths: catalog.NativeLibraries,
-                inputPaths: args.Length == 6 ? sourceInputs.Append(args[5]) : sourceInputs);
+                inputPaths: sourceInputs.Concat(catalog.CatalogInputs ?? []));
             binaries.Publish(output);
             output.WriteLine(outputPath);
             return 0;
