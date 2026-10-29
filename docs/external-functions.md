@@ -43,7 +43,7 @@ dotnet artifacts/native-runtime-error.dll
 ```
 
 O catálogo contém `functions`, cada uma com `name`, `assembly`, `type`, `method`
-e `parameters` (`Integer`, `Float`, `String`). O caminho da assembly é relativo
+e `parameters` (`Integer`, `Float`, `String`; ponteiros de struct em [native-struct-abi.md](native-struct-abi.md)). O caminho da assembly é relativo
 ao catálogo. A seleção do método verifica a assinatura exata; nenhum símbolo
 é registrado automaticamente. Catálogos são configuração confiável do host.
 A CLI usa contexto de carga coletável para inspeção, permitindo compilações

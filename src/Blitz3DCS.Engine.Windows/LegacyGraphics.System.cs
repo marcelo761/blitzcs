@@ -95,6 +95,14 @@ public static class LegacyWindowBindings
         return RegisterHandle(hwnd);
     }
 
+    /// <summary>Returns the keyboard-focus HWND of the calling thread's queue as a legacy handle token, or 0.</summary>
+    /// <remarks>The application window is owned and pumped by the BASIC thread, so focus elsewhere yields 0.</remarks>
+    public static int api_GetFocus()
+    {
+        EnsureWindows();
+        return RegisterHandle(Native.GetFocus());
+    }
+
     /// <summary>Writes a native RECT into the payload of a Blitz bank, never its BBBank header.</summary>
     public static int api_GetClientRect(int hwnd, int rectBank)
     {
@@ -162,6 +170,7 @@ public static class LegacyWindowBindings
     private static class Native
     {
         [DllImport("user32.dll", ExactSpelling = true)] public static extern nint GetDesktopWindow();
+        [DllImport("user32.dll", ExactSpelling = true)] public static extern nint GetFocus();
         [DllImport("user32.dll", ExactSpelling = true)] [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetClientRect(nint hwnd, out NativeRect rect);
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", ExactSpelling = true)]

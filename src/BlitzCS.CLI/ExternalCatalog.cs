@@ -177,7 +177,8 @@ internal static class ExternalCatalog
             var parameters = item.GetProperty("parameters").EnumerateArray().Select(p => p.GetString() switch
             {
                 "Integer" => ExternalValueType.Integer, "Float" => ExternalValueType.Float, "String" => ExternalValueType.String,
-                _ => throw new ArgumentException("External parameter types must be Integer, Float or String.")
+                "PointerIn" => ExternalValueType.PointerIn, "PointerOut" => ExternalValueType.PointerOut, "PointerInOut" => ExternalValueType.PointerInOut,
+                _ => throw new ArgumentException("External parameter types must be Integer, Float, String, PointerIn, PointerOut or PointerInOut.")
             }).ToArray();
             ExternalFunction? function = null;
             if (byItem.TryGetValue(item, out var assemblyPath))
@@ -535,7 +536,8 @@ internal static class ExternalCatalog
     private static Type ToSystemType(ExternalValueType type) => type switch
     {
         ExternalValueType.Integer => typeof(int), ExternalValueType.Float => typeof(float),
-        ExternalValueType.String => typeof(string), _ => throw new ArgumentOutOfRangeException(nameof(type))
+        ExternalValueType.String => typeof(string), ExternalValueType.PointerIn => typeof(ReadOnlySpan<byte>),
+        ExternalValueType.PointerOut or ExternalValueType.PointerInOut => typeof(Span<byte>), _ => throw new ArgumentOutOfRangeException(nameof(type))
     };
 }
 

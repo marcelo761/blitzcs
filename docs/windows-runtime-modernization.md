@@ -127,3 +127,71 @@ These components do not establish full game compatibility. Unsupported material
 effects, remaining loaders/commands and complete application startup
 and gameplay must be validated before replacing the legacy packages or claiming
 a performance improvement.
+
+## Multisampling (`AntiAlias 1`) design
+
+`AntiAlias 1` still fails explicitly, and `AntiAlias 0` is accepted. Setting the swapchain's sample
+count alone is not a working design. The renderer currently treats the swapchain buffer as the single
+back buffer for every operation:
+
+- 2D drawing
+- `CopyRect` from and to `BackBuffer`
+- Pixel locking and readback
+- Blit scratch copies
+
+D3D11 does not allow `CopyResource` or `CopySubresourceRegion` between textures with different sample
+counts, so each of these operations needs its own MSAA-aware path.
+
+The planned design:
+
+1. **Sample count.** Query `CheckMultisampleQualityLevels(R8G8B8A8_UNorm, n)` and the D32 depth format
+   for n = 4, then 2. Use the highest count supported by both. If neither is supported, keep the
+   explicit failure.
+2. **Render targets.** Keep the swapchain single-sampled, with flip-model compatibility. Render 3D and 2D
+   into an MSAA color texture and an MSAA depth texture of the same count. Recreate both on resize and
+   `Graphics3D`.
+3. **Resolve.** Resolve the MSAA texture with `ResolveSubresource` into the swapchain buffer before
+   `Present`. Also resolve before any operation that reads the back buffer: `CopyRect` sources, locks,
+   `ReadPixel` and readback staging.
+4. **Writes into the back buffer.** `CopyRect` destinations, `WritePixel` and unlock uploads must draw a
+   textured quad into the MSAA target, because copying into a multisampled resource is invalid. Clears
+   apply to the MSAA views.
+5. **Texture targets.** `SetBuffer TextureBuffer(...)` stays single-sampled.
+6. **Validation.** Before claiming support:
+   - Compare edge-coverage pixel tests on Win32 and Win64 with `AntiAlias 0`.
+   - Run readback and `CopyRect` round trips after a resolve.
+   - Test resize, and the fallback when the hardware lacks support.
+
+   The original D3D7 `AntiAlias` setting is a driver-dependent render state, so original captures should
+   determine whether exact pixel parity is expected.
+
+This touches every back-buffer path in `D3D11Renderer`, which is well over 150 lines. It is therefore
+deferred rather than implemented in a minimal change.
+
+## CreatePlane decision
+
+Decision: implement `CreatePlane` next, as its own increment. It is not part of the struct-ABI change,
+and it should not be added as a throwing catalog placeholder. `CreatePlane` is now the first
+semantic blocker on both targets (`Main.bb:8592`, the dimension 1499 event).
+
+That event depends on four plane behaviors: texturing (`EntityTexture`), placement
+(`PositionEntity`) and polygon collision (`EntityType` with `HIT_MAP`). The plane must also be
+effectively infinite.
+
+The minimum faithful scope:
+
+- **Entity.** A plane entity accepts the `segments` and `parent` arguments.
+- **Rendering.** The plane renders as a camera-centred grid of segments, with legacy UVs that tile per world unit.
+- **Collision.** Infinite-plane collision participates in swept-sphere responses and picking, without
+  being added to the triangle BVH.
+
+This is a scene and collision subsystem, not a catalog entry. Each part needs pixel and collision tests
+before it is bound.
+
+A scratch, declaration-only probe that did not change the tracked catalogs shows what follows. After
+`CreatePlane`, the next blockers are:
+
+- `ErrorLog()` (`Main.bb:11689`), a function of the modified game runtime.
+- `BlitzMovie_*` (`Main.bb:11876`), video playback through a third-party x86 DLL.
+
+`BlitzMovie_*` is another separate subsystem.

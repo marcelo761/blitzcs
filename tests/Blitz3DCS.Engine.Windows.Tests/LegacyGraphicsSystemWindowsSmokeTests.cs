@@ -52,6 +52,8 @@ public sealed class LegacyGraphicsSystemWindowsSmokeTests
             Assert.Throws<ArgumentOutOfRangeException>(() => LegacyGraphics.GfxDriverName(2));
             LegacyGraphics.HidePointer();
             LegacyGraphics.ShowPointer();
+            // Only the application window belongs to this thread's input queue.
+            Assert.Contains(LegacyWindowBindings.api_GetFocus(), new[] { 0, windowToken });
             var afterGraphicsHandle = LegacyWindowBindings.SystemProperty("AppHWND");
                 Assert.Equal(windowHandleText, afterGraphicsHandle);
                 Assert.Equal(1, LegacyWindowBindings.api_GetClientRect(windowToken, bank));

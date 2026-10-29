@@ -206,6 +206,8 @@ internal static class CSharpEmitter
         IrArrayAccess access => access.Type == ValueType.String ? $"({EmitArrayAccess(access)} ?? \"\")" : EmitArrayAccess(access),
         IrVariable variable => variable.Type == ValueType.String ? $"({variable.Storage} ?? \"\")" : variable.Storage,
         IrCall call => EmitCall(call),
+        IrFieldImage { Value: null } => "default(global::System.Span<byte>)",
+        IrFieldImage image => $"global::__BlitzFieldImage.Lend({EmitExpression(image.Value)}, {(image.Direction == ExternalValueType.PointerIn ? 0 : image.Direction == ExternalValueType.PointerOut ? 1 : 2)}, {Quote(image.Location)})",
         IrUnary { Operator: TokenKind.Abs } unary => $"global::BB.__BlitzAbs({EmitExpression(unary.Operand)})",
         IrUnary { Operator: TokenKind.Sgn } unary => $"global::BB.__BlitzSgn({EmitExpression(unary.Operand)})",
         IrUnary unary => $"unchecked(({Operator(unary.Operator)}{EmitExpression(unary.Operand)}))",
@@ -258,7 +260,17 @@ internal static class CSharpEmitter
     private static string EmitCall(IrCall call)
     {
         var target = call.IsCSharp ? $"global::{call.Name}" : $"global::BB.@{call.Name}";
-        var invocation = $"{target}({string.Join(", ", call.Arguments.Select(EmitExpression))})";
+        var arguments = call.Arguments.Select(EmitExpression).ToArray();
+        // Field images are refreshed after the last argument is evaluated, as the original passes live
+        // field memory, and written back after the call returns. Void calls occur only as statements.
+        var images = call.Arguments.Count(argument => argument is IrFieldImage { Value: not null });
+        if (images > 0)
+            arguments[^1] = $"global::__BlitzFieldImage.Seal({arguments[^1]}, {images})";
+        var invocation = $"{target}({string.Join(", ", arguments)})";
+        if (images > 0)
+            invocation = call.Type == ValueType.Void
+                ? $"{invocation}; global::__BlitzFieldImage.Return({images})"
+                : $"global::__BlitzFieldImage.Return({invocation}, {images})";
         if (call.Type == ValueType.String) return $"({invocation} ?? \"\")";
         return call.IsCSharp && call.Type == ValueType.Integer ? $"global::BB.__BlitzInteger({invocation})" : invocation;
     }

@@ -13,6 +13,11 @@ internal sealed partial class SemanticAnalysis
         var converted = new IrExpression[signature.ParameterTypes.Count];
         for (var i = 0; i < converted.Length; i++)
         {
+            if (ExternalFunction.IsPointer(signature.ParameterTypes[i]))
+            {
+                converted[i] = BindFieldImage(call, i, i < arguments.Count ? arguments[i] : null, signature.ParameterTypes[i]);
+                continue;
+            }
             if (i < arguments.Count && i < signature.PointerParameters.Count && signature.PointerParameters[i])
             {
                 if (arguments[i].Type == ValueType.Null)
@@ -46,5 +51,23 @@ internal sealed partial class SemanticAnalysis
         if (implementation is null)
             UnboundExternalCalls.Add(new(call.Name, call.Position.File ?? sourcePath, call.Position.Line, call.Position.Column));
         return new(target, converted, true, result);
+    }
+
+    // Struct pointers accept only Type instances whose fields all have a fixed 4-byte legacy slot.
+    private IrFieldImage BindFieldImage(Call call, int index, IrExpression? argument, ExternalValueType direction)
+    {
+        var parameter = $"Pointer argument {index + 1} of external function '{call.Name}'";
+        if (argument is null)
+            throw Error(call.Position, $"{parameter} is required; pointer parameters have no default.");
+        if (argument.Type == ValueType.Null)
+            return new(null, direction, Location(call.Position));
+        if (!argument.Type.IsObject || argument.Type.IsVector || !objectTypes.TryGetValue(argument.Type.Name, out var type))
+            throw Error(call.Position, $"{parameter} requires a Type instance; {argument.Type} values (including bank handles) need a binding with an Integer parameter.");
+        if (type.Fields.Count == 0)
+            throw Error(call.Position, $"{parameter}: Type '{type.Name}' has no fields to pass as a native struct.");
+        foreach (var field in type.Fields)
+            if (field.Value.IsVector || (field.Value != ValueType.Integer && field.Value != ValueType.Float))
+                throw Error(call.Position, $"{parameter}: field '{field.Key}' of Type '{type.Name}' is {field.Value}; native struct images support only Integer and Float fields.");
+        return new(argument, direction, Location(call.Position));
     }
 }

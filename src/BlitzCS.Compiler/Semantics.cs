@@ -18,6 +18,8 @@ internal static class Primitive
     internal static string Default(ValueType type) => type.IsVector ? $"new {CSharp(type)}({type.VectorLength})" : type.IsObject ? "null" : type == ValueType.Float ? "0f" : type == ValueType.String ? "\"\"" : "0";
 }
 internal abstract record IrExpression(ValueType Type);
+/// <summary>A BASIC object's field image lent to one external call; Value is null for Null.</summary>
+internal sealed record IrFieldImage(IrExpression? Value, ExternalValueType Direction, string Location) : IrExpression(ValueType.Integer);
 internal sealed record IrObjectOperation(string Operation, ValueType ObjectType, IrExpression? Value, string Location) : IrExpression(ObjectType);
 internal sealed record IrVectorAccess(IrExpression Owner, IrExpression Index, string Location) : IrExpression(Owner.Type.ElementType);
 internal sealed record IrField(IrExpression Owner, string Name, ValueType FieldType, string Location) : IrExpression(FieldType);

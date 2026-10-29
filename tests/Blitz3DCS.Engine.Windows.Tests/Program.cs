@@ -19,7 +19,10 @@ internal static class Program
             if (args[0] == "--image-smoke")
                 LegacyGraphicsImagesTests.RunSmoke();
             if (args[0] == "--system-smoke")
+            {
                 LegacyGraphicsSystemWindowsSmokeTests.RunSmoke();
+                LegacyKernel32BindingsTests.RunSmoke();
+            }
             if (args[0] == "--font-smoke")
                 LegacyGraphicsFontSmokeTests.RunSmoke();
             if (args[0] == "--model-smoke")

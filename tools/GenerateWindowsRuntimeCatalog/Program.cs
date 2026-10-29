@@ -35,14 +35,14 @@ foreach (var item in baseCatalog.RootElement.GetProperty("functions").EnumerateA
     functions[name] = function;
 }
 
-foreach (var type in new[] { typeof(LegacyScene), typeof(LegacyGraphics), typeof(LegacyWindowBindings), typeof(LegacyInput), typeof(LegacyMath), typeof(LegacyStreams), typeof(LegacyCompression), typeof(LegacyZip), typeof(LegacySystem) })
+foreach (var type in new[] { typeof(LegacyScene), typeof(LegacyGraphics), typeof(LegacyWindowBindings), typeof(LegacyKernel32Bindings), typeof(LegacyInput), typeof(LegacyMath), typeof(LegacyStreams), typeof(LegacyCompression), typeof(LegacyZip), typeof(LegacySystem) })
 {
     foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
     {
         if (method.IsSpecialName) continue;
         var parameters = method.GetParameters();
         var names = new JsonArray();
-        foreach (var parameter in parameters) names.Add(ScalarType(parameter.ParameterType));
+        foreach (var parameter in parameters) names.Add(ParameterType(parameter));
         var function = new JsonObject
         {
             ["name"] = method.Name,
@@ -95,7 +95,7 @@ foreach (var method in typeof(FSOUND).GetMethods(BindingFlags.Public | BindingFl
         ["assembly"] = audioAssembly,
         ["type"] = typeof(FSOUND).FullName,
         ["method"] = method.Name,
-        ["parameters"] = new JsonArray(parameters.Select(p => (JsonNode?)JsonValue.Create(ScalarType(p.ParameterType))).ToArray()),
+        ["parameters"] = new JsonArray(parameters.Select(p => (JsonNode?)JsonValue.Create(ParameterType(p))).ToArray()),
         ["returnType"] = ScalarType(method.ReturnType)
     };
     var defaults = parameters.SkipWhile(p => !p.HasDefaultValue).ToArray();
@@ -139,11 +139,17 @@ File.WriteAllText(Path.Combine(output, "scpcb.json"), MakeManifest("Win32.scpcb.
 Console.WriteLine($"Generated {functions.Count} general and {scpFunctions.Length} SCP-compatible command bindings per Windows target: {Path.Combine(output, "runtime.json")} and {Path.Combine(output, "scpcb.json")}");
 return;
 
+// Struct-pointer parameters receive a BASIC Type's field image; [Out] marks write-only images.
+static string ParameterType(ParameterInfo parameter) =>
+    parameter.ParameterType == typeof(ReadOnlySpan<byte>) ? "PointerIn"
+    : parameter.ParameterType == typeof(Span<byte>) ? (parameter.IsOut ? "PointerOut" : "PointerInOut")
+    : ScalarType(parameter.ParameterType);
+
 static string ScalarType(Type type) => type == typeof(void) ? "Void"
     : type == typeof(int) ? "Integer"
     : type == typeof(float) ? "Float"
     : type == typeof(string) ? "String"
-    : throw new InvalidDataException($"BASIC runtime bindings must use Int32, Single, String or Void, not {type}.");
+    : throw new InvalidDataException($"BASIC runtime bindings must use Int32, Single, String, Void or byte spans, not {type}.");
 
 string CanonicalAssemblyPath(string path)
 {

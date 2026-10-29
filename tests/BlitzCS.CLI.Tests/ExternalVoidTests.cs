@@ -82,7 +82,7 @@ public sealed class ExternalVoidTests : IDisposable
         var catalog = WriteCatalog("""{"functions":[{"name":"NativeWrite","returnType":"Void","parameters":["Void"]}]}""");
         using var errors = new StringWriter();
         Assert.Equal(1, CliApplication.Run(["check-semantics", source, "--externals", catalog], TextWriter.Null, errors));
-        Assert.Contains("External parameter types must be Integer, Float or String", errors.ToString());
+        Assert.Contains("External parameter types must be Integer, Float, String, PointerIn, PointerOut or PointerInOut", errors.ToString());
     }
 
     private string WriteSource(string text)

@@ -47,6 +47,47 @@ internal abstract class __BlitzObject
     internal static bool Equal(__BlitzObject left, __BlitzObject right) =>
         System.Object.ReferenceEquals(left is { Alive: true } ? left : null, right is { Alive: true } ? right : null);
 }
+// Field images lent to external struct-pointer parameters. Lend reserves an image while
+// arguments are evaluated; Seal refreshes the call's images from live fields after the last
+// argument; Return copies images back in reverse order after the call.
+internal static class __BlitzFieldImage
+{
+    [System.ThreadStatic] private static System.Collections.Generic.Stack<(__BlitzObject Owner, byte[] Bytes, int Direction, string Location)> __lent;
+    internal static System.Span<byte> Lend(__BlitzObject value, int direction, string location)
+    {
+        var lent = __lent ??= new();
+        if (value is null)
+        {
+            lent.Push((null, null, 0, location));
+            return default;
+        }
+        var bytes = __BlitzObject.Require(value, location).__PackFields();
+        lent.Push((value, bytes, direction, location));
+        return bytes;
+    }
+    internal static T Seal<T>(T value, int count) { Seal(count); return value; }
+    internal static System.Span<byte> Seal(System.Span<byte> value, int count) { Seal(count); return value; }
+    private static void Seal(int count)
+    {
+        foreach (var (owner, bytes, direction, location) in System.Linq.Enumerable.Take(__lent, count))
+        {
+            if (owner is null) continue;
+            if (direction == 1) System.Array.Clear(bytes);
+            else __BlitzObject.Require(owner, location).__PackFields().CopyTo(bytes, 0);
+        }
+    }
+    internal static T Return<T>(T result, int count) { Return(count); return result; }
+    internal static void Return(int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var (owner, bytes, direction, location) = __lent.Pop();
+            if (owner is null || direction == 0) continue;
+            if (!owner.Alive) throw new System.InvalidOperationException(location + ": Object was deleted during the external call.");
+            owner.__UnpackFields(bytes);
+        }
+    }
+}
 internal static class __BlitzHandles
 {
     private static int next;

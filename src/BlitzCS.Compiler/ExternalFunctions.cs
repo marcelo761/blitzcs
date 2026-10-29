@@ -3,7 +3,14 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace BlitzCS.Compiler;
 
-public enum ExternalValueType { Integer, Float, String, Void }
+/// <summary>BASIC-visible external value kinds.</summary>
+/// <remarks>The pointer kinds receive a BASIC <c>Type</c> instance as its legacy field image: one
+/// little-endian 4-byte slot per Integer (Int32) or Float (IEEE single) field, in declaration order.
+/// Bindings receive the image as <see cref="ReadOnlySpan{T}"/> (in), <c>[Out] Span&lt;byte&gt;</c>
+/// (out: zero-filled, copied back) or <see cref="Span{T}"/> (in/out: copied in and back). The span is
+/// valid only for the call; translating it to a target-specific native struct is the binding's job.
+/// <c>Null</c> passes an empty span.</remarks>
+public enum ExternalValueType { Integer, Float, String, Void, PointerIn, PointerOut, PointerInOut }
 public sealed record UnboundExternalCall(string Name, string SourcePath, int Line, int Column);
 
 /// <summary>A callable BASIC signature independent of any executable implementation.</summary>
@@ -35,7 +42,7 @@ public sealed class ExternalFunctionSignature
     {
         ArgumentNullException.ThrowIfNull(parameterTypes);
         ExternalFunction.ValidateName(name);
-        if (!Enum.IsDefined(returnType)) throw new ArgumentOutOfRangeException(nameof(returnType));
+        if (!Enum.IsDefined(returnType) || ExternalFunction.IsPointer(returnType)) throw new ArgumentOutOfRangeException(nameof(returnType));
         var parameters = parameterTypes.ToArray();
         if (parameters.Any(type => !Enum.IsDefined(type) || type == ExternalValueType.Void)) throw new ArgumentOutOfRangeException(nameof(parameterTypes));
         var defaults = defaultValues?.ToArray() ?? [];
@@ -88,6 +95,9 @@ public sealed class ExternalFunction
     internal IReadOnlyList<(ValueType Type, IrExpression? Default)> Parameters { get; }
     public ExternalFunctionSignature Signature { get; }
 
+    internal static bool IsPointer(ExternalValueType type) =>
+        type is ExternalValueType.PointerIn or ExternalValueType.PointerOut or ExternalValueType.PointerInOut;
+
     public ExternalFunction(string name, MethodInfo method)
     {
         ArgumentNullException.ThrowIfNull(method);
@@ -98,10 +108,24 @@ public sealed class ExternalFunction
             throw new ArgumentException("External methods must be public static methods on a visible non-generic type in a file-backed assembly.", nameof(method));
         Result = method.ReturnType == typeof(void) ? ValueType.Void : Map(method.ReturnType);
         var parameters = new List<(ValueType, IrExpression?)>();
+        var externalTypes = new List<ExternalValueType>();
         foreach (var parameter in method.GetParameters())
         {
-            if (parameter.IsOut || parameter.ParameterType.IsByRef || parameter.GetCustomAttribute<ParamArrayAttribute>() is not null)
+            if (parameter.ParameterType.IsByRef || parameter.GetCustomAttribute<ParamArrayAttribute>() is not null)
                 throw new ArgumentException("External parameters cannot use ref, out or params.", nameof(method));
+            var pointer = parameter.ParameterType == typeof(ReadOnlySpan<byte>) ? ExternalValueType.PointerIn
+                : parameter.ParameterType == typeof(Span<byte>) ? (parameter.IsOut ? ExternalValueType.PointerOut : ExternalValueType.PointerInOut)
+                : (ExternalValueType?)null;
+            if (parameter.IsOut && pointer != ExternalValueType.PointerOut)
+                throw new ArgumentException("[Out] is accepted only on Span<byte> pointer parameters.", nameof(method));
+            if (pointer is { } pointerType)
+            {
+                if (parameter.IsOptional)
+                    throw new ArgumentException("External pointer parameters cannot have defaults.", nameof(method));
+                parameters.Add((ValueType.Integer, null));
+                externalTypes.Add(pointerType);
+                continue;
+            }
             var type = Map(parameter.ParameterType);
             IrExpression? value = null;
             if (parameter.IsOptional)
@@ -114,12 +138,13 @@ public sealed class ExternalFunction
                     _ => throw new ArgumentException("External defaults must be finite typed primitive constants.", nameof(method))
                 };
             parameters.Add((type, value));
+            externalTypes.Add(ToExternal(type));
         }
         Name = name.ToLowerInvariant();
         Method = method;
         Parameters = parameters.AsReadOnly();
         Target = string.Join(".", owner.FullName.Replace('+', '.').Split('.').Select(Escape)) + "." + Escape(method.Name);
-        Signature = new(Name, ToExternal(Result), Parameters.Select(parameter => ToExternal(parameter.Type)));
+        Signature = new(Name, ToExternal(Result), externalTypes);
     }
 
     internal static void ValidateName(string name)
