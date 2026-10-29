@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Blitz3DCS.Engine.Windows</AssemblyName>
+    <RootNamespace>Blitz3DCS.Engine.Windows</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Blitz3DCS.Engine/Blitz3DCS.Engine.csproj" />
+    <ProjectReference Include="../Blitz3DCS.Graphics.D3D11/Blitz3DCS.Graphics.D3D11.csproj" />
+    <ProjectReference Include="../BlitzCS.LegacyRuntime/BlitzCS.LegacyRuntime.csproj" />
+    <ProjectReference Include="../Blitz3DCS.Runtime/Blitz3DCS.Runtime.csproj" />
+    <ProjectReference Include="../Blitz3DCS.Windowing/Blitz3DCS.Windowing.csproj" />
+    <PackageReference Include="StbImageSharp" Version="2.30.16" />
+  </ItemGroup>
+</Project>

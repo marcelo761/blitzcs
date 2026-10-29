@@ -1,0 +1,43 @@
+using Vortice.Direct3D11;
+
+namespace Blitz3DCS.Graphics.D3D11;
+
+/// <summary>Renderer-owned vertex and index buffers for repeated draws.</summary>
+public sealed class D3D11Mesh : IDisposable
+{
+    private bool _disposed;
+
+    internal D3D11Mesh(D3D11Renderer owner, ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, uint indexCount,
+        int vertexCount, bool dynamic = false)
+    {
+        Owner = owner;
+        VertexBuffer = vertexBuffer;
+        IndexBuffer = indexBuffer;
+        IndexCount = indexCount;
+        VertexCount = vertexCount;
+        IsDynamic = dynamic;
+    }
+
+    internal D3D11Renderer Owner { get; }
+    internal ID3D11Buffer VertexBuffer { get; }
+    internal ID3D11Buffer IndexBuffer { get; }
+    internal uint IndexCount { get; }
+    internal int VertexCount { get; }
+    internal bool IsDynamic { get; }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        Owner.DisposeMesh(this);
+    }
+
+    internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+
+    internal void DisposeFromRenderer()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        IndexBuffer.Dispose();
+        VertexBuffer.Dispose();
+    }
+}

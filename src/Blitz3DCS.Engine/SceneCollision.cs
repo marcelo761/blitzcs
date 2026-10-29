@@ -1,0 +1,619 @@
+namespace Blitz3DCS.Engine;
+
+/// <summary>A collision triangle in entity-local coordinates.</summary>
+public readonly record struct SceneCollisionTriangle(SceneVector3 A, SceneVector3 B, SceneVector3 C, int Index = -1, int Surface = 0);
+
+internal readonly record struct SceneCollisionInfo(
+    int Entity,
+    SceneVector3 Position,
+    SceneVector3 Normal,
+    float Time,
+    int Triangle,
+    int Surface);
+
+/// <summary>Collision configuration and swept collision queries for a scene.</summary>
+public sealed partial class SceneGraph
+{
+    private const int CollisionMethodSphere = 1;
+    private const int CollisionMethodPolygon = 2;
+    private const int CollisionMethodBox = 3;
+    private const int CollisionResponseNone = 0;
+    private const int CollisionResponseStop = 1;
+    private const int CollisionResponseSlide = 2;
+    private const int CollisionResponseSlideXZ = 3;
+    private const int MaxCollisionType = 1000;
+    private const int MaxCollisionHits = 10;
+    private const float CollisionEpsilon = 0.001f;
+    private const float Epsilon = 0.000001f;
+
+    private readonly Dictionary<int, CollisionEntityState> _collisionEntities = [];
+    private readonly List<CollisionRule> _collisionRules = [];
+    private readonly List<Node> _enabledCollisionNodes = [];
+    private readonly List<Node>?[] _collisionEntitiesByType = new List<Node>?[MaxCollisionType];
+    private readonly CollisionPlane[] _collisionPlanes = new CollisionPlane[2];
+    internal bool ForceLinearPolygonSearchForTesting { get; set; }
+
+    /// <summary>Sets an entity's collision type. A nonzero recursive flag applies it to descendants.</summary>
+    public void EntityType(int entity, int type, bool recursive = false)
+    {
+        if (type is < 0 or >= MaxCollisionType) throw new ArgumentOutOfRangeException(nameof(type));
+        var node = GetNode(entity);
+        IEnumerable<Node> targets = recursive ? GetSubtreeNodes(node) : [node];
+        foreach (var target in targets)
+        {
+            var state = GetCollisionState(target.Id);
+            state.Type = type;
+            ResetCollisionState(state, target);
+        }
+    }
+
+    public int GetEntityType(int entity) => GetCollisionState(entity).Type;
+
+    /// <summary>Whether configured rules can test this entity's polygon geometry.</summary>
+    public bool RequiresPolygonCollision(int entity)
+    {
+        return RequiresPolygonCollisionOrPicking(entity);
+    }
+
+    /// <summary>Sets source collision radii; a zero Y radius uses the X radius.</summary>
+    public void EntityRadius(int entity, float xRadius, float yRadius = 0)
+    {
+        var state = GetCollisionState(entity);
+        state.Radii = new(xRadius, yRadius == 0 ? xRadius : yRadius, xRadius);
+    }
+
+    /// <summary>Sets the local axis-aligned box used when this entity is a box collision target.</summary>
+    public void EntityBox(int entity, float x, float y, float z, float width, float height, float depth)
+    {
+        var state = GetCollisionState(entity);
+        state.BoxMinimum = new(MathF.Min(x, x + width), MathF.Min(y, y + height), MathF.Min(z, z + depth));
+        state.BoxMaximum = new(MathF.Max(x, x + width), MathF.Max(y, y + height), MathF.Max(z, z + depth));
+    }
+
+    /// <summary>Replaces local collision triangles for polygon collision mode.</summary>
+    public void SetCollisionTriangles(int entity, IReadOnlyList<SceneCollisionTriangle> triangles)
+    {
+        ArgumentNullException.ThrowIfNull(triangles);
+        var state = GetCollisionState(entity);
+        state.Triangles = triangles.ToArray();
+        state.TriangleCollider = null;
+        state.TriangleCandidates.Clear();
+    }
+
+    /// <summary>Registers a directed type-pair collision rule; the first destination rule wins.</summary>
+    public void Collisions(int sourceType, int destinationType, int method, int response)
+    {
+        ValidateCollisionType(sourceType, nameof(sourceType));
+        ValidateCollisionType(destinationType, nameof(destinationType));
+        if (method is < CollisionMethodSphere or > CollisionMethodBox) throw new ArgumentOutOfRangeException(nameof(method));
+        if (response is < CollisionResponseNone or > CollisionResponseSlideXZ) throw new ArgumentOutOfRangeException(nameof(response));
+        if (_collisionRules.Any(rule => rule.SourceType == sourceType && rule.DestinationType == destinationType)) return;
+        _collisionRules.Add(new(sourceType, destinationType, method, response));
+    }
+
+    /// <summary>Clears configured type-pair rules. Existing collision results remain until the next update.</summary>
+    public void ClearCollisions() => _collisionRules.Clear();
+
+    /// <summary>Updates collision results and responses using movement since the previous update.</summary>
+    public void UpdateWorld(float elapsed = 1)
+    {
+        _ = elapsed;
+        _enabledCollisionNodes.Clear();
+        foreach (var typed in _collisionEntitiesByType) typed?.Clear();
+        foreach (var node in _nodes.Values)
+            if (node.Parent is null) CollectEnabled(node, _enabledCollisionNodes);
+
+        foreach (var node in _enabledCollisionNodes)
+        {
+            var state = GetCollisionState(node.Id);
+            state.Collisions.Clear();
+            if (state.Type == 0) continue;
+            (_collisionEntitiesByType[state.Type] ??= []).Add(node);
+        }
+
+        foreach (var source in _enabledCollisionNodes)
+        {
+            var state = GetCollisionState(source.Id);
+            if (state.Type != 0 && HasSourceCollisionRule(state.Type))
+                ProcessCollisions(source, state);
+        }
+
+        foreach (var node in _enabledCollisionNodes)
+        {
+            var state = GetCollisionState(node.Id);
+            state.PreviousTransform = GetWorldTransform(node);
+            state.HasPreviousTransform = true;
+        }
+    }
+
+    public int CountCollisions(int entity) => GetCollisionState(entity).Collisions.Count;
+
+    public int EntityCollided(int entity, int collisionType)
+    {
+        var collisions = GetCollisionState(entity).Collisions;
+        foreach (var collision in collisions)
+            if (GetCollisionState(collision.Entity).Type == collisionType) return collision.Entity;
+        return 0;
+    }
+
+    public int CollisionEntity(int entity, int index) => GetCollision(entity, index).Entity;
+    public float CollisionX(int entity, int index) => GetCollision(entity, index).Position.X;
+    public float CollisionY(int entity, int index) => GetCollision(entity, index).Position.Y;
+    public float CollisionZ(int entity, int index) => GetCollision(entity, index).Position.Z;
+    public float CollisionNX(int entity, int index) => GetCollision(entity, index).Normal.X;
+    public float CollisionNY(int entity, int index) => GetCollision(entity, index).Normal.Y;
+    public float CollisionNZ(int entity, int index) => GetCollision(entity, index).Normal.Z;
+    public float CollisionTime(int entity, int index) => GetCollision(entity, index).Time;
+    public int CollisionTriangle(int entity, int index) => GetCollision(entity, index).Triangle;
+    public int CollisionSurface(int entity, int index) => GetCollision(entity, index).Surface;
+
+    /// <summary>Clears collision results and sets the motion sweep origin to the entity's current world transform.</summary>
+    public void ResetEntity(int entity) => ResetCollisionState(GetCollisionState(entity), GetNode(entity));
+
+    internal void ForgetCollisionState(int entity)
+    {
+        _collisionEntities.Remove(entity);
+        if (_pickedEntity == entity) _pickedEntity = 0;
+        foreach (var state in _collisionEntities.Values)
+            state.Collisions.RemoveAll(collision => collision.Entity == entity);
+    }
+
+    internal void CopyCollisionState(int source, int destination)
+    {
+        if (!_collisionEntities.TryGetValue(source, out var sourceState)) return;
+        var target = GetNode(destination);
+        var state = new CollisionEntityState
+        {
+            Type = sourceState.Type,
+            Radii = sourceState.Radii,
+            BoxMinimum = sourceState.BoxMinimum,
+            BoxMaximum = sourceState.BoxMaximum,
+            PickMode = sourceState.PickMode,
+            PickObscurer = sourceState.PickObscurer,
+            Triangles = sourceState.Triangles.ToArray(),
+            PreviousTransform = GetWorldTransform(target),
+            HasPreviousTransform = true
+        };
+        _collisionEntities[destination] = state;
+    }
+
+    internal void ResetCollisionState(int entity)
+    {
+        if (_collisionEntities.TryGetValue(entity, out var state)) ResetCollisionState(state, GetNode(entity));
+    }
+
+    private void ResetCollisionState(CollisionEntityState state, Node node)
+    {
+        state.Collisions.Clear();
+        state.PreviousTransform = GetWorldTransform(node);
+        state.HasPreviousTransform = true;
+    }
+
+    private CollisionEntityState GetCollisionState(int entity)
+    {
+        var node = GetNode(entity);
+        if (_collisionEntities.TryGetValue(entity, out var state)) return state;
+        state = new CollisionEntityState { PreviousTransform = GetWorldTransform(node), HasPreviousTransform = true };
+        _collisionEntities.Add(entity, state);
+        return state;
+    }
+
+    private SceneCollisionInfo GetCollision(int entity, int index)
+    {
+        var collisions = GetCollisionState(entity).Collisions;
+        if (index < 1 || index > collisions.Count) throw new ArgumentOutOfRangeException(nameof(index));
+        return collisions[index - 1];
+    }
+
+    private static void ValidateCollisionType(int type, string parameterName)
+    {
+        if (type is < 0 or >= MaxCollisionType) throw new ArgumentOutOfRangeException(parameterName);
+    }
+
+    private void CollectEnabled(Node node, List<Node> result)
+    {
+        if (!node.Enabled) return;
+        result.Add(node);
+        foreach (var child in node.Children) CollectEnabled(child, result);
+    }
+
+    private bool HasSourceCollisionRule(int sourceType)
+    {
+        foreach (var rule in _collisionRules)
+            if (rule.SourceType == sourceType) return true;
+        return false;
+    }
+
+    private void ProcessCollisions(Node source, CollisionEntityState sourceState)
+    {
+        var destination = GetWorldTransform(source).Position;
+        var origin = sourceState.PreviousTransform.Position;
+        if (NearlyEqual(origin, destination))
+        {
+            if (origin != destination) SetWorldPosition(source, origin);
+            return;
+        }
+
+        var panicPosition = origin;
+        var yScale = sourceState.Radii.X == sourceState.Radii.Y ? 1 : sourceState.Radii.X / sourceState.Radii.Y;
+        var inverseYScale = 1 / yScale;
+        origin = ScaleY(origin, yScale);
+        destination = ScaleY(destination, yScale);
+        var lineStart = origin;
+        var lineDirection = Subtract(destination, origin);
+        var originalDirection = lineDirection;
+        var remainingDistance = Length(lineDirection);
+        var remainingXZDistance = Length(new(lineDirection.X, 0, lineDirection.Z));
+        var sourceRadius = sourceState.Radii.X;
+        var planeCount = 0;
+        var planes = _collisionPlanes;
+        var hitCount = 0;
+
+        for (var iteration = 0; iteration < MaxCollisionHits; iteration++)
+        {
+            if (!FindNearestHit(source.Id, sourceState.Type, lineStart, lineDirection, sourceRadius, yScale, out var hit)) break;
+            if (++hitCount == MaxCollisionHits) break;
+            var contact = Add(lineStart, Multiply(lineDirection, hit.Time));
+            var resultPosition = ScaleY(Subtract(contact, Multiply(hit.Normal, sourceRadius)), inverseYScale);
+            var result = new SceneCollisionInfo(hit.Target.Id, resultPosition, hit.Normal, hit.Time, hit.Triangle, hit.Surface);
+            sourceState.Collisions.Add(result);
+            GetCollisionState(hit.Target.Id).Collisions.Add(result with { Entity = source.Id });
+
+            var collisionPlane = new CollisionPlane(hit.Normal, contact);
+            collisionPlane = collisionPlane with { Point = Subtract(collisionPlane.Point, Multiply(hit.Normal, CollisionEpsilon)) };
+            var planeTime = hit.Time;
+            var denominator = Dot(hit.Normal, lineDirection);
+            if (MathF.Abs(denominator) > Epsilon)
+                planeTime = Dot(hit.Normal, Subtract(collisionPlane.Point, lineStart)) / denominator;
+            if (planeTime > 0)
+            {
+                lineStart = Add(lineStart, Multiply(lineDirection, planeTime));
+                remainingDistance *= 1 - planeTime;
+                remainingXZDistance *= 1 - planeTime;
+            }
+
+            if (hit.Rule.Response == CollisionResponseStop)
+            {
+                destination = lineStart;
+                break;
+            }
+
+            var nearest = collisionPlane.Nearest(destination);
+            if (planeCount == 0)
+            {
+                destination = nearest;
+            }
+            else if (planeCount == 1)
+            {
+                if (planes[0].Distance(nearest) >= 0)
+                {
+                    destination = nearest;
+                    planeCount = 0;
+                }
+                else if (MathF.Abs(Dot(planes[0].Normal, collisionPlane.Normal)) < 1 - Epsilon)
+                {
+                    destination = Intersect(planes[0], collisionPlane).Nearest(destination);
+                }
+                else
+                {
+                    hitCount = MaxCollisionHits;
+                    break;
+                }
+            }
+            else if (planes[0].Distance(nearest) >= 0 && planes[1].Distance(nearest) >= 0)
+            {
+                destination = nearest;
+                planeCount = 0;
+            }
+            else
+            {
+                destination = lineStart;
+                break;
+            }
+
+            var delta = Subtract(destination, lineStart);
+            if (Dot(delta, originalDirection) <= 0)
+            {
+                destination = lineStart;
+                break;
+            }
+
+            if (hit.Rule.Response == CollisionResponseSlide)
+            {
+                var distance = Length(delta);
+                if (distance <= Epsilon) { destination = lineStart; break; }
+                if (distance > remainingDistance) delta = Multiply(delta, remainingDistance / distance);
+            }
+            else if (hit.Rule.Response == CollisionResponseSlideXZ)
+            {
+                var distance = Length(new(delta.X, 0, delta.Z));
+                if (distance <= Epsilon) { destination = lineStart; break; }
+                if (distance > remainingXZDistance) delta = Multiply(delta, remainingXZDistance / distance);
+            }
+
+            lineDirection = delta;
+            destination = Add(lineStart, delta);
+            planes[planeCount++] = collisionPlane;
+        }
+
+        if (hitCount == 0) return;
+        SetWorldPosition(source, hitCount < MaxCollisionHits ? ScaleY(destination, inverseYScale) : panicPosition);
+    }
+
+    private bool FindNearestHit(int sourceId, int sourceType, SceneVector3 lineStart, SceneVector3 lineDirection, float sourceRadius,
+        float yScale, out SweepHit nearest)
+    {
+        nearest = default;
+        var found = false;
+        var nearestTime = 1f;
+        foreach (var rule in _collisionRules)
+        {
+            if (rule.SourceType != sourceType) continue;
+            var destinations = _collisionEntitiesByType[rule.DestinationType];
+            if (destinations is null) continue;
+            foreach (var target in destinations)
+            {
+                if (target.Id == sourceId) continue;
+                var targetState = GetCollisionState(target.Id);
+                if (!TryHit(rule, target, targetState, lineStart, lineDirection, sourceRadius, yScale, nearestTime, out var candidate)) continue;
+                nearest = candidate;
+                nearestTime = candidate.Time;
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    private bool TryHit(CollisionRule rule, Node target, CollisionEntityState targetState, SceneVector3 lineStart,
+        SceneVector3 lineDirection, float radius, float yScale, float maxTime, out SweepHit hit)
+    {
+        hit = default;
+        var targetTransform = GetWorldTransform(target);
+        if (rule.Method == CollisionMethodSphere)
+        {
+            var centre = ScaleY(targetTransform.Position, yScale);
+            if (!TrySphere(lineStart, lineDirection, radius + targetState.Radii.X, centre, maxTime, out var time, out var normal)) return false;
+            hit = new(target, rule, time, normal, ushort.MaxValue);
+            return true;
+        }
+
+        if (rule.Method == CollisionMethodBox)
+        {
+            if (!TryBox(lineStart, lineDirection, radius, yScale, targetTransform, targetState, maxTime, out var time, out var localNormal)) return false;
+            var scaled = ScaleTransformY(targetTransform, yScale);
+            var basis = new Matrix3(Normalize(scaled.BasisX), Normalize(scaled.BasisY), Normalize(scaled.BasisZ));
+            var normal = Normalize(basis.Transform(localNormal));
+            hit = new(target, rule, time, normal, ushort.MaxValue);
+            return true;
+        }
+
+        if (rule.Method == CollisionMethodPolygon)
+        {
+            var scaled = ScaleTransformY(targetTransform, yScale);
+            var found = false;
+            var bestTime = maxTime;
+            var bestNormal = default(SceneVector3);
+            var bestTriangle = (int)ushort.MaxValue;
+            var bestSurface = 0;
+            var candidates = targetState.TriangleCandidates;
+            var triangleCollider = targetState.TriangleCollider ??= new SceneTriangleCollider(targetState.Triangles);
+            var candidateCount = targetState.Triangles.Length;
+            if (!ForceLinearPolygonSearchForTesting)
+            {
+                triangleCollider.Query(scaled, lineStart, lineDirection, radius, candidates);
+                candidateCount = candidates.Count;
+            }
+
+            for (var candidateIndex = 0; candidateIndex < candidateCount; candidateIndex++)
+            {
+                var index = ForceLinearPolygonSearchForTesting ? candidateIndex : candidates[candidateIndex];
+                var triangle = targetState.Triangles[index];
+                var a = scaled.TransformPoint(triangle.A);
+                var b = scaled.TransformPoint(triangle.B);
+                var c = scaled.TransformPoint(triangle.C);
+                if (!TryTriangle(lineStart, lineDirection, radius, a, b, c, bestTime, out var time, out var normal)) continue;
+                found = true;
+                bestTime = time;
+                bestNormal = normal;
+                bestTriangle = triangle.Index < 0 ? index : triangle.Index;
+                bestSurface = triangle.Surface;
+            }
+            if (!found) return false;
+            hit = new(target, rule, bestTime, bestNormal, bestTriangle, bestSurface);
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryBox(SceneVector3 lineStart, SceneVector3 lineDirection, float radius, float yScale,
+        SceneTransform targetTransform, CollisionEntityState targetState, float maxTime, out float time, out SceneVector3 normal)
+    {
+        var scaled = ScaleTransformY(targetTransform, yScale);
+        var matrix = new Matrix3(Normalize(scaled.BasisX), Normalize(scaled.BasisY), Normalize(scaled.BasisZ));
+        var localStart = matrix.InverseTransform(Subtract(lineStart, scaled.Position));
+        var localDirection = matrix.InverseTransform(lineDirection);
+        var box = new CollisionBox(targetState.BoxMinimum, targetState.BoxMaximum);
+        if (TryBoxLocal(localStart, localDirection, radius, box, maxTime, out time, out var localNormal))
+        {
+            normal = localNormal;
+            return true;
+        }
+        normal = default;
+        return false;
+    }
+
+    private static bool TrySphere(SceneVector3 start, SceneVector3 direction, float radius, SceneVector3 centre,
+        float maxTime, out float time, out SceneVector3 normal)
+    {
+        var relative = Subtract(start, centre);
+        var a = Dot(direction, direction);
+        if (a == 0) { time = 0; normal = default; return false; }
+        var b = 2 * Dot(relative, direction);
+        var c = Dot(relative, relative) - radius * radius;
+        var discriminant = b * b - 4 * a * c;
+        if (discriminant < 0) { time = 0; normal = default; return false; }
+        time = (-b - MathF.Sqrt(discriminant)) / (2 * a);
+        var point = Add(start, Multiply(direction, time));
+        normal = Normalize(Subtract(point, centre));
+        return UpdateCollision(start, direction, time, normal, point, maxTime);
+    }
+
+    private static bool TryTriangle(SceneVector3 start, SceneVector3 direction, float radius,
+        SceneVector3 a, SceneVector3 b, SceneVector3 c, float maxTime, out float time, out SceneVector3 normal)
+    {
+        normal = Normalize(Cross(Subtract(b, a), Subtract(c, a)));
+        if (Dot(normal, direction) >= 0) { time = 0; return false; }
+        var denominator = Dot(normal, direction);
+        time = (radius - Dot(normal, Subtract(start, a))) / denominator;
+        var contact = Add(start, Multiply(direction, time));
+        if (time >= 0 && time <= maxTime && InsideTriangle(contact, a, b, c, normal)
+            && UpdateCollision(start, direction, time, normal, contact, maxTime)) return true;
+        if (radius <= 0) return false;
+
+        var found = false;
+        var bestTime = maxTime;
+        var bestNormal = normal;
+        if (TryTriangleEdge(start, direction, radius, a, b, bestTime, out var edgeTime, out var edgeNormal))
+        { found = true; bestTime = edgeTime; bestNormal = edgeNormal; }
+        if (TryTriangleEdge(start, direction, radius, b, c, bestTime, out edgeTime, out edgeNormal))
+        { found = true; bestTime = edgeTime; bestNormal = edgeNormal; }
+        if (TryTriangleEdge(start, direction, radius, c, a, bestTime, out edgeTime, out edgeNormal))
+        { found = true; bestTime = edgeTime; bestNormal = edgeNormal; }
+        time = bestTime;
+        normal = bestNormal;
+        return found;
+    }
+
+    private static bool TryTriangleEdge(SceneVector3 start, SceneVector3 direction, float radius,
+        SceneVector3 a, SceneVector3 b, float maxTime, out float time, out SceneVector3 normal)
+    {
+        var edge = Subtract(b, a);
+        var length = Length(edge);
+        if (length == 0) { time = 0; normal = default; return false; }
+        var axis = Multiply(edge, 1 / length);
+        var relative = Subtract(start, a);
+        var alongStart = Dot(relative, axis);
+        var alongDirection = Dot(direction, axis);
+        var radialStart = Subtract(relative, Multiply(axis, alongStart));
+        var radialDirection = Subtract(direction, Multiply(axis, alongDirection));
+        var qa = Dot(radialDirection, radialDirection);
+        var qb = 2 * Dot(radialStart, radialDirection);
+        var qc = Dot(radialStart, radialStart) - radius * radius;
+        if (qa == 0) { time = 0; normal = default; return false; }
+        var discriminant = qb * qb - 4 * qa * qc;
+        if (discriminant < 0) { time = 0; normal = default; return false; }
+        time = (-qb - MathF.Sqrt(discriminant)) / (2 * qa);
+        if (time < 0) { normal = default; return false; }
+        var along = alongStart + alongDirection * time;
+        if (along < 0)
+        {
+            if (!TrySphere(start, direction, radius, a, maxTime, out time, out normal)) return false;
+            return true;
+        }
+        if (along > length || time > maxTime) { normal = default; return false; }
+        var point = Add(start, Multiply(direction, time));
+        var closest = Add(a, Multiply(axis, along));
+        normal = Normalize(Subtract(point, closest));
+        return UpdateCollision(start, direction, time, normal, point, maxTime);
+    }
+
+    private static bool TryBoxLocal(SceneVector3 start, SceneVector3 direction, float radius,
+        CollisionBox box, float maxTime, out float time, out SceneVector3 normal)
+    {
+        var corners = new SceneVector3[8];
+        for (var index = 0; index < corners.Length; index++)
+            corners[index] = new((index & 1) == 0 ? box.Minimum.X : box.Maximum.X,
+                (index & 2) == 0 ? box.Minimum.Y : box.Maximum.Y,
+                (index & 4) == 0 ? box.Minimum.Z : box.Maximum.Z);
+        int[] quads = [2, 3, 1, 0, 3, 7, 5, 1, 7, 6, 4, 5, 6, 2, 0, 4, 6, 7, 3, 2, 0, 1, 5, 4];
+        var found = false;
+        var bestTime = maxTime;
+        var bestNormal = default(SceneVector3);
+        for (var face = 0; face < 6; face++)
+        {
+            var v0 = corners[quads[face * 4]];
+            var v1 = corners[quads[face * 4 + 1]];
+            var v2 = corners[quads[face * 4 + 2]];
+            var v3 = corners[quads[face * 4 + 3]];
+            var faceNormal = Normalize(Cross(Subtract(v1, v0), Subtract(v2, v0)));
+            if (Dot(faceNormal, direction) >= 0) continue;
+            var denominator = Dot(faceNormal, direction);
+            var candidateTime = (radius - Dot(faceNormal, Subtract(start, v0))) / denominator;
+            var point = Add(start, Multiply(direction, candidateTime));
+            if (candidateTime >= 0 && candidateTime <= bestTime && InsideQuad(point, v0, v1, v2, v3, faceNormal)
+                && UpdateCollision(start, direction, candidateTime, faceNormal, point, bestTime))
+            {
+                found = true; bestTime = candidateTime; bestNormal = faceNormal;
+            }
+            if (radius <= 0) continue;
+            if (TryTriangleEdge(start, direction, radius, v0, v1, bestTime, out candidateTime, out var edgeNormal))
+            { found = true; bestTime = candidateTime; bestNormal = edgeNormal; }
+            if (TryTriangleEdge(start, direction, radius, v1, v2, bestTime, out candidateTime, out edgeNormal))
+            { found = true; bestTime = candidateTime; bestNormal = edgeNormal; }
+            if (TryTriangleEdge(start, direction, radius, v2, v3, bestTime, out candidateTime, out edgeNormal))
+            { found = true; bestTime = candidateTime; bestNormal = edgeNormal; }
+            if (TryTriangleEdge(start, direction, radius, v3, v0, bestTime, out candidateTime, out edgeNormal))
+            { found = true; bestTime = candidateTime; bestNormal = edgeNormal; }
+        }
+        time = bestTime;
+        normal = bestNormal;
+        return found;
+    }
+
+    private static bool InsideTriangle(SceneVector3 point, SceneVector3 a, SceneVector3 b, SceneVector3 c, SceneVector3 normal) =>
+        Dot(Cross(normal, Subtract(b, a)), Subtract(point, a)) >= 0 &&
+        Dot(Cross(normal, Subtract(c, b)), Subtract(point, b)) >= 0 &&
+        Dot(Cross(normal, Subtract(a, c)), Subtract(point, c)) >= 0;
+
+    private static bool InsideQuad(SceneVector3 point, SceneVector3 a, SceneVector3 b, SceneVector3 c, SceneVector3 d, SceneVector3 normal) =>
+        Dot(Cross(normal, Subtract(b, a)), Subtract(point, a)) >= 0 &&
+        Dot(Cross(normal, Subtract(c, b)), Subtract(point, b)) >= 0 &&
+        Dot(Cross(normal, Subtract(d, c)), Subtract(point, c)) >= 0 &&
+        Dot(Cross(normal, Subtract(a, d)), Subtract(point, d)) >= 0;
+
+    private static bool UpdateCollision(SceneVector3 start, SceneVector3 direction, float time,
+        SceneVector3 normal, SceneVector3 contact, float maxTime) =>
+        time <= maxTime && Dot(normal, direction) < 0 && Dot(normal, Subtract(start, contact)) >= -CollisionEpsilon;
+
+    private static CollisionPlane Intersect(CollisionPlane first, CollisionPlane second)
+    {
+        var direction = Cross(first.Normal, second.Normal);
+        var denominator = Dot(direction, direction);
+        var point = Add(Multiply(Cross(second.Normal, direction), Dot(first.Normal, first.Point)),
+            Multiply(Cross(direction, first.Normal), Dot(second.Normal, second.Point)));
+        return new(Normalize(direction), Multiply(point, 1 / denominator));
+    }
+
+    private static SceneTransform ScaleTransformY(SceneTransform transform, float scale) => new(
+        ScaleY(transform.BasisX, scale), ScaleY(transform.BasisY, scale), ScaleY(transform.BasisZ, scale), ScaleY(transform.Position, scale));
+
+    private static bool NearlyEqual(SceneVector3 left, SceneVector3 right) =>
+        MathF.Abs(left.X - right.X) <= Epsilon && MathF.Abs(left.Y - right.Y) <= Epsilon && MathF.Abs(left.Z - right.Z) <= Epsilon;
+
+    private static SceneVector3 ScaleY(SceneVector3 value, float scale) => new(value.X, value.Y * scale, value.Z);
+    private sealed class CollisionEntityState
+    {
+        public int Type { get; set; }
+        public SceneVector3 Radii { get; set; } = new(1, 1, 1);
+        public SceneVector3 BoxMinimum { get; set; } = new(-1, -1, -1);
+        public SceneVector3 BoxMaximum { get; set; } = new(1, 1, 1);
+        public int PickMode { get; set; }
+        public bool PickObscurer { get; set; }
+        public SceneCollisionTriangle[] Triangles { get; set; } = [];
+        public SceneTriangleCollider? TriangleCollider { get; set; }
+        public List<int> TriangleCandidates { get; } = [];
+        public SceneTransform PreviousTransform { get; set; }
+        public bool HasPreviousTransform { get; set; }
+        public List<SceneCollisionInfo> Collisions { get; } = [];
+    }
+
+    private readonly record struct CollisionRule(int SourceType, int DestinationType, int Method, int Response);
+    private readonly record struct SweepHit(Node Target, CollisionRule Rule, float Time, SceneVector3 Normal, int Triangle, int Surface = 0);
+    private readonly record struct CollisionBox(SceneVector3 Minimum, SceneVector3 Maximum);
+    private readonly record struct CollisionPlane(SceneVector3 Normal, SceneVector3 Point)
+    {
+        public float Distance(SceneVector3 value) => Dot(Normal, Subtract(value, Point));
+        public SceneVector3 Nearest(SceneVector3 value) => Subtract(value, Multiply(Normal, Distance(value)));
+    }
+}
