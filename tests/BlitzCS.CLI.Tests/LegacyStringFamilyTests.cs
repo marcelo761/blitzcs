@@ -131,6 +131,8 @@ public sealed class LegacyStringFamilyTests
     [InlineData(140, "Œ")]
     [InlineData(255, "ÿ")]
     [InlineData(-1, "ÿ")]
+    [InlineData(int.MinValue, "\0")]
+    [InlineData(int.MaxValue, "ÿ")]
     [InlineData(384, "€")]
     public void ChrUsesTheLowEightBitsAndAscReturnsUnsignedBytes(int code, string expected)
     {
@@ -156,7 +158,23 @@ public sealed class LegacyStringFamilyTests
             var text = LegacyStrings.Chr(value);
             Assert.Equal(value, LegacyStrings.Asc(text));
             Assert.Equal(1, LegacyStrings.Len(text));
+            Assert.Same(text, LegacyStrings.Chr(value));
         }
+    }
+
+    [Fact]
+    public void ChrDoesNotAllocateAfterItsByteTableIsWarmed()
+    {
+        _ = LegacyStrings.Chr(0);
+        for (var i = 0; i < 256; i++)
+            _ = LegacyStrings.Chr(i);
+
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 10_000; i++)
+            GC.KeepAlive(LegacyStrings.Chr(i & 255));
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        Assert.Equal(0, allocated);
     }
 
     [Fact]

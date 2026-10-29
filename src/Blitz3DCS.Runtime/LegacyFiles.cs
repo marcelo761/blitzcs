@@ -33,7 +33,7 @@ public static class LegacyFiles
     private static bool IsPathFailure(Exception error) => error is IOException
         or UnauthorizedAccessException or ArgumentException or NotSupportedException;
 
-    private static string? Resolve(string file, bool allowWildcard)
+    internal static string? Resolve(string file, bool allowWildcard)
     {
         if (string.IsNullOrEmpty(file)) return null;
         var zero = file.IndexOf('\0');

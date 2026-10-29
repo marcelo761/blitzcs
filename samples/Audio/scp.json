@@ -451,6 +451,14 @@
       "returnType": "Integer"
     },
     {
+      "name": "MilliSecs",
+      "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
+      "type": "Blitz3DCS.Runtime.LegacySystem",
+      "method": "MilliSecs",
+      "parameters": [],
+      "returnType": "Integer"
+    },
+    {
       "name": "SystemProperty",
       "assembly": "../../src/Blitz3DCS.Runtime/bin/Release/net10.0/Blitz3DCS.Runtime.dll",
       "type": "Blitz3DCS.Runtime.LegacySystem",

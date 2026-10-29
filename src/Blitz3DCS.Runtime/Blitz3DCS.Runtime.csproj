@@ -1,1 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk" />
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="BlitzCS.CLI.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../BlitzCS.LegacyRuntime/BlitzCS.LegacyRuntime.csproj" />
+    <ProjectReference Include="../BlitzCS.NativeInterop/BlitzCS.NativeInterop.csproj" />
+  </ItemGroup>
+</Project>

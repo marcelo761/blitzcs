@@ -8,6 +8,15 @@ public static class LegacyStrings
 {
     private static readonly Encoding Ansi = CodePagesEncodingProvider.Instance.GetEncoding(
         1252, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback)!;
+    private static readonly string[] Chars = CreateChars();
+
+    private static string[] CreateChars()
+    {
+        var chars = new string[256];
+        for (var value = 0; value < chars.Length; value++)
+            chars[value] = Ansi.GetString([(byte)value]);
+        return chars;
+    }
 
     public static string String(string text, int repeat)
     {
@@ -91,7 +100,7 @@ public static class LegacyStrings
     }
 
     /// <summary>Creates one legacy byte; only the low eight bits are significant.</summary>
-    public static string Chr(int code) => Ansi.GetString([unchecked((byte)code)]);
+    public static string Chr(int code) => Chars[unchecked((byte)code)];
 
     public static int Asc(string text)
     {
