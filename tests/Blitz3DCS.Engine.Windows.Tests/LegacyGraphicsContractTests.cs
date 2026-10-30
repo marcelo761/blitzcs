@@ -184,7 +184,6 @@ public sealed class LegacyGraphicsContractTests
             Assert.Equal(0, LegacyGraphics.AddVertex(surface, 0, 0, 0));
             Assert.Equal(1, LegacyGraphics.AddVertex(surface, 1, 0, 0));
             Assert.Equal(2, LegacyGraphics.AddVertex(surface, 0, 1, 0));
-            Assert.Throws<NotSupportedException>(() => LegacyGraphics.AddVertex(surface, 0, 0, 0, w: 0));
             Assert.Equal(0, LegacyGraphics.AddTriangle(surface, 0, 1, 2));
             Assert.Throws<ArgumentException>(() => LegacyGraphics.CreateSurface(mesh, brush: 1));
             Assert.Equal(3, LegacyGraphics.CountVertices(surface));

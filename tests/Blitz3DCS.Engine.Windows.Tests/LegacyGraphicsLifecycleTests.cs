@@ -8,6 +8,22 @@ namespace Blitz3DCS.Engine.Windows.Tests;
 public sealed class LegacyGraphicsLifecycleTests
 {
     [Fact]
+    public void Free_zero_handles_are_no_ops_but_invalid_nonzero_handles_still_fail()
+    {
+        WithCleanState(() =>
+        {
+            var entity = LegacyScene.CreatePivot();
+
+            LegacyGraphics.FreeEntity(0);
+            LegacyGraphics.FreeTexture(0);
+
+            Assert.Equal(string.Empty, LegacyScene.EntityName(entity));
+            Assert.Throws<KeyNotFoundException>(() => LegacyGraphics.FreeEntity(int.MaxValue));
+            Assert.Throws<ArgumentException>(() => LegacyGraphics.FreeTexture(int.MaxValue));
+        });
+    }
+
+    [Fact]
     public void ClearWorld_flags_free_entities_and_brushes_selectively_without_reusing_handles()
     {
         WithCleanState(() =>

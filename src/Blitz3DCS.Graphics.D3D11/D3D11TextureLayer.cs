@@ -11,4 +11,7 @@ public readonly record struct D3D11TextureLayer(
     bool UseAlpha = true,
     Matrix3x2? UvTransform = null,
     int CoordinateSet = 0,
-    bool Masked = false);
+    bool Masked = false,
+    Vector4? BumpMatrix = null,
+    float BumpScale = 0,
+    float BumpOffset = 0);

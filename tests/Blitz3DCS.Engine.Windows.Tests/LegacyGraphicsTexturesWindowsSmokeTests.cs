@@ -12,6 +12,31 @@ public sealed class LegacyGraphicsTexturesWindowsSmokeTests
         RunSmoke();
     }
 
+    [WindowsTextureSmokeFact]
+    public void Independent_pixel_buffer_locks_allow_texture_queries_and_release_in_reverse_order()
+    {
+        RunIndependentPixelBufferLocks();
+    }
+
+    internal static void RunIndependentPixelBufferLocks()
+    {
+        var previousScene = LegacyScene.Current;
+        LegacyGraphics.ResetForTests();
+        LegacyScene.Current = new SceneGraph();
+        try
+        {
+            LegacyGraphics.Graphics3D(32, 32, 0, 2);
+            VerifyIndependentPixelBufferLocks();
+            LegacyGraphics.EndGraphics();
+        }
+        finally
+        {
+            LegacyGraphics.EndGraphics();
+            LegacyGraphics.ResetForTests();
+            LegacyScene.Current = previousScene;
+        }
+    }
+
     internal static void RunSmoke()
     {
         var previousScene = LegacyScene.Current;
@@ -21,6 +46,7 @@ public sealed class LegacyGraphicsTexturesWindowsSmokeTests
         {
             LegacyGraphics.Graphics3D(96, 96, 0, 2);
             VerifyAnimatedTextureLoad();
+            VerifyIndependentPixelBufferLocks();
             var backBuffer = LegacyGraphics.BackBuffer();
             Assert.Equal(backBuffer, LegacyGraphics.GraphicsBuffer());
             Assert.Throws<NotSupportedException>(() => LegacyGraphics.FrontBuffer());
@@ -94,6 +120,50 @@ public sealed class LegacyGraphicsTexturesWindowsSmokeTests
             LegacyGraphics.EndGraphics();
             LegacyGraphics.ResetForTests();
             LegacyScene.Current = previousScene;
+        }
+    }
+
+    private static void VerifyIndependentPixelBufferLocks()
+    {
+        var image = LegacyGraphics.CreateImage(2, 2);
+        var imageBuffer = LegacyGraphics.ImageBuffer(image);
+        var texture = LegacyGraphics.CreateTexture(3, 2, flags: 2);
+        var textureBuffer = LegacyGraphics.TextureBuffer(texture);
+        try
+        {
+            LegacyGraphics.LockBuffer(imageBuffer);
+            try
+            {
+                Assert.Throws<InvalidOperationException>(() => LegacyGraphics.LockBuffer(imageBuffer));
+                LegacyGraphics.LockBuffer(textureBuffer);
+                try
+                {
+                    Assert.Equal(textureBuffer, LegacyGraphics.TextureBuffer(texture));
+                    Assert.Equal(3, LegacyGraphics.TextureWidth(texture));
+                    Assert.Equal(2, LegacyGraphics.TextureHeight(texture));
+                    Assert.Equal(string.Empty, LegacyGraphics.TextureName(texture));
+                    Assert.Equal(imageBuffer, LegacyGraphics.ImageBuffer(image));
+                    Assert.Equal(LegacyGraphics.BackBuffer(), LegacyGraphics.GraphicsBuffer());
+
+                    LegacyGraphics.WritePixelFast(0, 0, unchecked((int)0xFFFF2040), imageBuffer);
+                    LegacyGraphics.WritePixelFast(2, 1, unchecked((int)0xFF40A0E0), textureBuffer);
+                    Assert.Equal(unchecked((int)0xFFFF2040), LegacyGraphics.ReadPixelFast(0, 0, imageBuffer));
+                    Assert.Equal(unchecked((int)0xFF40A0E0), LegacyGraphics.ReadPixelFast(2, 1, textureBuffer));
+                }
+                finally
+                {
+                    LegacyGraphics.UnlockBuffer(textureBuffer);
+                }
+            }
+            finally
+            {
+                LegacyGraphics.UnlockBuffer(imageBuffer);
+            }
+        }
+        finally
+        {
+            LegacyGraphics.FreeImage(image);
+            LegacyGraphics.FreeTexture(texture);
         }
     }
 

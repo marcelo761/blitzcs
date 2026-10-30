@@ -9,6 +9,25 @@ namespace Blitz3DCS.Engine.Windows.Tests;
 public sealed class LegacyGraphicsMeshOperationsTests
 {
     [Fact]
+    public void Texture_coordinates_ignore_w_and_initialize_both_legacy_uv_sets()
+    {
+        WithCleanState(() =>
+        {
+            var surface = LegacyGraphics.CreateSurface(LegacyGraphics.CreateMesh());
+            var vertex = LegacyGraphics.AddVertex(surface, 0, 0, 0, .2f, .3f, w: 0);
+            Assert.Equal(.2f, LegacyGraphics.VertexU(surface, vertex, 1));
+            Assert.Equal(.3f, LegacyGraphics.VertexV(surface, vertex, 1));
+            LegacyGraphics.VertexTexCoords(surface, vertex, .4f, .5f, w: 0, coordSet: 0);
+            LegacyGraphics.VertexTexCoords(surface, vertex, .6f, .7f, w: 9, coordSet: 1);
+            Assert.Equal(.4f, LegacyGraphics.VertexU(surface, vertex));
+            Assert.Equal(.5f, LegacyGraphics.VertexV(surface, vertex));
+            Assert.Equal(.6f, LegacyGraphics.VertexU(surface, vertex, 1));
+            Assert.Equal(.7f, LegacyGraphics.VertexV(surface, vertex, 1));
+            Assert.Equal(1, LegacyGraphics.VertexW(surface, vertex, 1));
+        });
+    }
+
+    [Fact]
     public void Vertex_queries_and_normal_updates_preserve_both_uv_sets()
     {
         WithCleanState(() =>

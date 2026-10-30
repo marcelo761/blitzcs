@@ -6,14 +6,15 @@ namespace Blitz3DCS.Engine.Windows.Tests;
 public sealed class LegacyGraphicsTextureContractTests
 {
     [Fact]
-    public void Texture_flags_accept_masks_and_reject_mipmap_and_cube_modes()
+    public void Texture_flags_accept_masks_and_mipmaps_and_reject_cube_modes()
     {
         LegacyGraphics.ValidateTextureFlags(0);
         LegacyGraphics.ValidateTextureFlags(1 | 2 | 16 | 32 | 256);
         LegacyGraphics.ValidateTextureFlags(2 | 16);
 
         LegacyGraphics.ValidateTextureFlags(1 | 4);
-        Assert.Throws<NotSupportedException>(() => LegacyGraphics.ValidateTextureFlags(8));
+        LegacyGraphics.ValidateTextureFlags(8);
+        LegacyGraphics.ValidateTextureFlags(0x109);
         Assert.Throws<NotSupportedException>(() => LegacyGraphics.ValidateTextureFlags(64));
         Assert.Throws<NotSupportedException>(() => LegacyGraphics.ValidateTextureFlags(128));
         Assert.Throws<NotSupportedException>(() => LegacyGraphics.ValidateTextureFlags(-1));

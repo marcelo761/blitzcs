@@ -91,7 +91,8 @@ public static partial class LegacyGraphics
             var texture = Textures[index];
             Layers[index] = texture is null ? default : new D3D11TextureLayer(
                 texture.Resource, texture.Blend, texture.ClampU, texture.ClampV, texture.UseAlpha,
-                texture.UvTransform, texture.CoordinateSet, texture.Masked);
+                texture.UvTransform, texture.CoordinateSet, texture.Masked,
+                texture.BumpMatrix, texture.BumpScale, texture.BumpOffset);
         }
 
         internal EntityMaterial Copy()

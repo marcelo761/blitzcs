@@ -136,13 +136,22 @@ public sealed class LegacyGraphicsImagesTests
     }
 
     [Fact]
-    public void MaskImage_changes_only_matching_rgb_pixels_to_transparent()
+    public void MaskImage_replaces_the_color_key_and_makes_nonmatching_pixels_opaque()
     {
         byte[] rgba = [0, 0, 0, 255, 2, 3, 4, 128, 0, 0, 0, 64];
 
         LegacyGraphics.MaskPixels(rgba, 0, 0, 0);
 
-        Assert.Equal(new byte[] { 0, 0, 0, 0, 2, 3, 4, 128, 0, 0, 0, 0 }, rgba);
+        Assert.Equal(new byte[] { 0, 0, 0, 0, 2, 3, 4, 255, 0, 0, 0, 0 }, rgba);
+    }
+
+    [Fact]
+    public void Replacing_black_mask_with_yellow_restores_black_button_pixels()
+    {
+        byte[] rgba = [0, 0, 0, 255, 255, 255, 0, 255, 7, 7, 7, 255];
+        LegacyGraphics.MaskPixels(rgba, 0, 0, 0);
+        LegacyGraphics.MaskPixels(rgba, 255, 255, 0);
+        Assert.Equal(new byte[] { 0, 0, 0, 255, 255, 255, 0, 0, 7, 7, 7, 255 }, rgba);
     }
 
     [Fact]
