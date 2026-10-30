@@ -32,6 +32,7 @@ public static partial class LegacyGraphics
             copiedMesh.Material = mesh.Material.Copy();
             copiedMesh.Order = mesh.Order;
             copiedMesh.AutoFade = mesh.AutoFade;
+            if (mesh.Plane is { } plane) copiedMesh.Plane = new PlaneState(plane.Segments);
             MeshEntities.Add(copiedMesh.Entity, copiedMesh);
             copiedMesh.Geometry.References++;
             CopySpriteState(sourceIds[index], copyIds[index]);

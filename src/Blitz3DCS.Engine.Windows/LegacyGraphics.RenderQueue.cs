@@ -49,11 +49,15 @@ public static partial class LegacyGraphics
             var isSprite = Sprites.TryGetValue(id, out var sprite);
             var world = isSprite ? BuildSpriteWorldMatrix(sprite!, entityWorld, cameraWorld) : entityWorld;
             var wvp = world * view * projection;
-            if (!isSprite && !IsMeshVisible(entity, wvp)) continue;
+            if (entity.Plane is not null)
+            {
+                if (!PreparePlane(entity, world, cameraWorld, camera)) continue;
+            }
+            else if (!isSprite && !IsMeshVisible(entity, wvp)) continue;
             for (var index = 0; index < entity.SurfaceHandles.Count; index++)
             {
                 var surface = Surfaces[entity.SurfaceHandles[index]];
-                if (surface.Indices.Count == 0) continue;
+                if (surface.Indices.Count == 0 && entity.Plane is null) continue;
                 var material = entity.Material;
                 ValidateComposedMaterial(surface.Material, material);
                 var stages = 0;
@@ -85,7 +89,9 @@ public static partial class LegacyGraphics
                 RenderLayers[index] = material.Textures[index] is not null ? material.Layers[index] : surfaceMaterial.Layers[index];
             }
             D3D11Mesh gpuMesh;
-            if (draw.Entity.Animated is { Skin: not null } animated)
+            if (draw.Entity.Plane is { } plane)
+                gpuMesh = PlaneGpuMesh(renderer, plane);
+            else if (draw.Entity.Animated is { Skin: not null } animated)
                 gpuMesh = AnimatedGpuMesh(renderer, animated.Surfaces[draw.SurfaceIndex]);
             else
             {
@@ -97,8 +103,8 @@ public static partial class LegacyGraphics
             var depthMode = draw.Order != 0 ? 2 : draw.Blend != 0 ? 1 : 0;
             var state = new D3D11LightingDrawState(effects, surfaceMaterial.Shininess + material.Shininess, draw.Blend, depthMode, _wireframe);
             renderer.DrawMesh(gpuMesh, draw.WorldViewProjection, RenderLayers, draw.Blend == 1, draw.Color, fog,
-                draw.World * view, state, draw.World);
-            _trianglesRendered += draw.Surface.Indices.Count / 3;
+                draw.World * view, state, draw.World, draw.Entity.Plane is { } activePlane ? (uint)activePlane.Grid.IndexCount : null);
+            _trianglesRendered += draw.Entity.Plane is { } renderedPlane ? renderedPlane.Grid.IndexCount / 3 : draw.Surface.Indices.Count / 3;
         }
     }
 

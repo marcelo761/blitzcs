@@ -56,7 +56,7 @@ public static partial class LegacyGraphics
         var projection = CreateLeftHandedPerspectiveFromScales(state.Zoom,
             state.Zoom * viewport.Width / viewport.Height, state.Near, state.Far);
         var matrix = ToWorldMatrix(scene.GetWorldTransform(entity)) * view * projection;
-        if (MeshEntities.TryGetValue(entity, out var mesh) && !Sprites.ContainsKey(entity))
+        if (MeshEntities.TryGetValue(entity, out var mesh) && mesh.Plane is null && !Sprites.ContainsKey(entity))
         {
             EnsureGeometryBounds(mesh.Geometry);
             return mesh.Geometry.HasBounds && BoxIntersectsClipVolume(mesh.Geometry.BoundsMinimum, mesh.Geometry.BoundsMaximum, matrix) ? 1 : 0;

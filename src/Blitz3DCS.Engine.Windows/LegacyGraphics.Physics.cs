@@ -5,6 +5,13 @@ namespace Blitz3DCS.Engine.Windows;
 
 public static partial class LegacyGraphics
 {
+    private static SceneGraph? _collisionGeometrySelectionScene;
+    private static long _collisionGeometrySelectionVersion = long.MinValue;
+    private static int _collisionGeometryMeshCount = -1;
+    private static readonly List<MeshEntity> PolygonCollisionMeshes = [];
+
+    internal static int PolygonCollisionMeshCountForTesting => PolygonCollisionMeshes.Count;
+
     public static void UpdateWorld(float elapsed = 1)
     {
         CheckThreadIfStarted();
@@ -16,9 +23,25 @@ public static partial class LegacyGraphics
 
     private static void PrepareCollisionGeometry(SceneGraph scene)
     {
-        foreach (var mesh in MeshEntities.Values)
+        var selectionVersion = scene.PolygonGeometrySelectionVersion;
+        var meshCount = MeshEntities.Count;
+        if (!ReferenceEquals(_collisionGeometrySelectionScene, scene) ||
+            _collisionGeometrySelectionVersion != selectionVersion ||
+            _collisionGeometryMeshCount != meshCount)
         {
-            if (!scene.RequiresPolygonCollision(mesh.Entity)) continue;
+            PolygonCollisionMeshes.Clear();
+            foreach (var mesh in MeshEntities.Values)
+            {
+                if (mesh.Plane is not null || !scene.RequiresPolygonCollision(mesh.Entity)) continue;
+                PolygonCollisionMeshes.Add(mesh);
+            }
+            _collisionGeometrySelectionScene = scene;
+            _collisionGeometrySelectionVersion = selectionVersion;
+            _collisionGeometryMeshCount = meshCount;
+        }
+
+        foreach (var mesh in PolygonCollisionMeshes)
+        {
             var geometry = mesh.Geometry;
             var version = GeometryVersion(geometry);
             if (geometry.CollisionVersion != version)
@@ -45,6 +68,14 @@ public static partial class LegacyGraphics
             scene.SetCollisionTriangles(mesh.Entity, geometry.CollisionTriangles);
             mesh.CollisionVersion = version;
         }
+    }
+
+    private static void ClearCollisionGeometrySelectionCache()
+    {
+        PolygonCollisionMeshes.Clear();
+        _collisionGeometrySelectionScene = null;
+        _collisionGeometrySelectionVersion = long.MinValue;
+        _collisionGeometryMeshCount = -1;
     }
 
     private static SceneVector3 ToSceneVector(Vector3 vector) => new(vector.X, vector.Y, vector.Z);
