@@ -25,6 +25,14 @@ public sealed class ApplicationPackageTests
         var executable = Path.Combine(package, "hello.exe");
         Assert.True(File.Exists(executable), $"Expected package executable at {executable}");
         AssertPeX64Executable(executable, 3);
+        var crossgenPacks = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages",
+            "microsoft.netcore.app.crossgen2.linux-x64");
+        if (OperatingSystem.IsLinux() && Directory.Exists(crossgenPacks) && Environment.GetEnvironmentVariable("BLITZCS_PACKAGE_R2R") != "0")
+        {
+            using var game = new System.Reflection.PortableExecutable.PEReader(File.OpenRead(Path.Combine(package, "hello.dll")));
+            Assert.NotNull(game.PEHeaders.CorHeader);
+            Assert.NotEqual(0, game.PEHeaders.CorHeader!.ManagedNativeHeaderDirectory.Size);
+        }
         Assert.True(File.Exists(Path.Combine(package, "coreclr.dll")), "Self-contained package must include coreclr.dll.");
         Assert.True(File.Exists(Path.Combine(package, "hostfxr.dll")), "Self-contained package must include hostfxr.dll.");
 

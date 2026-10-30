@@ -116,6 +116,7 @@ internal static class ApplicationPublisher
                 throw new InvalidOperationException($".NET SDK publishing failed ({process.ExitCode}). Install the .NET 10 SDK and restore access to the target runtime packs.{Environment.NewLine}{stdout.Result}{stderr.Result}");
             File.Copy(assemblyPath, Path.Combine(package, name + ".dll"), overwrite: true);
             File.Copy(Path.ChangeExtension(assemblyPath, ".pdb"), Path.Combine(package, name + ".pdb"), overwrite: true);
+            if (windows) PrecompileGameAssembly(Path.Combine(package, name + ".dll"), package, workspace, error);
             if (assets is not null)
             {
                 var packagedNames = new HashSet<string>(Directory.EnumerateFiles(package, "*", SearchOption.AllDirectories)
@@ -158,6 +159,46 @@ internal static class ApplicationPublisher
             output.WriteLine(Path.Combine(destinationPath, name + (windows ? ".exe" : "")));
         }
         finally { Directory.Delete(workspace, recursive: true); }
+    }
+
+    /// <summary>
+    /// Compiles the generated game assembly ahead of time (ReadyToRun) so its very large methods are not
+    /// JIT-compiled at tier 0 on first call. The SDK publish only precompiles the shell, because the original
+    /// Roslyn assembly is copied over it. Skipped when BLITZCS_PACKAGE_R2R=0, or when the crossgen2 pack is not
+    /// in the local NuGet cache; failures keep the IL-only assembly.
+    /// </summary>
+    internal static void PrecompileGameAssembly(string assembly, string package, string workspace, TextWriter error)
+    {
+        if (Environment.GetEnvironmentVariable("BLITZCS_PACKAGE_R2R") == "0") return;
+        try
+        {
+            var host = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
+            var os = OperatingSystem.IsWindows() ? "win" : OperatingSystem.IsMacOS() ? "osx" : "linux";
+            var packs = Path.Combine(Environment.GetEnvironmentVariable("NUGET_PACKAGES") ??
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages"),
+                $"microsoft.netcore.app.crossgen2.{os}-{host}");
+            if (!Directory.Exists(packs)) return; // Offline cache without the pack: keep the IL-only assembly.
+            var tool = Directory.EnumerateDirectories(packs).OrderByDescending(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .Select(dir => Path.Combine(dir, "tools", OperatingSystem.IsWindows() ? "crossgen2.exe" : "crossgen2"))
+                .FirstOrDefault(File.Exists);
+            if (tool is null) return;
+            var output = Path.Combine(workspace, "r2r-" + Path.GetFileName(assembly));
+            var start = new ProcessStartInfo(tool) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            foreach (var arg in new[] { assembly, "-o", output, "-r", Path.Combine(package, "*.dll"),
+                         "--targetos", "windows", "--targetarch", "x64", "-O" })
+                start.ArgumentList.Add(arg);
+            using var process = Process.Start(start)!;
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(300_000)) { process.Kill(entireProcessTree: true); process.WaitForExit(); File.Delete(output); error.WriteLine("warning: crossgen2 timed out; game assembly stays IL-only."); return; }
+            Task.WaitAll(stdout, stderr);
+            if (process.ExitCode != 0 || !File.Exists(output)) { error.WriteLine("warning: crossgen2 failed; game assembly stays IL-only."); return; }
+            File.Move(output, assembly, overwrite: true);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            error.WriteLine("warning: could not precompile the game assembly: " + exception.Message);
+        }
     }
 
     internal static XElement CreatePropertyGroup(string name, bool graphical) =>
