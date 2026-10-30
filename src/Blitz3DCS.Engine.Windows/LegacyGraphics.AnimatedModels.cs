@@ -111,6 +111,15 @@ public static partial class LegacyGraphics
                 foreach (var group in mesh.TriangleGroups)
                 {
                     var baseVertices = BuildAnimatedSurfaceVertices(mesh, group);
+                    var gpuVertices = baseVertices;
+                    int[]? vertexMap = null;
+                    uint[]? gpuIndices = null;
+                    if (!EngineOptimizations.Disabled && TryCompactSurface(group, baseVertices, out var compact, out var map, out var remapped))
+                    {
+                        gpuVertices = compact;
+                        vertexMap = map;
+                        gpuIndices = remapped;
+                    }
                     var surface = CreateSurface(entity);
                     var surfaceState = GetSurface(surface);
                     surfaceState.Vertices.AddRange(baseVertices);
@@ -122,8 +131,8 @@ public static partial class LegacyGraphics
                     }
                     if (group.BrushId >= 0)
                         SetSurfaceMaterialForLoading(surface, BuildMaterial(model.Brushes[group.BrushId], textures));
-                    animatedMesh.Surfaces.Add(new AnimatedSurface(surface, baseVertices,
-                        (D3D11Vertex[])baseVertices.Clone(), surfaceState.Indices.ToArray()));
+                    animatedMesh.Surfaces.Add(new AnimatedSurface(surface, gpuVertices,
+                        (D3D11Vertex[])gpuVertices.Clone(), gpuIndices ?? surfaceState.Indices.ToArray(), vertexMap));
                 }
                 meshState.Animated = animatedMesh;
                 animatedMeshes.Add(animatedMesh);
@@ -133,6 +142,42 @@ public static partial class LegacyGraphics
             foreach (var child in node.Children) AddNode(child, index);
             return index;
         }
+    }
+
+    /// <summary>Keeps only the vertices a triangle group references (ascending mesh order) and remaps its indices.</summary>
+    private static bool TryCompactSurface(B3dTriangleGroup group, D3D11Vertex[] full,
+        out D3D11Vertex[] compact, out int[] map, out uint[] indices)
+    {
+        compact = full; map = []; indices = [];
+        if (group.Triangles.Count == 0) return false;
+        var remap = new int[full.Length];
+        Array.Fill(remap, -1);
+        foreach (var t in group.Triangles)
+        {
+            if ((uint)t.A >= (uint)full.Length || (uint)t.B >= (uint)full.Length || (uint)t.C >= (uint)full.Length) return false;
+            remap[t.A] = remap[t.B] = remap[t.C] = 0;
+        }
+        var used = 0;
+        for (var i = 0; i < remap.Length; i++) if (remap[i] == 0) used++;
+        map = new int[used];
+        compact = new D3D11Vertex[used];
+        var slot = 0;
+        for (var i = 0; i < remap.Length; i++)
+        {
+            if (remap[i] != 0) continue;
+            map[slot] = i;
+            compact[slot] = full[i];
+            remap[i] = slot++;
+        }
+        indices = new uint[group.Triangles.Count * 3];
+        var cursor = 0;
+        foreach (var t in group.Triangles)
+        {
+            indices[cursor++] = (uint)remap[t.A];
+            indices[cursor++] = (uint)remap[t.B];
+            indices[cursor++] = (uint)remap[t.C];
+        }
+        return true;
     }
 
     private static D3D11Vertex[] BuildAnimatedSurfaceVertices(B3dMesh mesh, B3dTriangleGroup group)
@@ -200,20 +245,30 @@ public static partial class LegacyGraphics
 
     internal sealed class AnimatedSurface
     {
+        /// <param name="vertexMap">Mesh vertex index per GPU vertex slot; null keeps the full mesh copy (identity map).</param>
         public AnimatedSurface(int handle, D3D11Vertex[] baseSurfaceVertices,
-            D3D11Vertex[] vertices, uint[] indices)
+            D3D11Vertex[] vertices, uint[] indices, int[]? vertexMap = null)
         {
             Handle = handle;
             BaseSurfaceVertices = baseSurfaceVertices;
             Vertices = vertices;
             Indices = indices;
             SourceNormals = new B3dVector3[baseSurfaceVertices.Length];
-            DeformedNormals = new B3dVector3[baseSurfaceVertices.Length];
+            SourceNormalVectors = new Vector3[baseSurfaceVertices.Length];
             for (var index = 0; index < baseSurfaceVertices.Length; index++)
             {
                 var normal = baseSurfaceVertices[index].Normal;
                 SourceNormals[index] = new B3dVector3(normal.X, normal.Y, normal.Z);
+                SourceNormalVectors[index] = normal;
             }
+            DeformedNormals = new B3dVector3[baseSurfaceVertices.Length];
+            if (vertexMap is null)
+            {
+                vertexMap = new int[baseSurfaceVertices.Length];
+                for (var index = 0; index < vertexMap.Length; index++) vertexMap[index] = index;
+                IdentityMap = true;
+            }
+            VertexMap = vertexMap;
         }
 
         public int Handle { get; }
@@ -221,7 +276,11 @@ public static partial class LegacyGraphics
         public D3D11Vertex[] Vertices { get; }
         public uint[] Indices { get; }
         public B3dVector3[] SourceNormals { get; }
+        public Vector3[] SourceNormalVectors { get; }
         public B3dVector3[] DeformedNormals { get; }
+        /// <summary>Mesh vertex index for each slot of <see cref="Vertices"/>.</summary>
+        public int[] VertexMap { get; }
+        public bool IdentityMap { get; }
         public D3D11Mesh? GpuMesh { get; set; }
         public bool UploadDirty { get; set; } = true;
     }

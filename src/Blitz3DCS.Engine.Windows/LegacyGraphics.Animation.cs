@@ -64,7 +64,9 @@ public static partial class LegacyGraphics
         var nodes = model.Pose.Nodes;
         for (var index = 0; index < nodes.Length; index++)
             scene.ApplyAnimationPose(model.Entities[index], nodes[index]);
-        model.SkinDirty = true;
+        // Fast path: skinning only depends on the entity world matrices, which PrepareAnimatedGeometry compares
+        // against the previous frame, so an unchanged pose skips deformation and upload.
+        if (EngineOptimizations.Disabled) model.SkinDirty = true;
     }
 
     private static void UpdateAnimations(SceneGraph scene, float elapsed)
@@ -132,24 +134,57 @@ public static partial class LegacyGraphics
                 var deformStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
                 EngineProfile.Count(EngineProfile.SkinMeshes);
                 EngineProfile.Count(EngineProfile.SkinVerts, mesh.Positions.Length);
-                mesh.Skin.DeformInto(model.Pose, model.CurrentWorld, mesh.Positions);
-                foreach (var surface in mesh.Surfaces)
-                {
-                    mesh.Skin.DeformNormalsInto(surface.SourceNormals, surface.DeformedNormals);
-                    for (var vertex = 0; vertex < surface.Vertices.Length; vertex++)
-                    {
-                        var source = surface.BaseSurfaceVertices[vertex];
-                        var position = mesh.Positions[vertex];
-                        var normal = surface.DeformedNormals[vertex];
-                        surface.Vertices[vertex] = new D3D11Vertex(new Vector3(position.X, position.Y, position.Z),
-                            source.Color, new Vector3(normal.X, normal.Y, normal.Z), source.TexCoord, source.TexCoord2);
-                    }
-                    surface.UploadDirty = true;
-                }
+                if (EngineOptimizations.Disabled) DeformMeshLegacy(model, mesh);
+                else DeformMeshFused(model, mesh);
                 mesh.Dirty = false;
                 if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.SkinDeform, deformStart);
             }
             model.SkinDirty = false;
+        }
+    }
+
+    private static void DeformMeshLegacy(AnimatedModel model, AnimatedMesh mesh)
+    {
+        mesh.Skin!.DeformInto(model.Pose, model.CurrentWorld, mesh.Positions);
+        foreach (var surface in mesh.Surfaces)
+        {
+            mesh.Skin.DeformNormalsInto(surface.SourceNormals, surface.DeformedNormals);
+            for (var vertex = 0; vertex < surface.Vertices.Length; vertex++)
+            {
+                var source = surface.BaseSurfaceVertices[vertex];
+                var position = mesh.Positions[vertex];
+                var normal = surface.DeformedNormals[vertex];
+                surface.Vertices[vertex] = new D3D11Vertex(new Vector3(position.X, position.Y, position.Z),
+                    source.Color, new Vector3(normal.X, normal.Y, normal.Z), source.TexCoord, source.TexCoord2);
+            }
+            surface.UploadDirty = true;
+        }
+    }
+
+    // Bone matrices once per mesh, then one pass per surface straight into its GPU vertex array.
+    private static void DeformMeshFused(AnimatedModel model, AnimatedMesh mesh)
+    {
+        var skin = mesh.Skin!;
+        skin.PrepareFrame(model.CurrentWorld);
+        foreach (var surface in mesh.Surfaces)
+        {
+            var sink = new PackSink { Dest = surface.Vertices, Base = surface.BaseSurfaceVertices, Positions = mesh.Positions };
+            skin.SkinInto(surface.VertexMap, surface.SourceNormalVectors, ref sink);
+            surface.UploadDirty = true;
+        }
+    }
+
+    private struct PackSink : ISkinSink
+    {
+        public D3D11Vertex[] Dest;
+        public D3D11Vertex[] Base;
+        public B3dVector3[] Positions;
+
+        public void Write(int slot, int meshVertex, Vector3 position, Vector3 normal)
+        {
+            ref readonly var source = ref Base[slot];
+            Dest[slot] = new D3D11Vertex(position, source.Color, normal, source.TexCoord, source.TexCoord2);
+            Positions[meshVertex] = new B3dVector3(position.X, position.Y, position.Z);
         }
     }
 
@@ -232,7 +267,8 @@ public static partial class LegacyGraphics
                     new B3dVector3[sourceMesh.Positions.Length], new B3dVector3[sourceMesh.Normals.Length]);
                 foreach (var sourceSurface in sourceMesh.Surfaces)
                     mesh.Surfaces.Add(new AnimatedSurface(sourceSurface.Handle, sourceSurface.BaseSurfaceVertices,
-                        (D3D11Vertex[])sourceSurface.BaseSurfaceVertices.Clone(), sourceSurface.Indices));
+                        (D3D11Vertex[])sourceSurface.BaseSurfaceVertices.Clone(), sourceSurface.Indices,
+                        sourceSurface.IdentityMap ? null : sourceSurface.VertexMap));
                 meshes.Add(mesh);
                 GetMesh(mesh.Entity).Animated = mesh;
             }

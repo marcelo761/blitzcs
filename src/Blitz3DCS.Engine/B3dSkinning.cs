@@ -193,6 +193,56 @@ public sealed class B3dSkinningBuffer
         }
     }
 
+    /// <summary>Computes the per-bone skin matrices and normal bases for one frame; call once before <see cref="SkinInto{TSink}"/>.</summary>
+    public void PrepareFrame(ReadOnlySpan<Matrix4x4> currentWorldMatrices)
+    {
+        if (currentWorldMatrices.Length != _poseMatrices.Length)
+            throw new ArgumentException("World matrix count must match the pose node count.", nameof(currentWorldMatrices));
+        PrepareBones(currentWorldMatrices);
+    }
+
+    /// <summary>
+    /// Fused single pass: skins each requested mesh vertex (position and, from the caller's source normals, normal)
+    /// and hands the result to the sink. Produces bit-identical values to DeformInto followed by
+    /// <see cref="DeformNormalsInto"/>. <paramref name="slotNormals"/> is indexed by slot (position in <paramref name="vertexMap"/>).
+    /// </summary>
+    public void SkinInto<TSink>(ReadOnlySpan<int> vertexMap, ReadOnlySpan<Vector3> slotNormals, ref TSink sink)
+        where TSink : struct, ISkinSink
+    {
+        if (!_skinMatricesPrepared) throw new InvalidOperationException("Call PrepareFrame first.");
+        if (slotNormals.Length != vertexMap.Length) throw new ArgumentException("Normal count must match the vertex map.", nameof(slotNormals));
+        var skinMatrices = _skinMatrices;
+        var basis = _normalBasis;
+        var start = _influenceStart;
+        var bones = _influenceBone;
+        var weights = _influenceWeight;
+        var sources = _srcPosition;
+        for (var slot = 0; slot < vertexMap.Length; slot++)
+        {
+            var v = vertexMap[slot];
+            var first = start[v];
+            var end = start[v + 1];
+            var source = sources[v];
+            var sourceNormal = slotNormals[slot];
+            if (first == end)
+            {
+                sink.Write(slot, v, Vector3.Transform(source, skinMatrices[0]), ApplyBasis(basis[0], sourceNormal));
+                continue;
+            }
+            var position = Vector3.Zero;
+            var normalSum = Vector3.Zero;
+            for (var i = first; i < end; i++)
+            {
+                var bone = bones[i];
+                var weight = weights[i];
+                position += Vector3.Transform(source, skinMatrices[bone]) * weight;
+                normalSum += ApplyBasis(basis[bone], sourceNormal) * weight;
+            }
+            if (end - first > 1 && normalSum.LengthSquared() > 0) normalSum = Vector3.Normalize(normalSum);
+            sink.Write(slot, v, position, normalSum);
+        }
+    }
+
     private static Vector3 ApplyBasis(in NormalBasis b, Vector3 n) => b.YZ * n.X + b.ZX * n.Y + b.XY * n.Z;
 
     private void DeformIntoCoreLegacy(ReadOnlySpan<Matrix4x4> currentWorldMatrices,
@@ -393,4 +443,10 @@ public sealed class B3dSkinningBuffer
     private readonly record struct NormalBasis(Vector3 YZ, Vector3 ZX, Vector3 XY);
     private readonly record struct BoneBinding(int NodeIndex, Matrix4x4 InverseBind);
     private readonly record struct VertexInfluence(int BoneIndex, float Weight);
+}
+
+/// <summary>Receives skinned vertices from <see cref="B3dSkinningBuffer.SkinInto{TSink}"/>.</summary>
+public interface ISkinSink
+{
+    void Write(int slot, int meshVertex, Vector3 position, Vector3 normal);
 }
