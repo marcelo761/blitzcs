@@ -8,13 +8,13 @@ public sealed partial class SceneGraph
         ArgumentNullException.ThrowIfNull(destination);
         destination.Clear();
         foreach (var node in _nodes.Values)
-            if (node.Parent is null) Visit(node);
+            if (node.Parent is null) Visit(node, destination);
 
-        void Visit(Node node)
+        static void Visit(Node node, List<int> destination)
         {
             if (!node.Enabled) return;
             destination.Add(node.Id);
-            foreach (var child in node.Children) Visit(child);
+            foreach (var child in node.Children) Visit(child, destination);
         }
     }
 }

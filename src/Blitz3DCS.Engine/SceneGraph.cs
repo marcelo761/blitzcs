@@ -364,6 +364,7 @@ public sealed partial class SceneGraph
         public bool WorldDirty { get; set; } = true;
         public SceneTransform LocalTransform { get; set; }
         public SceneTransform WorldTransform { get; set; }
+        internal CollisionEntityState? CollisionState;
     }
 
     private readonly record struct Matrix3(SceneVector3 I, SceneVector3 J, SceneVector3 K)

@@ -29,6 +29,7 @@ public sealed partial class SceneGraph
     private readonly Dictionary<int, CollisionEntityState> _collisionEntities = [];
     private readonly List<CollisionRule> _collisionRules = [];
     private readonly List<Node> _enabledCollisionNodes = [];
+    private readonly List<CollisionEntityState> _enabledCollisionStates = [];
     private readonly List<Node>?[] _collisionEntitiesByType = new List<Node>?[MaxCollisionType];
     private readonly CollisionPlane[] _collisionPlanes = new CollisionPlane[2];
     internal bool ForceLinearPolygonSearchForTesting { get; set; }
@@ -122,6 +123,35 @@ public sealed partial class SceneGraph
         foreach (var node in _nodes.Values)
             if (node.Parent is null) CollectEnabled(node, _enabledCollisionNodes);
 
+        if (EngineOptimizations.Disabled) { UpdateWorldLegacy(); return; }
+        _enabledCollisionStates.Clear();
+        for (var i = 0; i < _enabledCollisionNodes.Count; i++)
+        {
+            var node = _enabledCollisionNodes[i];
+            var state = GetCollisionState(node);
+            _enabledCollisionStates.Add(state);
+            state.Collisions.Clear();
+            if (state.Type == 0) continue;
+            (_collisionEntitiesByType[state.Type] ??= []).Add(node);
+        }
+
+        for (var i = 0; i < _enabledCollisionNodes.Count; i++)
+        {
+            var state = _enabledCollisionStates[i];
+            if (state.Type != 0 && HasSourceCollisionRule(state.Type))
+                ProcessCollisions(_enabledCollisionNodes[i], state);
+        }
+
+        for (var i = 0; i < _enabledCollisionNodes.Count; i++)
+        {
+            var state = _enabledCollisionStates[i];
+            state.PreviousTransform = GetWorldTransform(_enabledCollisionNodes[i]);
+            state.HasPreviousTransform = true;
+        }
+    }
+
+    private void UpdateWorldLegacy()
+    {
         foreach (var node in _enabledCollisionNodes)
         {
             var state = GetCollisionState(node.Id);
@@ -182,6 +212,7 @@ public sealed partial class SceneGraph
     {
         _polygonGeometrySelectionVersion++;
         _collisionEntities.Remove(entity);
+        if (_nodes.TryGetValue(entity, out var forgotten)) forgotten.CollisionState = null;
         if (_pickedEntity == entity) _pickedEntity = 0;
         foreach (var state in _collisionEntities.Values)
             state.Collisions.RemoveAll(collision => collision.Entity == entity);
@@ -206,6 +237,7 @@ public sealed partial class SceneGraph
             HasPreviousTransform = true
         };
         _collisionEntities[destination] = state;
+        target.CollisionState = state;
     }
 
     internal void ResetCollisionState(int entity)
@@ -220,12 +252,16 @@ public sealed partial class SceneGraph
         state.HasPreviousTransform = true;
     }
 
-    private CollisionEntityState GetCollisionState(int entity)
+    private CollisionEntityState GetCollisionState(int entity) => GetCollisionState(GetNode(entity));
+
+    private CollisionEntityState GetCollisionState(Node node)
     {
-        var node = GetNode(entity);
-        if (_collisionEntities.TryGetValue(entity, out var state)) return state;
+        var cached = node.CollisionState;
+        if (cached is not null && !EngineOptimizations.Disabled) return cached;
+        if (_collisionEntities.TryGetValue(node.Id, out var state)) { node.CollisionState = state; return state; }
         state = new CollisionEntityState { PreviousTransform = GetWorldTransform(node), HasPreviousTransform = true };
-        _collisionEntities.Add(entity, state);
+        _collisionEntities.Add(node.Id, state);
+        node.CollisionState = state;
         return state;
     }
 
