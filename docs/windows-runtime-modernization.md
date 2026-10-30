@@ -67,6 +67,11 @@ GPU. Direct scene rendering into texture buffers additionally needs
 render-target and depth-state handling; the corresponding portal call observed
 in the application's main path is commented out.
 
+Distinct image and texture buffers can be locked simultaneously, including the
+heightmap and mask used by forest generation. Buffer identity and dimension
+queries remain available while locked; locking the same buffer twice fails.
+Native tests exercise independent reads, writes and unlock order on both ABIs.
+
 Texture values share their underlying state in the original engine. Changing
 blend mode, coordinate selection or UV transformation therefore affects brushes
 that already reference that texture. Brush painting itself copies brush values:
@@ -82,6 +87,20 @@ Material blend selection follows the original distinction between a single
 transparent texture, explicit alpha blending with multiple stages, and
 vertex/material alpha. Masked textures alone do not request alpha blending;
 explicit multiply/add modes retain priority.
+Texture flag 8 creates a full GPU mip chain. Writes to mutable textures invalidate
+the chain, which regenerates before sampling; mip-zero readback and copies remain
+compatible with single-level staging resources. Native tests cover minification
+and regeneration after clears, uploads, copies, draws and self-blits on both ABIs.
+
+Texture stage blend 1 interpolates RGB by the texture alpha. Blend 6 interprets
+RG as signed bump deltas and applies the configured matrix to the following
+stage's UVs, without changing its own stage color or alpha. Native tests cover an
+asymmetric matrix and the following stage's secondary UV set. The plain bump
+mode does not use the luminance scale/offset controls.
+Image color-key masking replaces the previous key instead of accumulating
+transparent colors. Remasking a black-keyed image with yellow therefore restores
+opaque black pixels, as required by the menu's dark button interiors. Regression
+tests cover this sequence and the unchanged RGB values.
 The image decoder also reads DXT1, DXT3 and DXT5 DDS textures, including the
 1024-by-1024 forest texture exercised from the game assets. Tests cover block
 alpha, partial edge blocks and malformed input bounds.
@@ -116,6 +135,12 @@ cached local-space BVH and conservative swept-volume queries; candidate triangle
 order is preserved before narrow-phase tests. Static rendering also rejects
 meshes outside the camera clip volume using cached local geometry bounds.
 
+The Windows adapter caches which meshes require polygon geometry, invalidating
+membership when collision rules, pick modes, entity types or mesh membership
+change. Repeated queries check geometry versions only for those selected meshes.
+Regression tests cover copying, freeing, same-count replacement and vertex edits.
+The scene graph's own query traversal remains separate from this cache.
+
 The warmed collision-update fixture (one moving source, 32 targets, 256 updates)
 previously allocated 13,752 bytes per update; reusable traversal/type buffers
 reduce that fixture to zero managed allocations. Regression tests also check
@@ -128,70 +153,62 @@ effects, remaining loaders/commands and complete application startup
 and gameplay must be validated before replacing the legacy packages or claiming
 a performance improvement.
 
-## Multisampling (`AntiAlias 1`) design
+## Multisampling (`AntiAlias 1`)
 
-`AntiAlias 1` still fails explicitly, and `AntiAlias 0` is accepted. Setting the swapchain's sample
-count alone is not a working design. The renderer currently treats the swapchain buffer as the single
-back buffer for every operation:
+The renderer negotiates a common 4x or 2x sample count for RGBA8 color and D32
+depth. It reports an explicit failure if the device supports neither combination.
+The swapchain remains single-sampled; optional multisampled color/depth targets
+receive both 3D and backbuffer 2D drawing.
 
-- 2D drawing
-- `CopyRect` from and to `BackBuffer`
-- Pixel locking and readback
-- Blit scratch copies
+The color target resolves before presentation, readback and backbuffer-source
+copies. Backbuffer writes use textured GPU draws to avoid copying between
+incompatible sample counts. Texture buffers remain single-sampled. Resize
+recreates the targets. Switching anti-aliasing preserves the full current frame,
+including when a custom viewport is active, using a GPU snapshot and restore.
 
-D3D11 does not allow `CopyResource` or `CopySubresourceRegion` between textures with different sample
-counts, so each of these operations needs its own MSAA-aware path.
+Native Win32 and Win64 tests compare edge coverage with AA disabled, exercise
+readback, backbuffer/texture copy round trips, pixel uploads, presentation and
+resize, and verify exact color preservation across both toggle directions.
+The original D3D7 anti-alias state was driver dependent; these checks establish
+working multisampling rather than exact pixel parity with every legacy driver.
 
-The planned design:
+## Infinite planes and remaining startup bindings
 
-1. **Sample count.** Query `CheckMultisampleQualityLevels(R8G8B8A8_UNorm, n)` and the D32 depth format
-   for n = 4, then 2. Use the highest count supported by both. If neither is supported, keep the
-   explicit failure.
-2. **Render targets.** Keep the swapchain single-sampled, with flip-model compatibility. Render 3D and 2D
-   into an MSAA color texture and an MSAA depth texture of the same count. Recreate both on resize and
-   `Graphics3D`.
-3. **Resolve.** Resolve the MSAA texture with `ResolveSubresource` into the swapchain buffer before
-   `Present`. Also resolve before any operation that reads the back buffer: `CopyRect` sources, locks,
-   `ReadPixel` and readback staging.
-4. **Writes into the back buffer.** `CopyRect` destinations, `WritePixel` and unlock uploads must draw a
-   textured quad into the MSAA target, because copying into a multisampled resource is invalid. Clears
-   apply to the MSAA views.
-5. **Texture targets.** `SetBuffer TextureBuffer(...)` stays single-sampled.
-6. **Validation.** Before claiming support:
-   - Compare edge-coverage pixel tests on Win32 and Win64 with `AntiAlias 0`.
-   - Run readback and `CopyRect` round trips after a resolve.
-   - Test resize, and the fallback when the hardware lacks support.
+`CreatePlane(segments, parent)` now creates an effectively infinite plane. Rendering
+clips the camera's far-frustum grid against the local plane and projects it onto
+local Y=0, with local X/Z texture coordinates. Reusable CPU vertex arrays and a
+persistent dynamic GPU buffer keep geometry updates bounded. Cameras on or below
+the plane see no plane geometry, matching the original one-sided implementation.
 
-   The original D3D7 `AntiAlias` setting is a driver-dependent render state, so original captures should
-   determine whether exact pixel parity is expected.
+Polygon collision and picking use an analytic infinite-plane intersection instead
+of the generated render triangles or a BVH. Copies retain the plane behavior and
+have independent render buffers; parent transforms and swept sphere responses
+are covered by focused tests. Exact endpoint/tie intersections follow the original
+plane's strict collision-time comparison.
 
-This touches every back-buffer path in `D3D11Renderer`, which is well over 150 lines. It is therefore
-deferred rather than implemented in a minimal change.
+Native Win32 and Win64 pixel tests cover texture binding, camera movement 50,000
+units from the origin, and the invisible underside. CPU tests cover horizon
+clipping, planar UVs, allocation-free warmed grid generation, transformed collision,
+and copied-plane picking without a world/render step.
 
-## CreatePlane decision
+`ErrorLog()` now drains a FIFO of recoverable error messages and returns an empty
+string when drained. Fatal `RuntimeError` remains fatal. Image/model load misses
+retain their original silent zero return and do not enqueue invented diagnostics.
 
-Decision: implement `CreatePlane` next, as its own increment. It is not part of the struct-ABI change,
-and it should not be added as a throwing catalog placeholder. `CreatePlane` is now the first
-semantic blocker on both targets (`Main.bb:8592`, the dimension 1499 event).
+The movie bindings now use a bounded-memory Media Foundation Source Reader and
+update the target image as the application requests its buffer. Playback timing,
+pause/stop and looping are independent of the game frame rate. The AVI soundtracks
+used by the application are separate OGG streams. The two packaged AVIs use
+MPEG-4 Part 2; no legacy x86 movie DLL is loaded by this implementation.
+Native tests with an injected decoder verify image upload, timed frame changes
+and decoder disposal on Win32 and Win64; these tests do not validate a codec.
 
-That event depends on four plane behaviors: texturing (`EntityTexture`), placement
-(`PositionEntity`) and polygon collision (`EntityType` with `HIT_MAP`). The plane must also be
-effectively infinite.
-
-The minimum faithful scope:
-
-- **Entity.** A plane entity accepts the `segments` and `parent` arguments.
-- **Rendering.** The plane renders as a camera-centred grid of segments, with legacy UVs that tile per world unit.
-- **Collision.** Infinite-plane collision participates in swept-sphere responses and picking, without
-  being added to the triangle BVH.
-
-This is a scene and collision subsystem, not a catalog entry. Each part needs pixel and collision tests
-before it is bound.
-
-A scratch, declaration-only probe that did not change the tracked catalogs shows what follows. After
-`CreatePlane`, the next blockers are:
-
-- `ErrorLog()` (`Main.bb:11689`), a function of the modified game runtime.
-- `BlitzMovie_*` (`Main.bb:11876`), video playback through a third-party x86 DLL.
-
-`BlitzMovie_*` is another separate subsystem.
+The unchanged application passes semantic validation and builds for Win64 without
+BRE dependencies. With startup movies disabled in the application configuration,
+the Win64 package has rendered the menu and entered procedural map generation,
+including forest terrain. Full gameplay remains unverified.
+The decoder opens the actual AVI files under the tested Proton
+runtime, but RGB output negotiation fails with `MF_E_TOPO_CODEC_NOT_FOUND` on both
+architectures. Frame decoding remains unverified on native Windows. Successful
+compilation and isolated graphics tests do not establish successful full game
+startup or a gameplay performance result.
