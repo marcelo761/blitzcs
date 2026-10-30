@@ -7,7 +7,7 @@ public static partial class LegacyGraphics
 {
     private const int BackBufferHandle = 1;
     private const int FirstTextureBufferHandle = -1;
-    private const int SupportedTextureFlags = 1 | 2 | 4 | 16 | 32 | 256;
+    private const int SupportedTextureFlags = 1 | 2 | 4 | 8 | 16 | 32 | 256;
     private static readonly Dictionary<int, TextureRep> Textures = [];
     private static readonly Dictionary<int, BufferTextureState> TextureBuffers = [];
     private static int _nextTextureHandle = 1;
@@ -186,7 +186,7 @@ public static partial class LegacyGraphics
         {
             for (var frameIndex = 0; frameIndex < frames; frameIndex++)
             {
-                var gpu = renderer.CreateMutableTexture(width, height);
+                var gpu = renderer.CreateMutableTexture(width, height, mipmaps: (flags & 8) != 0);
                 // Alpha textures begin transparent; opaque textures begin black.
                 renderer.ClearTexture(gpu, 0, 0, 0, (flags & 2) != 0 ? 0 : 1);
                 var bufferHandle = _nextTextureBufferHandle;
@@ -218,6 +218,7 @@ public static partial class LegacyGraphics
     public static void FreeTexture(int texture)
     {
         CheckThreadIfStarted();
+        if (texture == 0) return;
         EnsureNoBufferLocked();
         var rep = GetTexture(texture);
         Textures.Remove(texture);
@@ -229,7 +230,6 @@ public static partial class LegacyGraphics
     public static string TextureName(int texture)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         return GetTexture(texture).SourceName;
     }
 
@@ -262,14 +262,12 @@ public static partial class LegacyGraphics
     public static int TextureWidth(int texture)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         return GetTexture(texture).Width;
     }
 
     public static int TextureHeight(int texture)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         return GetTexture(texture).Height;
     }
 
@@ -277,7 +275,6 @@ public static partial class LegacyGraphics
     public static int TextureBuffer(int texture, int frame = 0)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         var rep = GetTexture(texture);
         return rep.Frames[ValidateFrame(rep, frame)].BufferHandle;
     }
@@ -286,14 +283,13 @@ public static partial class LegacyGraphics
     {
         CheckThreadIfStarted();
         EnsureNoBufferLocked();
-        if (blend is not (0 or 2 or 3 or 5))
-            throw new NotSupportedException($"Texture blend mode {blend} is not implemented; supported modes are 0, 2, 3, and 5.");
+        if (blend is not (0 or 1 or 2 or 3 or 5 or 6))
+            throw new NotSupportedException($"Texture blend mode {blend} is not implemented; supported modes are 0, 1, 2, 3, 5, and 6.");
         GetTexture(texture).Blend = blend;
     }
 
     /// <summary>
-    /// Stores one element of the texture's 2x2 bump-environment matrix, as the legacy runtime does.
-    /// The values only affect blend mode 6, which TextureBlend rejects explicitly in this backend.
+    /// Sets one element of the matrix used by blend mode 6 to perturb the next texture stage's UVs.
     /// </summary>
     public static void TextureBumpEnvMat(int texture, int x, int y, float value)
     {
@@ -328,7 +324,6 @@ public static partial class LegacyGraphics
     public static int BackBuffer()
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         _ = RequireRenderer();
         return BackBufferHandle;
     }
@@ -340,7 +335,6 @@ public static partial class LegacyGraphics
     public static int GraphicsBuffer()
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         return _renderer is null ? 0 : _selectedBuffer;
     }
 
@@ -357,8 +351,9 @@ public static partial class LegacyGraphics
     {
         CheckThreadIfStarted();
         _ = RequireRenderer();
-        EnsureNoBufferLocked();
         var target = GetBuffer(ResolveBufferHandle(buffer));
+        if (target.LockedPixels is not null)
+            throw new InvalidOperationException("LockBuffer cannot lock the same buffer more than once.");
         target.LockedPixels = target.IsBackBuffer
             ? RequireRenderer().ReadTexturePixels()
             : RequireRenderer().ReadTexturePixels(target.Frame!.Resource);
@@ -489,7 +484,7 @@ public static partial class LegacyGraphics
     internal static void ValidateTextureFlags(int flags)
     {
         if (flags < 0 || (flags & ~SupportedTextureFlags) != 0)
-            throw new NotSupportedException($"Texture flags 0x{flags:X} include unsupported options; implemented flags are color (1), alpha (2), black mask (4), clamp U (16), clamp V (32), and store in video memory (256).");
+            throw new NotSupportedException($"Texture flags 0x{flags:X} include unsupported options; implemented flags are color (1), alpha (2), black mask (4), mipmaps (8), clamp U (16), clamp V (32), and store in video memory (256).");
     }
 
     internal static byte[] ArgbToRgbaPixels(ReadOnlySpan<int> argb)
@@ -625,6 +620,10 @@ public static partial class LegacyGraphics
         internal bool ClampV => (_rep.Flags & 32) != 0;
         internal Matrix3x2 UvTransform => _rep.UvTransform;
         internal int CoordinateSet => _rep.CoordinateSet;
+        internal Vector4 BumpMatrix => new(_rep.BumpEnvMat[0, 0], _rep.BumpEnvMat[0, 1],
+            _rep.BumpEnvMat[1, 0], _rep.BumpEnvMat[1, 1]);
+        internal float BumpScale => _rep.BumpEnvScale;
+        internal float BumpOffset => _rep.BumpEnvOffset;
 
         internal TextureBinding Retain()
         {

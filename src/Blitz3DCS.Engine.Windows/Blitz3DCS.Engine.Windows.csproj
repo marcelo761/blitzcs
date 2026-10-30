@@ -2,6 +2,7 @@
   <PropertyGroup>
     <AssemblyName>Blitz3DCS.Engine.Windows</AssemblyName>
     <RootNamespace>Blitz3DCS.Engine.Windows</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Blitz3DCS.Engine/Blitz3DCS.Engine.csproj" />
@@ -11,5 +12,6 @@
     <ProjectReference Include="../Blitz3DCS.Runtime/Blitz3DCS.Runtime.csproj" />
     <ProjectReference Include="../Blitz3DCS.Windowing/Blitz3DCS.Windowing.csproj" />
     <PackageReference Include="StbImageSharp" Version="2.30.16" />
+    <PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" />
   </ItemGroup>
 </Project>

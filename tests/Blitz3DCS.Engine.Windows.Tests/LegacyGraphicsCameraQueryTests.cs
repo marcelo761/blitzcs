@@ -34,6 +34,28 @@ public sealed class LegacyGraphicsCameraQueryTests
     }
 
     [Fact]
+    public void Camera_range_accepts_degenerate_values_like_the_original_runtime()
+    {
+        var previousScene = LegacyScene.Current;
+        LegacyGraphics.ResetForTests();
+        LegacyScene.Current = new SceneGraph();
+        try
+        {
+            var camera = LegacyGraphics.CreateCamera();
+            // SCP:CB Main.bb: CameraRange(Camera, 0.05, Min(CameraFogFar*LightVolume*1.5, 28)) with LightVolume = 0.
+            LegacyGraphics.CameraRange(camera, 0.05f, Math.Min(20f * 0f * 1.5f, 28f));
+            var projection = LegacyGraphics.GetCameraProjectionForTesting(camera, 800, 600);
+            Assert.Equal(0f, projection.M33);
+            Assert.Equal(0f, projection.M43);
+            LegacyGraphics.CameraRange(camera, 1, 1);
+            _ = LegacyGraphics.GetCameraProjectionForTesting(camera, 800, 600);
+            LegacyGraphics.CameraRange(camera, 0, 10);
+            _ = LegacyGraphics.GetCameraProjectionForTesting(camera, 800, 600);
+        }
+        finally { LegacyGraphics.ResetForTests(); LegacyScene.Current = previousScene; }
+    }
+
+    [Fact]
     public void In_view_uses_mesh_extents_ignores_visibility_and_cull_override()
     {
         var previousScene = LegacyScene.Current;

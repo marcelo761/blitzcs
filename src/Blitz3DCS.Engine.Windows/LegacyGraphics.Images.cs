@@ -90,6 +90,7 @@ public static partial class LegacyGraphics
     public static void FreeImage(int image)
     {
         CheckThreadIfStarted();
+        if (_movie?.Image == image) BlitzMovie_Close();
         EnsureNoBufferLocked();
         if (!Images.Remove(image, out var state)) throw new ArgumentOutOfRangeException(nameof(image));
         if (Textures.ContainsKey(state.Texture)) FreeTexture(state.Texture);
@@ -101,6 +102,7 @@ public static partial class LegacyGraphics
 
     public static int ImageBuffer(int image, int frame = 0)
     {
+        UpdateMovieImage(image);
         var state = GetImage(image);
         if ((uint)frame >= (uint)state.Frames) throw new ArgumentOutOfRangeException(nameof(frame));
         return TextureBuffer(state.Texture, frame);
@@ -111,6 +113,7 @@ public static partial class LegacyGraphics
     /// <summary>Draws a source rectangle from an image at the requested destination position.</summary>
     public static void DrawImageRect(int image, int x, int y, int sourceX, int sourceY, int sourceWidth, int sourceHeight, int frame = 0)
     {
+        UpdateMovieImage(image);
         CheckThreadIfStarted();
         EnsureNoBufferLocked();
         var state = GetImage(image);
@@ -259,8 +262,8 @@ public static partial class LegacyGraphics
         if (rgba.Length % 4 != 0) throw new ArgumentException("RGBA data must contain complete pixels.", nameof(rgba));
         for (var offset = 0; offset < rgba.Length; offset += 4)
         {
-            if (rgba[offset] == red && rgba[offset + 1] == green && rgba[offset + 2] == blue)
-                rgba[offset + 3] = 0;
+            rgba[offset + 3] = rgba[offset] == red && rgba[offset + 1] == green && rgba[offset + 2] == blue
+                ? (byte)0 : (byte)255;
         }
     }
 
@@ -368,6 +371,7 @@ public static partial class LegacyGraphics
 
     private static void DrawImageCore(int image, int x, int y, int frame, bool useAlpha, bool useHandle)
     {
+        UpdateMovieImage(image);
         CheckThreadIfStarted();
         EnsureNoBufferLocked();
         var state = GetImage(image);

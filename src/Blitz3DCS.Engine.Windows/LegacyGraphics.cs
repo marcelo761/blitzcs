@@ -51,6 +51,8 @@ public static partial class LegacyGraphics
     public static void EndGraphics()
     {
         CheckThreadIfStarted();
+        BlitzMovie_Close();
+        ClosePlaneGpuMeshes();
         if (_renderer is null) return;
         CloseAnimatedGpuMeshes();
         CloseDrawing();
@@ -131,6 +133,7 @@ public static partial class LegacyGraphics
     public static void FreeEntity(int entity)
     {
         CheckThreadIfStarted();
+        if (entity == 0) return;
         SceneDraws.Clear();
         var scene = RequireScene();
         var pending = new Stack<int>();
@@ -143,6 +146,7 @@ public static partial class LegacyGraphics
                 pending.Push(scene.GetChild(current, index));
         }
 
+        if (subtree.Any(MeshEntities.ContainsKey)) ClearCollisionGeometrySelectionCache();
         ReleaseAnimatedModels(subtree);
         foreach (var current in subtree)
         {
@@ -150,6 +154,7 @@ public static partial class LegacyGraphics
             ForgetLightState(current);
             Cameras.Remove(current);
             if (!MeshEntities.Remove(current, out var mesh)) continue;
+            mesh.Plane?.GpuMesh?.Dispose();
             mesh.Material.Dispose();
             if (--mesh.Geometry.References != 0) continue;
             if (ReferenceEquals(mesh.Geometry, _spriteQuadGeometry)) _spriteQuadGeometry = null;
@@ -191,10 +196,11 @@ public static partial class LegacyGraphics
     public static int AddVertex(int surface, float x, float y, float z, float u = 0, float v = 0, float w = 1)
     {
         CheckThreadIfStarted();
-        if (w != 1) throw new NotSupportedException("The D3D11 mesh layout supports two-dimensional texture coordinates only.");
         var state = GetSurface(surface);
         var index = state.Vertices.Count;
-        state.Vertices.Add(new D3D11Vertex(new Vector3(x, y, z), Vector4.One, Vector3.UnitZ, new Vector2(u, v)));
+        // The legacy surface stores U/V in both sets and ignores the W argument.
+        var uv = new Vector2(u, v);
+        state.Vertices.Add(new D3D11Vertex(new Vector3(x, y, z), Vector4.One, Vector3.UnitZ, uv, uv));
         state.Dirty = true;
         return index;
     }
@@ -241,7 +247,6 @@ public static partial class LegacyGraphics
     {
         CheckThreadIfStarted();
         if ((uint)coordSet > 1) throw new ArgumentOutOfRangeException(nameof(coordSet));
-        if (w != 1) throw new NotSupportedException("The D3D11 mesh layout supports two-dimensional texture coordinates.");
         var state = GetSurface(surface);
         var old = GetVertex(state, vertex);
         state.Vertices[vertex] = new D3D11Vertex(old.Position, old.Color, old.Normal,
@@ -274,8 +279,8 @@ public static partial class LegacyGraphics
 
     public static void CameraRange(int camera, float near, float far)
     {
-        if (!float.IsFinite(near) || near <= 0) throw new ArgumentOutOfRangeException(nameof(near));
-        if (!float.IsFinite(far) || far <= near) throw new ArgumentOutOfRangeException(nameof(far));
+        // Original Camera::setRange stores both values unvalidated; degenerate ranges (SCP:CB's first
+        // frame uses far = 0) only yield a degenerate projection matrix, never an error.
         var state = GetCamera(camera);
         state.Near = near;
         state.Far = far;
@@ -375,7 +380,6 @@ public static partial class LegacyGraphics
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(viewportWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(viewportHeight);
         if (camera.ProjectionMode == 0) throw new InvalidOperationException("A disabled camera has no projection matrix.");
-        ValidateProjectionRange(camera.Near, camera.Far);
         if (!float.IsFinite(camera.Zoom)) throw new ArgumentOutOfRangeException(nameof(camera.Zoom));
 
         var aspect = (float)viewportWidth / viewportHeight;
@@ -392,7 +396,6 @@ public static partial class LegacyGraphics
 
     private static Matrix4x4 CreateLeftHandedPerspectiveFromScales(float xScale, float yScale, float near, float far)
     {
-        ValidateProjectionRange(near, far);
         var depthScale = far / (far - near);
         return new Matrix4x4(
             xScale, 0, 0, 0,
@@ -403,19 +406,12 @@ public static partial class LegacyGraphics
 
     private static Matrix4x4 CreateLeftHandedOrthographicFromScales(float xScale, float yScale, float near, float far)
     {
-        ValidateProjectionRange(near, far);
         var depthScale = 1 / (far - near);
         return new Matrix4x4(
             xScale, 0, 0, 0,
             0, yScale, 0, 0,
             0, 0, depthScale, 0,
             0, 0, -near * depthScale, 1);
-    }
-
-    private static void ValidateProjectionRange(float near, float far)
-    {
-        if (!float.IsFinite(near) || near <= 0) throw new ArgumentOutOfRangeException(nameof(near));
-        if (!float.IsFinite(far) || far <= near) throw new ArgumentOutOfRangeException(nameof(far));
     }
 
     internal static (D3D11Vertex[] Vertices, uint[] Indices) BuildCubeGeometry()
@@ -470,6 +466,7 @@ public static partial class LegacyGraphics
 
     internal static void ResetForTests()
     {
+        ClearCollisionGeometrySelectionCache();
         SceneDraws.Clear();
         RenderTraversal.Clear();
         _trianglesRendered = 0;
@@ -567,6 +564,7 @@ public static partial class LegacyGraphics
         public MeshGeometry Geometry { get; } = geometry ?? new MeshGeometry();
         public EntityMaterial Material { get; set; } = new();
         public AnimatedMesh? Animated { get; set; }
+        public PlaneState? Plane { get; set; }
         public List<int> SurfaceHandles => Geometry.SurfaceHandles;
         public long CollisionVersion { get; set; } = -1;
         public int Order { get; set; }
