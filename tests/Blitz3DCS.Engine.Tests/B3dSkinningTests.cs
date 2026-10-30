@@ -78,9 +78,10 @@ public sealed class B3dSkinningTests
 
         skin.DeformInto(pose, positions, normals);
 
-        AssertPoint((0, 2, 0), ToVector3(positions[0]));
-        // A single influence keeps upstream's unnormalized cofactor normal: cross(z, x) * ny = -2x.
-        AssertPoint((-2, 0, 0), ToVector3(normals[0]));
+        // Upstream Matrix(Quat) maps X to (1-2(y²+z²), 2(xy-wz), 2(xz+wy)) = -Y for this quarter turn.
+        AssertPoint((0, -2, 0), ToVector3(positions[0]));
+        // A single influence keeps upstream's unnormalized cofactor normal: cross(z, x) * ny = 2x.
+        AssertPoint((2, 0, 0), ToVector3(normals[0]));
     }
 
     [Fact]
@@ -105,7 +106,7 @@ public sealed class B3dSkinningTests
         skin.DeformNormalsInto([new B3dVector3(0, 1, 0)], normals);
 
         // Cofactor transform for the quarter-turn and nonuniform scale matches the source path.
-        AssertPoint((-2, 0, 0), ToVector3(normals[0]));
+        AssertPoint((2, 0, 0), ToVector3(normals[0]));
     }
 
     [Fact]

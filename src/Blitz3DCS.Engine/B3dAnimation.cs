@@ -129,9 +129,7 @@ public static class B3dAnimationEvaluator
             var position = SampleVector(nodeTracks.Position, frame, source.Position, positionChannel: true, rangeStartFrame, rangeEndFrame);
             var scale = SampleVector(nodeTracks.Scale, frame, source.Scale, positionChannel: false, rangeStartFrame, rangeEndFrame);
             var rotation = SampleRotation(nodeTracks.Rotation, frame, source.Rotation, rangeStartFrame, rangeEndFrame);
-            var local = Matrix4x4.CreateScale(scale.X, scale.Y, scale.Z)
-                        * Matrix4x4.CreateFromQuaternion(ToNumerics(rotation))
-                        * Matrix4x4.CreateTranslation(position.X, position.Y, position.Z);
+            var local = ComposeLocalMatrix(position, scale, rotation);
             var parentIndex = parentIndices[index];
             var modelMatrix = parentIndex < 0 ? local : local * destination[parentIndex].ModelMatrix;
             destination[index] = new B3dPoseNode(source, parentIndex, position, scale, rotation, local, modelMatrix,
@@ -257,5 +255,14 @@ public static class B3dAnimationEvaluator
             from.Z * fromWeight + to.Z * toWeight);
     }
 
-    private static Quaternion ToNumerics(B3dQuaternion value) => new(value.X, value.Y, value.Z, value.W);
+    /// <summary>
+    /// Builds a row-vector local matrix (scale, rotation, translation) for a B3D node or key.
+    /// B3D quaternions follow the source engine's Matrix(Quat) convention, which maps the X axis to
+    /// (1-2(y²+z²), 2(xy-wz), 2(xz+wy)): the conjugate of System.Numerics' rotation for the same
+    /// components. Using that convention keeps these matrices identical to the scene graph's.
+    /// </summary>
+    internal static Matrix4x4 ComposeLocalMatrix(B3dVector3 position, B3dVector3 scale, B3dQuaternion rotation) =>
+        Matrix4x4.CreateScale(scale.X, scale.Y, scale.Z)
+        * Matrix4x4.CreateFromQuaternion(Quaternion.Normalize(new Quaternion(-rotation.X, -rotation.Y, -rotation.Z, rotation.W)))
+        * Matrix4x4.CreateTranslation(position.X, position.Y, position.Z);
 }

@@ -96,10 +96,7 @@ public static partial class LegacyGraphics
 
         void Visit(B3dNode node, Matrix4x4 parent)
         {
-            var q = node.Rotation;
-            var world = Matrix4x4.CreateScale(node.Scale.X, node.Scale.Y, node.Scale.Z)
-                * Matrix4x4.CreateFromQuaternion(new Quaternion(q.X, q.Y, q.Z, q.W))
-                * Matrix4x4.CreateTranslation(node.Position.X, node.Position.Y, node.Position.Z) * parent;
+            var world = B3dAnimationEvaluator.ComposeLocalMatrix(node.Position, node.Scale, node.Rotation) * parent;
             // The original collapse walks children before consuming their parent mesh.
             foreach (var child in node.Children) Visit(child, world);
             if (node.Mesh is not { } mesh) return;

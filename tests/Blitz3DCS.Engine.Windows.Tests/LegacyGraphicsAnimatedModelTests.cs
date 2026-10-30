@@ -169,6 +169,76 @@ public sealed class LegacyGraphicsAnimatedModelTests
         }
     }
 
+    [Fact]
+    public void Skinned_rest_pose_with_rotated_bones_reproduces_bind_vertices_for_loads_and_scaled_copies()
+    {
+        // Bones with non-identity rest rotations (as in every biped rig) must skin to their bind shape:
+        // the bind matrices and the scene graph have to share the source quaternion convention.
+        var previous = LegacyScene.Current;
+        var file = Path.Combine(Path.GetTempPath(), $"blitz-rotated-bones-{Guid.NewGuid():N}.b3d");
+        LegacyGraphics.ResetForTests();
+        LegacyScene.Current = new SceneGraph();
+        try
+        {
+            File.WriteAllBytes(file, RotatedBoneModelBytes());
+            var root = LegacyGraphics.LoadAnimMesh(file);
+            var copy = LegacyGraphics.CopyEntity(root);
+            LegacyScene.ScaleEntity(copy, 2, 2, 2);
+            LegacyGraphics.PrepareAnimatedGeometry();
+
+            foreach (var entity in new[] { root, copy })
+            {
+                var mesh = Assert.Single(LegacyGraphics.AnimatedModels[entity].Meshes);
+                Assert.NotNull(mesh.Skin);
+                for (var i = 0; i < RotatedBoneVertices.Length; i++)
+                {
+                    Assert.Equal(RotatedBoneVertices[i].X, mesh.Positions[i].X, 4);
+                    Assert.Equal(RotatedBoneVertices[i].Y, mesh.Positions[i].Y, 4);
+                    Assert.Equal(RotatedBoneVertices[i].Z, mesh.Positions[i].Z, 4);
+                }
+            }
+        }
+        finally
+        {
+            LegacyGraphics.ResetForTests();
+            LegacyScene.Current = previous;
+            File.Delete(file);
+        }
+    }
+
+    private static readonly Vector3[] RotatedBoneVertices = [new(1, 0, 0), new(0, 3, 0), new(1, 2, 1)];
+
+    private static byte[] RotatedBoneModelBytes()
+    {
+        var vertices = Chunk("VRTS", Write(w =>
+        {
+            w.Write(0); // no normals or colors
+            w.Write(1); // one UV set
+            w.Write(2); // two components
+            foreach (var p in RotatedBoneVertices) Floats(w, p.X, p.Y, p.Z, 0, 0);
+        }));
+        var triangles = Chunk("TRIS", Write(w => { w.Write(-1); w.Write(0); w.Write(1); w.Write(2); }));
+        var meshChunk = Chunk("MESH", Write(w => { w.Write(-1); w.Write(vertices); w.Write(triangles); }));
+        var half = MathF.Sqrt(.5f);
+        var tipBone = Chunk("BONE", Write(w => { w.Write(1); w.Write(1f); w.Write(2); w.Write(.5f); }));
+        var tip = Chunk("NODE", Write(w =>
+        {
+            String(w, "tip");
+            Floats(w, 1, 0, 0, 1, 1, 1, half, half, 0, 0); // quarter turn about X
+            w.Write(tipBone);
+        }));
+        var armBone = Chunk("BONE", Write(w => { w.Write(0); w.Write(1f); w.Write(2); w.Write(.5f); }));
+        var arm = Chunk("NODE", Write(w =>
+        {
+            String(w, "arm");
+            Floats(w, 0, 2, 0, 1, 1, 1, half, 0, 0, half); // quarter turn about Z
+            w.Write(armBone);
+            w.Write(tip);
+        }));
+        var root = Chunk("NODE", Write(w => { Header(w, "mesh", 0, 1, 1, 1); w.Write(meshChunk); w.Write(arm); }));
+        return Chunk("BB3D", Write(w => { w.Write(1); w.Write(root); }));
+    }
+
     internal static byte[] AnimatedModelBytes(bool keyedRoot = true)
     {
         var vertices = Chunk("VRTS", Write(w =>

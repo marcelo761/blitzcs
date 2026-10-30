@@ -221,9 +221,7 @@ public sealed class B3dSkinningBuffer
         for (var index = 0; index < pose.Count; index++)
         {
             var node = sourceNodes[index];
-            var local = Matrix4x4.CreateScale(node.Scale.X, node.Scale.Y, node.Scale.Z)
-                        * Matrix4x4.CreateFromQuaternion(new Quaternion(node.Rotation.X, node.Rotation.Y, node.Rotation.Z, node.Rotation.W))
-                        * Matrix4x4.CreateTranslation(node.Position.X, node.Position.Y, node.Position.Z);
+            var local = B3dAnimationEvaluator.ComposeLocalMatrix(node.Position, node.Scale, node.Rotation);
             var parent = parents[index];
             matrices[index] = parent < 0 ? local : local * matrices[parent];
         }

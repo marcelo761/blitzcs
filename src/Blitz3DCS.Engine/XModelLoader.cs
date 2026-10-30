@@ -128,7 +128,7 @@ public static class XModelLoader
             if (item.Identifier.Equals("Frame", StringComparison.OrdinalIgnoreCase))
                 root.Children.Add(BuildFrame(item, textures, brushes, materialDefinitions));
             else if (item.Identifier.Equals("Mesh", StringComparison.OrdinalIgnoreCase))
-                root.Mesh = BuildMesh(item, textures, brushes, materialDefinitions);
+                root.Mesh = AppendMesh(root.Mesh, BuildMesh(item, textures, brushes, materialDefinitions));
         }
         return new B3dModel(0, root, textures, brushes, null, null);
     }
@@ -156,14 +156,40 @@ public static class XModelLoader
                     throw new InvalidDataException("A frame transform cannot be decomposed.");
                 node.Position = V(position);
                 node.Scale = V(scale);
-                node.Rotation = new B3dQuaternion(rotation.W, rotation.X, rotation.Y, rotation.Z);
+                // Decompose returns a System.Numerics quaternion; B3D nodes use the source engine's
+                // Matrix(Quat) convention, which is its conjugate (see B3dAnimationEvaluator.ComposeLocalMatrix).
+                node.Rotation = new B3dQuaternion(rotation.W, -rotation.X, -rotation.Y, -rotation.Z);
             }
             else if (child.Identifier.Equals("Mesh", StringComparison.OrdinalIgnoreCase))
-                node.Mesh = BuildMesh(child, textures, brushes, materialDefinitions);
+                node.Mesh = AppendMesh(node.Mesh, BuildMesh(child, textures, brushes, materialDefinitions));
             else if (child.Identifier.Equals("Frame", StringComparison.OrdinalIgnoreCase))
                 node.Children.Add(BuildFrame(child, textures, brushes, materialDefinitions));
         }
         return node;
+    }
+
+    /// <summary>
+    /// Every Mesh inside one frame adds its geometry to that frame's model, as the source X loader does
+    /// (each parsed mesh ends in the same MeshModel and joins the surface that has its brush).
+    /// </summary>
+    private static B3dMesh AppendMesh(B3dMesh? existing, B3dMesh next)
+    {
+        if (existing is null) return next;
+        var offset = existing.Vertices.Count;
+        if ((next.VertexFlags & 1) == 0) existing.VertexFlags &= ~1;
+        existing.Vertices.AddRange(next.Vertices);
+        foreach (var source in next.TriangleGroups)
+        {
+            var group = existing.TriangleGroups.Find(candidate => candidate.BrushId == source.BrushId);
+            if (group is null)
+            {
+                group = new B3dTriangleGroup(source.BrushId);
+                existing.TriangleGroups.Add(group);
+            }
+            foreach (var triangle in source.Triangles)
+                group.Triangles.Add(new B3dTriangle(triangle.A + offset, triangle.B + offset, triangle.C + offset));
+        }
+        return existing;
     }
 
     private static B3dMesh BuildMesh(XObject source, List<B3dTexture> textures, List<B3dBrush> brushes,
@@ -347,12 +373,23 @@ public static class XModelLoader
         var alpha = numbers.Count >= 4 && numbers[3] != 0 ? (float)numbers[3] : 1;
         var color = numbers.Count >= 4 ? new B3dColor((float)numbers[0], (float)numbers[1], (float)numbers[2], alpha) : new B3dColor(1, 1, 1, 1);
         var textureFile = source?.Children.FirstOrDefault(child => child.Identifier.Equals("TextureFilename", StringComparison.OrdinalIgnoreCase))?.Strings.FirstOrDefault();
+        if (string.IsNullOrEmpty(textureFile)) textureFile = null;
+        else color = new B3dColor(1, 1, 1, color.A);
+
+        // Equal brushes share one id, so their faces share one surface like the source's findSurface(brush).
+        for (var index = 0; index < brushes.Count; index++)
+        {
+            var candidate = brushes[index];
+            var candidateTexture = candidate.TextureIds.Count == 0 ? null : textures[candidate.TextureIds[0]].Name;
+            if (candidate.Color == color && string.Equals(candidateTexture, textureFile, StringComparison.OrdinalIgnoreCase))
+                return index;
+        }
+
         var textureIds = Array.Empty<int>();
-        if (!string.IsNullOrEmpty(textureFile))
+        if (textureFile is not null)
         {
             textureIds = [textures.Count];
             textures.Add(new B3dTexture(textureFile, 0, 2, new(0, 0), new(1, 1), 0));
-            color = new B3dColor(1, 1, 1, color.A);
         }
         // The Blitz3D X loader reads face color and alpha only; X power/specular/emissive are ignored.
         brushes.Add(new B3dBrush(source?.Name ?? "", color, 0, 0, 0, textureIds));

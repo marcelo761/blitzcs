@@ -9,6 +9,66 @@ namespace Blitz3DCS.Engine.Tests;
 public sealed class XModelLoaderTests
 {
     [Fact]
+    public void Every_mesh_in_a_frame_contributes_geometry_and_equal_materials_share_a_group()
+    {
+        // 3D World Studio exports (e.g. door frames) place many brush meshes directly inside one frame.
+        var text = """
+            xof 0302txt 0064
+            Material metal { 1.0;1.0;1.0;1.0;; 1.0; 1.0;1.0;1.0;; 0.0;0.0;0.0;; TextureFilename { "metal.jpg"; } }
+            Frame World {
+              FrameTransformMatrix { 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1;; }
+              Mesh Brush1 { 3; 0;0;0;, 1;0;0;, 0;1;0;; 1; 3;0,1,2;; MeshMaterialList { 1; 1; 0;; { metal } } }
+              Mesh Brush2 { 3; 10;0;0;, 11;0;0;, 10;1;0;; 1; 3;0,1,2;; MeshMaterialList { 1; 1; 0;; { metal } } }
+            }
+            """;
+        using var stream = new MemoryStream(Encoding.ASCII.GetBytes(text));
+
+        var model = XModelLoader.Load(stream);
+
+        var mesh = Assert.IsType<B3dMesh>(Assert.Single(model.Root.Children).Mesh);
+        Assert.Equal(6, mesh.Vertices.Count);
+        Assert.Equal(new B3dVector3(10, 0, 0), mesh.Vertices[3].Position);
+        var group = Assert.Single(mesh.TriangleGroups);
+        Assert.Equal(new[] { new B3dTriangle(0, 1, 2), new B3dTriangle(3, 4, 5) }, group.Triangles);
+        Assert.Single(model.Brushes);
+        Assert.Single(model.Textures);
+    }
+
+    [Fact]
+    public void Rotated_frame_matrix_round_trips_through_the_source_quaternion_convention()
+    {
+        // Row-vector X matrix for a quarter turn that maps +X to +Y.
+        var text = """
+            xof 0303txt 0032
+            Frame Turned {
+              FrameTransformMatrix { 0,1,0,0, -1,0,0,0, 0,0,1,0, 0,0,0,1;; }
+              Mesh { 3; 1;0;0;, 0;1;0;, 0;0;1;; 1; 3;0,1,2;; }
+            }
+            """;
+        using var stream = new MemoryStream(Encoding.ASCII.GetBytes(text));
+        var model = XModelLoader.Load(stream);
+        var pose = new B3dPose(model);
+        B3dAnimationEvaluator.EvaluateInto(model, 0, pose);
+
+        var expected = new Vector3(0, 1, 0);
+        var poseResult = Vector3.Transform(Vector3.UnitX, pose.Nodes[1].ModelMatrix);
+        Assert.Equal(expected.X, poseResult.X, 4);
+        Assert.Equal(expected.Y, poseResult.Y, 4);
+        Assert.Equal(expected.Z, poseResult.Z, 4);
+
+        // The scene graph must agree with the pose matrices for the same stored quaternion.
+        var scene = new SceneGraph();
+        var entity = scene.CreatePivot();
+        var node = model.Root.Children[0];
+        scene.SetLocalPose(entity, new SceneVector3(0, 0, 0), new SceneVector3(1, 1, 1),
+            node.Rotation.W, node.Rotation.X, node.Rotation.Y, node.Rotation.Z);
+        var sceneResult = scene.GetWorldTransform(entity).TransformPoint(new SceneVector3(1, 0, 0));
+        Assert.Equal(expected.X, sceneResult.X, 4);
+        Assert.Equal(expected.Y, sceneResult.Y, 4);
+        Assert.Equal(expected.Z, sceneResult.Z, 4);
+    }
+
+    [Fact]
     public void Loads_text_frames_mesh_materials_normals_uvs_and_polygon_fan()
     {
         var text = """

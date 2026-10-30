@@ -46,7 +46,8 @@ public sealed class B3dAnimationTests
         var rootNode = halfway;
         Assert.Equal(5, halfway.LocalPosition.X, 4);
         var rotated = Vector3.TransformNormal(Vector3.UnitX, halfway.LocalMatrix);
-        AssertPoint((.70710677f, .70710677f, 0), rotated);
+        // Upstream Matrix(Quat) convention: a positive Z quaternion turns +X toward -Y.
+        AssertPoint((.70710677f, -.70710677f, 0), rotated);
 
         B3dAnimationEvaluator.EvaluateInto(model, 10, pose);
         Assert.Equal(0, pose.Nodes[0].LocalPosition.X);
