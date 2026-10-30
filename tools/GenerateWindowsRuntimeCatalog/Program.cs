@@ -6,6 +6,7 @@ using Blitz3DCS.Engine;
 using Blitz3DCS.Engine.Windows;
 using Blitz3DCS.Runtime;
 using Blitz3DCS.Windowing;
+using BlitzCS.LegacyRuntime;
 
 var repository = FindRepository();
 var output = Path.GetFullPath(args.Length > 0 ? args[0] : Path.Combine(repository, "artifacts", "windows-runtime-catalog"));
@@ -35,11 +36,14 @@ foreach (var item in baseCatalog.RootElement.GetProperty("functions").EnumerateA
     functions[name] = function;
 }
 
-foreach (var type in new[] { typeof(LegacyScene), typeof(LegacyGraphics), typeof(LegacyWindowBindings), typeof(LegacyKernel32Bindings), typeof(LegacyInput), typeof(LegacyMath), typeof(LegacyStreams), typeof(LegacyCompression), typeof(LegacyZip), typeof(LegacySystem) })
+// Generic commands are registered before Windows adapters, which own native
+// window handles and graphics-aware scene operations with the same BASIC names.
+foreach (var type in new[] { typeof(LegacySystem), typeof(LegacyScene), typeof(LegacyMath), typeof(LegacyStreams), typeof(LegacyCompression), typeof(LegacyZip), typeof(LegacyErrors), typeof(LegacyWindowBindings), typeof(LegacyKernel32Bindings), typeof(LegacyInput), typeof(LegacyGraphics) })
 {
     foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
     {
         if (method.IsSpecialName) continue;
+        if (type == typeof(LegacyErrors) && method.Name != nameof(LegacyErrors.ErrorLog)) continue;
         var parameters = method.GetParameters();
         var names = new JsonArray();
         foreach (var parameter in parameters) names.Add(ParameterType(parameter));
@@ -62,9 +66,12 @@ foreach (var type in new[] { typeof(LegacyScene), typeof(LegacyGraphics), typeof
     }
 }
 
-foreach (var cameraCommand in new[] { "CameraProjMode", "CameraZoom" })
+foreach (var cameraCommand in new[] { "CameraProjMode", "CameraZoom", "AppTitle" })
     if (!functions.TryGetValue(cameraCommand, out var cameraFunction) || cameraFunction["type"]?.GetValue<string>() != typeof(LegacyGraphics).FullName)
         throw new InvalidDataException($"Legacy graphics camera command {cameraCommand} is missing or bound to the wrong runtime type.");
+
+if (functions["SystemProperty"]["type"]?.GetValue<string>() != typeof(LegacyWindowBindings).FullName)
+    throw new InvalidDataException("SystemProperty must bind through the Windows adapter to expose the application HWND.");
 
 if (functions["CopyEntity"]["type"]?.GetValue<string>() != typeof(LegacyGraphics).FullName)
     throw new InvalidDataException("The runtime catalog must bind CopyEntity through LegacyGraphics so graphics-owned subtrees are protected.");
