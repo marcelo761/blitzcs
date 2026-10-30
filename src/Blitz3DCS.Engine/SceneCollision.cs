@@ -32,6 +32,10 @@ public sealed partial class SceneGraph
     private readonly List<Node>?[] _collisionEntitiesByType = new List<Node>?[MaxCollisionType];
     private readonly CollisionPlane[] _collisionPlanes = new CollisionPlane[2];
     internal bool ForceLinearPolygonSearchForTesting { get; set; }
+    private long _polygonGeometrySelectionVersion;
+
+    /// <summary>Changes when entity membership in polygon collision geometry can change.</summary>
+    public long PolygonGeometrySelectionVersion => _polygonGeometrySelectionVersion;
 
     /// <summary>Sets an entity's collision type. A nonzero recursive flag applies it to descendants.</summary>
     public void EntityType(int entity, int type, bool recursive = false)
@@ -45,6 +49,7 @@ public sealed partial class SceneGraph
             state.Type = type;
             ResetCollisionState(state, target);
         }
+        _polygonGeometrySelectionVersion++;
     }
 
     public int GetEntityType(int entity) => GetCollisionState(entity).Type;
@@ -80,6 +85,15 @@ public sealed partial class SceneGraph
         state.TriangleCandidates.Clear();
     }
 
+    /// <summary>Uses an entity's local y=0 plane as infinite polygon collision geometry.</summary>
+    public void SetInfinitePlane(int entity, bool enabled = true)
+    {
+        GetCollisionState(entity).InfinitePlane = enabled;
+        _polygonGeometrySelectionVersion++;
+    }
+
+    internal bool HasTriangleColliderForTesting(int entity) => GetCollisionState(entity).TriangleCollider is not null;
+
     /// <summary>Registers a directed type-pair collision rule; the first destination rule wins.</summary>
     public void Collisions(int sourceType, int destinationType, int method, int response)
     {
@@ -89,10 +103,15 @@ public sealed partial class SceneGraph
         if (response is < CollisionResponseNone or > CollisionResponseSlideXZ) throw new ArgumentOutOfRangeException(nameof(response));
         if (_collisionRules.Any(rule => rule.SourceType == sourceType && rule.DestinationType == destinationType)) return;
         _collisionRules.Add(new(sourceType, destinationType, method, response));
+        _polygonGeometrySelectionVersion++;
     }
 
     /// <summary>Clears configured type-pair rules. Existing collision results remain until the next update.</summary>
-    public void ClearCollisions() => _collisionRules.Clear();
+    public void ClearCollisions()
+    {
+        _collisionRules.Clear();
+        _polygonGeometrySelectionVersion++;
+    }
 
     /// <summary>Updates collision results and responses using movement since the previous update.</summary>
     public void UpdateWorld(float elapsed = 1)
@@ -152,6 +171,7 @@ public sealed partial class SceneGraph
 
     internal void ForgetCollisionState(int entity)
     {
+        _polygonGeometrySelectionVersion++;
         _collisionEntities.Remove(entity);
         if (_pickedEntity == entity) _pickedEntity = 0;
         foreach (var state in _collisionEntities.Values)
@@ -160,6 +180,7 @@ public sealed partial class SceneGraph
 
     internal void CopyCollisionState(int source, int destination)
     {
+        _polygonGeometrySelectionVersion++;
         if (!_collisionEntities.TryGetValue(source, out var sourceState)) return;
         var target = GetNode(destination);
         var state = new CollisionEntityState
@@ -170,6 +191,7 @@ public sealed partial class SceneGraph
             BoxMaximum = sourceState.BoxMaximum,
             PickMode = sourceState.PickMode,
             PickObscurer = sourceState.PickObscurer,
+            InfinitePlane = sourceState.InfinitePlane,
             Triangles = sourceState.Triangles.ToArray(),
             PreviousTransform = GetWorldTransform(target),
             HasPreviousTransform = true
@@ -390,6 +412,26 @@ public sealed partial class SceneGraph
         if (rule.Method == CollisionMethodPolygon)
         {
             var scaled = ScaleTransformY(targetTransform, yScale);
+            if (targetState.InfinitePlane)
+            {
+                var matrix = new Matrix3(scaled.BasisX, scaled.BasisY, scaled.BasisZ);
+                var determinant = Dot(matrix.I, Cross(matrix.J, matrix.K));
+                if (MathF.Abs(determinant) <= Epsilon) return false;
+                var localStart = matrix.InverseTransform(Subtract(lineStart, scaled.Position));
+                var localDirection = matrix.InverseTransform(lineDirection);
+                if (MathF.Abs(localDirection.Y) <= Epsilon) return false;
+
+                // Match PlaneModel::collide: offset the local plane by the source radius,
+                // then transform its +Y normal with the target cofactor matrix.
+                var time = (radius - localStart.Y) / localDirection.Y;
+                if (time >= maxTime) return false;
+                var normal = Normalize(CofactorTransform(scaled, new(0, 1, 0)));
+                var contact = Add(lineStart, Multiply(lineDirection, time));
+                if (!UpdateCollision(lineStart, lineDirection, time, normal, contact, maxTime)) return false;
+                hit = new(target, rule, time, normal, ushort.MaxValue);
+                return true;
+            }
+
             var found = false;
             var bestTime = maxTime;
             var bestNormal = default(SceneVector3);
@@ -600,6 +642,7 @@ public sealed partial class SceneGraph
         public SceneVector3 BoxMaximum { get; set; } = new(1, 1, 1);
         public int PickMode { get; set; }
         public bool PickObscurer { get; set; }
+        public bool InfinitePlane { get; set; }
         public SceneCollisionTriangle[] Triangles { get; set; } = [];
         public SceneTriangleCollider? TriangleCollider { get; set; }
         public List<int> TriangleCandidates { get; } = [];

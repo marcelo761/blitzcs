@@ -14,6 +14,7 @@ public sealed partial class SceneGraph
         var state = GetCollisionState(entity);
         state.PickMode = mode;
         state.PickObscurer = obscurer;
+        _polygonGeometrySelectionVersion++;
     }
 
     /// <summary>Whether this entity needs polygon geometry for collision or picking queries.</summary>

@@ -91,6 +91,114 @@ public sealed class SceneCollisionTests
     }
 
     [Fact]
+    public void Infinite_plane_collision_uses_parented_world_transform_and_stops_swept_sphere()
+    {
+        var scene = new SceneGraph();
+        var parent = scene.CreatePivot();
+        var plane = scene.CreatePivot(parent);
+        var source = scene.CreatePivot();
+        scene.PositionEntity(parent, 1, 2, 3);
+        scene.RotateEntity(parent, 90, 0, 0);
+        scene.PositionEntity(plane, 0, 0, 2);
+        scene.SetInfinitePlane(plane);
+        scene.EntityType(source, 1);
+        scene.EntityType(plane, 2);
+        scene.EntityRadius(source, .5f);
+        scene.Collisions(1, 2, method: 2, response: 1);
+
+        var transform = scene.GetWorldTransform(plane);
+        var normal = scene.TransformNormal(new(0, 1, 0), source: plane);
+        var start = new SceneVector3(transform.Position.X + normal.X * 2, transform.Position.Y + normal.Y * 2, transform.Position.Z + normal.Z * 2);
+        var end = new SceneVector3(transform.Position.X - normal.X * 2, transform.Position.Y - normal.Y * 2, transform.Position.Z - normal.Z * 2);
+        scene.PositionEntity(source, start.X, start.Y, start.Z, global: true);
+        scene.ResetEntity(source);
+        scene.PositionEntity(source, end.X, end.Y, end.Z, global: true);
+
+        scene.UpdateWorld();
+
+        Assert.Equal(1, scene.CountCollisions(source));
+        Assert.Equal(plane, scene.CollisionEntity(source, 1));
+        Assert.Equal(.375f, scene.CollisionTime(source, 1), 4);
+        Assert.Equal(normal.X, scene.CollisionNX(source, 1), 4);
+        Assert.Equal(normal.Y, scene.CollisionNY(source, 1), 4);
+        Assert.Equal(normal.Z, scene.CollisionNZ(source, 1), 4);
+        Assert.Equal(transform.Position.X, scene.CollisionX(source, 1), 4);
+        Assert.Equal(transform.Position.Y, scene.CollisionY(source, 1), 4);
+        Assert.Equal(transform.Position.Z, scene.CollisionZ(source, 1), 4);
+    }
+
+    [Fact]
+    public void Infinite_plane_collision_slides_along_plane_and_does_not_build_triangle_bvh()
+    {
+        var scene = new SceneGraph();
+        var plane = scene.CreatePivot();
+        var source = scene.CreatePivot();
+        scene.PositionEntity(plane, 0, 1, 0);
+        scene.SetInfinitePlane(plane);
+        scene.EntityType(plane, 2);
+        scene.EntityType(source, 1);
+        scene.EntityRadius(source, .5f);
+        scene.Collisions(1, 2, method: 2, response: 2);
+        scene.PositionEntity(source, 0, 4, 0);
+        scene.ResetEntity(source);
+        scene.PositionEntity(source, 5, -2, 4);
+
+        scene.UpdateWorld();
+
+        Assert.Equal(1, scene.CountCollisions(source));
+        Assert.Equal(1.499f, scene.EntityY(source, global: true), 2);
+        Assert.Equal(5, scene.EntityX(source, global: true), 3);
+        Assert.Equal(4, scene.EntityZ(source, global: true), 3);
+        Assert.False(scene.HasTriangleColliderForTesting(plane));
+    }
+
+    [Fact]
+    public void Infinite_plane_does_not_hit_when_contact_is_exactly_at_sweep_endpoint()
+    {
+        var scene = new SceneGraph();
+        var plane = scene.CreatePivot();
+        var source = scene.CreatePivot();
+        scene.SetInfinitePlane(plane);
+        scene.EntityType(plane, 2);
+        scene.EntityType(source, 1);
+        scene.EntityRadius(source, .5f);
+        scene.Collisions(1, 2, method: 2, response: 1);
+        scene.PositionEntity(source, 0, 1.5f, 0);
+        scene.ResetEntity(source);
+        scene.PositionEntity(source, 0, .5f, 0);
+
+        scene.UpdateWorld();
+
+        Assert.Equal(0, scene.CountCollisions(source));
+        Assert.Equal(.5f, scene.EntityY(source, global: true), 4);
+    }
+
+    [Fact]
+    public void Earlier_polygon_hit_wins_equal_time_tie_with_infinite_plane()
+    {
+        var scene = new SceneGraph();
+        var triangle = scene.CreatePivot();
+        var plane = scene.CreatePivot();
+        var source = scene.CreatePivot();
+        scene.SetCollisionTriangles(triangle, [new(
+            new(-5, 0, -5), new(0, 0, 5), new(5, 0, -5), Index: 42)]);
+        scene.SetInfinitePlane(plane);
+        scene.EntityType(triangle, 2);
+        scene.EntityType(plane, 2);
+        scene.EntityType(source, 1);
+        scene.EntityRadius(source, .5f);
+        scene.Collisions(1, 2, method: 2, response: 1);
+        scene.PositionEntity(source, 0, 2, 0);
+        scene.ResetEntity(source);
+        scene.PositionEntity(source, 0, -2, 0);
+
+        scene.UpdateWorld();
+
+        Assert.Equal(triangle, scene.CollisionEntity(source, 1));
+        Assert.Equal(42, scene.CollisionTriangle(source, 1));
+    }
+
+    [Fact]
     public void Copy_preserves_collision_configuration_and_free_removes_sidecar_results()
     {
         var scene = new SceneGraph();
