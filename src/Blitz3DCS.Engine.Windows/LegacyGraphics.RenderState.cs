@@ -14,14 +14,13 @@ public static partial class LegacyGraphics
     }
 
     /// <summary>
-    /// Records the legacy full-scene antialias request. The Direct3D 11 backend has no multisampled
-    /// render path yet, so enabling it fails explicitly rather than pretending to antialias.
+    /// Selects full-scene multisampling using a sample count supported by color and depth targets.
     /// </summary>
     public static void AntiAlias(int enable)
     {
         CheckThreadIfStarted();
-        if (enable != 0)
-            throw new NotSupportedException("AntiAlias 1 is not implemented: the Direct3D 11 backend renders without multisampling. AntiAlias 0 is accepted.");
+        if (enable == 0 && _renderer is null) return;
+        RequireRenderer().SetAntialias(enable != 0);
     }
 
     /// <summary>Sets the global mip LOD bias used by every texture stage; it resets with each new display.</summary>

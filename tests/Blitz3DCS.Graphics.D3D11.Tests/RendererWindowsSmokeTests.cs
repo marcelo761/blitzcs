@@ -14,6 +14,199 @@ public sealed class RendererWindowsSmokeTests
         RunSmoke();
     }
 
+    [WindowsD3D11SmokeFact]
+    public void Antialias_resolves_reads_backbuffer_writes_copies_and_survives_resize()
+    {
+        RunAntialiasSmoke();
+    }
+
+    [WindowsD3D11SmokeFact]
+    public void Mutable_and_immutable_mipmaps_generate_and_regenerate_after_writes()
+    {
+        RunMipmapsSmoke();
+    }
+
+    [WindowsD3D11SmokeFact]
+    public void Texture_blend_alpha_and_bump_environment_modes_match_legacy_contract()
+    {
+        RunTextureBlendSmoke();
+    }
+
+    internal static void RunTextureBlendSmoke()
+    {
+        using var renderer = new D3D11Renderer(64, 64, "Blitz3DCS D3D11 texture blend smoke");
+        var fullscreen = new[]
+        {
+            new D3D11Vertex(new Vector3(-1, -1, .5f), Vector4.One, Vector3.UnitZ, new Vector2(.5f, .5f), new Vector2(.1875f, .5f)),
+            new D3D11Vertex(new Vector3(-1, 3, .5f), Vector4.One, Vector3.UnitZ, new Vector2(.5f, .5f), new Vector2(.1875f, .5f)),
+            new D3D11Vertex(new Vector3(3, -1, .5f), Vector4.One, Vector3.UnitZ, new Vector2(.5f, .5f), new Vector2(.1875f, .5f)),
+        };
+        using var mesh = renderer.CreateMesh(fullscreen, [0, 1, 2]);
+
+        using var alphaTexture = renderer.CreateTexture(1, 1, [0, 0, 255, 128]);
+        renderer.Clear(0, 0, 0);
+        renderer.DrawMesh(mesh, Matrix4x4.Identity,
+            [new D3D11TextureLayer(alphaTexture, Blend: 1, UseAlpha: false)],
+            materialColor: new Vector4(1, 0, 0, 1));
+        var alphaBlend = renderer.ReadPixelForTesting(32, 32);
+        Assert.InRange(alphaBlend.R, (byte)127, (byte)128);
+        Assert.Equal((byte)0, alphaBlend.G);
+        Assert.InRange(alphaBlend.B, (byte)127, (byte)128);
+        Assert.Equal((byte)255, alphaBlend.A);
+
+        var environmentPixels = new byte[8 * 4];
+        for (var x = 0; x < 8; x++)
+        {
+            environmentPixels[x * 4] = (byte)(x * 24);
+            environmentPixels[x * 4 + 1] = (byte)(255 - x * 24);
+            environmentPixels[x * 4 + 2] = (byte)(x * 17);
+            environmentPixels[x * 4 + 3] = 255;
+        }
+        using var bump = renderer.CreateTexture(1, 1, [255, 0, 0, 255]);
+        using var environment = renderer.CreateTexture(8, 1, environmentPixels);
+        renderer.Clear(0, 0, 0);
+        D3D11TextureLayer[] bumpLayers =
+        [
+            new(bump, Blend: 6, UseAlpha: false, BumpMatrix: new Vector4(.5f, .25f, .125f, .25f), BumpScale: 9, BumpOffset: -4),
+            new(environment, Blend: 2, UseAlpha: false, CoordinateSet: 1)
+        ];
+        renderer.DrawMesh(mesh, Matrix4x4.Identity, bumpLayers);
+        var bumped = renderer.ReadPixelForTesting(32, 32);
+        Assert.Equal((byte)(4 * 24), bumped.R);
+        Assert.Equal((byte)(255 - 4 * 24), bumped.G);
+        Assert.Equal((byte)(4 * 17), bumped.B);
+        Assert.Equal((byte)255, bumped.A);
+    }
+
+    internal static void RunAntialiasSmoke()
+    {
+        using var renderer = new D3D11Renderer(96, 80, "Blitz3DCS D3D11 MSAA smoke");
+        renderer.Clear(.13f, .27f, .41f);
+        renderer.SetViewport(20, 12, 48, 36);
+        renderer.UpdateTexturePixels(null, 5, 7, 2, 1, [23, 71, 149, 255, 181, 43, 97, 255]);
+        var originalFrame = renderer.ReadTexturePixels();
+
+        renderer.SetAntialias(true);
+        Assert.Contains(renderer.AntialiasSampleCount, new[] { 2, 4 });
+        var sampleCount = renderer.AntialiasSampleCount;
+        Assert.Equal(originalFrame, renderer.ReadTexturePixels());
+
+        renderer.SetAntialias(false);
+        Assert.Equal(1, renderer.AntialiasSampleCount);
+        Assert.Equal(originalFrame, renderer.ReadTexturePixels());
+        renderer.SetViewport(0, 0, 96, 80);
+        renderer.SetAntialias(true);
+
+        renderer.Clear(0, 0, 0);
+        var triangle = new[]
+        {
+            new D3D11Vertex(new Vector3(-.83f, -.71f, .5f), Vector4.One),
+            new D3D11Vertex(new Vector3(.19f, .89f, .5f), Vector4.One),
+            new D3D11Vertex(new Vector3(.81f, -.37f, .5f), Vector4.One),
+        };
+        renderer.DrawTriangles(triangle, [0, 1, 2], Matrix4x4.Identity);
+        var antialiasedPixels = renderer.ReadTexturePixels();
+        var antialiasedEdgePixels = CountPartialCoveragePixels(antialiasedPixels);
+        Assert.True(antialiasedEdgePixels > 0, "MSAA resolve should retain partial coverage at an edge pixel.");
+
+        renderer.SetAntialias(false);
+        renderer.Clear(0, 0, 0);
+        renderer.DrawTriangles(triangle, [0, 1, 2], Matrix4x4.Identity);
+        var singleSamplePixels = renderer.ReadTexturePixels();
+        Assert.Equal(0, CountPartialCoveragePixels(singleSamplePixels));
+
+        renderer.SetAntialias(true);
+        renderer.Clear(0, 0, 0);
+        renderer.DrawTriangles(triangle, [0, 1, 2], Matrix4x4.Identity);
+        var resolvedPixels = renderer.ReadTexturePixels();
+        Assert.True(CountPartialCoveragePixels(resolvedPixels) > 0);
+
+        using var copied = renderer.CreateMutableTexture(96, 80);
+        renderer.CopyTextureRegion(null, copied, 0, 0, 0, 0, 96, 80);
+        Assert.Equal(resolvedPixels, renderer.ReadTexturePixels(copied));
+        renderer.CopyTextureRegion(copied, null, 0, 0, 0, 0, 96, 80);
+        Assert.Equal(resolvedPixels, renderer.ReadTexturePixels());
+
+        renderer.UpdateTexturePixels(null, 8, 9, 1, 1, [23, 71, 149, 255]);
+        Assert.Equal(new Rgba32(23, 71, 149, 255), renderer.ReadPixelForTesting(8, 9));
+        renderer.Present(vsync: false);
+
+        renderer.Resize(112, 88);
+        Assert.Equal(sampleCount, renderer.AntialiasSampleCount);
+        renderer.Clear(.25f, .5f, .75f);
+        Assert.Equal(new Rgba32(64, 128, 191, 255), renderer.ReadPixelForTesting(3, 3));
+        renderer.Present(vsync: false);
+
+        renderer.SetAntialias(false);
+        Assert.Equal(1, renderer.AntialiasSampleCount);
+        renderer.Clear(0, 0, 0);
+    }
+
+    internal static void RunMipmapsSmoke()
+    {
+        using var renderer = new D3D11Renderer(64, 64, "Blitz3DCS D3D11 mipmap smoke");
+        var checker = new byte[8 * 8 * 4];
+        for (var y = 0; y < 8; y++)
+        for (var x = 0; x < 8; x++)
+        {
+            var offset = (y * 8 + x) * 4;
+            var value = (byte)(((x + y) & 1) == 0 ? 0 : 255);
+            checker[offset] = checker[offset + 1] = checker[offset + 2] = value;
+            checker[offset + 3] = 255;
+        }
+
+        using var singleLevel = renderer.CreateTexture(8, 8, checker);
+        using var mipTexture = renderer.CreateTexture(8, 8, checker, mipmaps: true);
+        using var mutableSingleLevel = renderer.CreateMutableTexture(8, 8);
+        using var mutableMipTexture = renderer.CreateMutableTexture(8, 8, mipmaps: true);
+        Assert.Equal(1, singleLevel.MipLevels);
+        Assert.Equal(1, mutableSingleLevel.MipLevels);
+        Assert.Equal(4, mipTexture.MipLevels);
+        Assert.Equal(4, mutableMipTexture.MipLevels);
+        AssertAverageCheckerMip(renderer.ReadTextureMipPixelsForTesting(mipTexture, 3));
+
+        renderer.UpdateTexturePixels(mutableMipTexture, 0, 0, 8, 8, checker);
+        renderer.DrawTextureRegion(mutableMipTexture, 0, 0, 8, 8, 0, 0, 1, 1, alphaBlend: false);
+        AssertAverageCheckerMip(renderer.ReadTextureMipPixelsForTesting(mutableMipTexture, 3));
+
+        renderer.ClearTexture(mutableMipTexture, 1, 0, 0, 1);
+        renderer.DrawTextureRegion(mutableMipTexture, 0, 0, 8, 8, 1, 0, 1, 1, alphaBlend: false);
+        Assert.Equal(new byte[] { 255, 0, 0, 255 }, renderer.ReadTextureMipPixelsForTesting(mutableMipTexture, 3));
+
+        renderer.CopyTextureRegion(mipTexture, mutableMipTexture, 0, 0, 0, 0, 8, 8);
+        renderer.DrawTextureRegion(mutableMipTexture, 0, 0, 8, 8, 2, 0, 1, 1, alphaBlend: false);
+        AssertAverageCheckerMip(renderer.ReadTextureMipPixelsForTesting(mutableMipTexture, 3));
+
+        renderer.DrawTextureRegion(mutableMipTexture, 0, 0, 8, 8, 0, 0, 8, 8,
+            alphaBlend: false, destination: mutableMipTexture);
+        AssertAverageCheckerMip(renderer.ReadTextureMipPixelsForTesting(mutableMipTexture, 3));
+
+        renderer.ClearTexture(mutableMipTexture, 0, 0, 0, 0);
+        renderer.DrawTextureRegion(mipTexture, 0, 0, 8, 8, 0, 0, 8, 8,
+            alphaBlend: false, destination: mutableMipTexture);
+        AssertAverageCheckerMip(renderer.ReadTextureMipPixelsForTesting(mutableMipTexture, 3));
+    }
+
+    private static int CountPartialCoveragePixels(byte[] rgbaPixels)
+    {
+        var count = 0;
+        for (var pixel = 0; pixel < rgbaPixels.Length / 4; pixel++)
+        {
+            var red = rgbaPixels[pixel * 4];
+            if (red is > 0 and < 255) count++;
+        }
+        return count;
+    }
+
+    private static void AssertAverageCheckerMip(byte[] pixel)
+    {
+        Assert.Equal(4, pixel.Length);
+        Assert.InRange(pixel[0], (byte)126, (byte)129);
+        Assert.InRange(pixel[1], (byte)126, (byte)129);
+        Assert.InRange(pixel[2], (byte)126, (byte)129);
+        Assert.Equal((byte)255, pixel[3]);
+    }
+
     internal static void RunSmoke()
     {
         using var renderer = new D3D11Renderer(320, 240, "Blitz3DCS D3D11 smoke");

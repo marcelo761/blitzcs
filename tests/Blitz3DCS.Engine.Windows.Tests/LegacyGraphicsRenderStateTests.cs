@@ -22,10 +22,10 @@ public sealed class LegacyGraphicsRenderStateTests
     }
 
     [Fact]
-    public void Antialias_enable_fails_explicitly_and_disable_is_accepted()
+    public void Antialias_enable_requires_an_active_display_and_disable_is_accepted()
     {
         LegacyGraphics.AntiAlias(0);
-        Assert.Throws<NotSupportedException>(() => LegacyGraphics.AntiAlias(1));
+        Assert.Throws<InvalidOperationException>(() => LegacyGraphics.AntiAlias(1));
     }
 
     [Fact]
@@ -64,7 +64,10 @@ public sealed class LegacyGraphicsRenderStateTests
             Assert.Throws<ArgumentOutOfRangeException>(() => LegacyGraphics.TextureBumpEnvMat(rep.Handle, 2, 0, 1));
             Assert.Throws<ArgumentOutOfRangeException>(() => LegacyGraphics.TextureBumpEnvMat(rep.Handle, 0, -1, 1));
             Assert.Throws<ArgumentOutOfRangeException>(() => LegacyGraphics.TextureBumpEnvScale(rep.Handle, float.NaN));
-            Assert.Throws<NotSupportedException>(() => LegacyGraphics.TextureBlend(rep.Handle, 6));
+            LegacyGraphics.TextureBlend(rep.Handle, 6);
+            Assert.Equal(6, rep.Blend);
+            LegacyGraphics.TextureBlend(rep.Handle, 1);
+            Assert.Equal(1, rep.Blend);
         }
         finally { LegacyGraphics.ForgetTextureForTesting(rep.Handle); }
         Assert.Throws<ArgumentException>(() => LegacyGraphics.TextureBumpEnvOffset(rep.Handle, 0));

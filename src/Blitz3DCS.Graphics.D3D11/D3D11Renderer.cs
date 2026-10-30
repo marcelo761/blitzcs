@@ -30,6 +30,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             float4 RegionFlags;
             float4 UvRowsX[8];
             float4 UvRowsY[8];
+            float4 BumpMatrices[8];
             float4 FogColor;
             float4 FogParameters;
             float4 Shininess;
@@ -152,7 +153,8 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         float4 PSColor(PixelInput input) : SV_TARGET { float4 result = ResolveColor(input); result.rgb = saturate(result.rgb + ResolveSpecular(input)); return ApplyFog(result, input.ViewDepth); }
         float4 BlendTexture(float4 current, float4 texel, int mode, float useAlpha)
         {
-            if (mode == 2) current.rgb *= texel.rgb;
+            if (mode == 1) current.rgb = lerp(current.rgb, texel.rgb, texel.a);
+            else if (mode == 2) current.rgb *= texel.rgb;
             else if (mode == 3) current.rgb = saturate(current.rgb + texel.rgb);
             else if (mode == 5) current.rgb = saturate(current.rgb * texel.rgb * 2.0);
             if (useAlpha != 0) current.a *= texel.a;
@@ -165,17 +167,73 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             float2 result = float2(dot(uv, UvRowsX[stage].xyz), dot(uv, UvRowsY[stage].xyz));
             return RegionFlags.x != 0 ? clamp(result, input.RegionUvBounds.xy, input.RegionUvBounds.zw) : result;
         }
+        float2 BumpedStageUV(PixelInput input, int stage)
+        {
+            float2 result = StageUV(input, stage);
+            float2 bump;
+            float4 coefficients;
+            if (stage == 1 && BlendModes0.x == 6)
+            {
+                bump = Texture0.Sample(Sampler0, StageUV(input, 0)).rg * 2.0 - 1.0;
+                coefficients = BumpMatrices[0];
+                result += float2(coefficients.x * bump.x + coefficients.z * bump.y,
+                    coefficients.y * bump.x + coefficients.w * bump.y);
+            }
+            else if (stage == 2 && BlendModes0.y == 6)
+            {
+                bump = Texture1.Sample(Sampler1, StageUV(input, 1)).rg * 2.0 - 1.0;
+                coefficients = BumpMatrices[1];
+                result += float2(coefficients.x * bump.x + coefficients.z * bump.y,
+                    coefficients.y * bump.x + coefficients.w * bump.y);
+            }
+            else if (stage == 3 && BlendModes0.z == 6)
+            {
+                bump = Texture2.Sample(Sampler2, StageUV(input, 2)).rg * 2.0 - 1.0;
+                coefficients = BumpMatrices[2];
+                result += float2(coefficients.x * bump.x + coefficients.z * bump.y,
+                    coefficients.y * bump.x + coefficients.w * bump.y);
+            }
+            else if (stage == 4 && BlendModes0.w == 6)
+            {
+                bump = Texture3.Sample(Sampler3, StageUV(input, 3)).rg * 2.0 - 1.0;
+                coefficients = BumpMatrices[3];
+                result += float2(coefficients.x * bump.x + coefficients.z * bump.y,
+                    coefficients.y * bump.x + coefficients.w * bump.y);
+            }
+            else if (stage == 5 && BlendModes1.x == 6)
+            {
+                bump = Texture4.Sample(Sampler4, StageUV(input, 4)).rg * 2.0 - 1.0;
+                coefficients = BumpMatrices[4];
+                result += float2(coefficients.x * bump.x + coefficients.z * bump.y,
+                    coefficients.y * bump.x + coefficients.w * bump.y);
+            }
+            else if (stage == 6 && BlendModes1.y == 6)
+            {
+                bump = Texture5.Sample(Sampler5, StageUV(input, 5)).rg * 2.0 - 1.0;
+                coefficients = BumpMatrices[5];
+                result += float2(coefficients.x * bump.x + coefficients.z * bump.y,
+                    coefficients.y * bump.x + coefficients.w * bump.y);
+            }
+            else if (stage == 7 && BlendModes1.z == 6)
+            {
+                bump = Texture6.Sample(Sampler6, StageUV(input, 6)).rg * 2.0 - 1.0;
+                coefficients = BumpMatrices[6];
+                result += float2(coefficients.x * bump.x + coefficients.z * bump.y,
+                    coefficients.y * bump.x + coefficients.w * bump.y);
+            }
+            return result;
+        }
         float4 PSTextured(PixelInput input) : SV_TARGET
         {
             float4 result = ResolveColor(input);
-            if (BlendModes0.x != 0) result = BlendTexture(result, Texture0.Sample(Sampler0, StageUV(input, 0)), (int)BlendModes0.x, UseAlpha0.x);
-            if (BlendModes0.y != 0) result = BlendTexture(result, Texture1.Sample(Sampler1, StageUV(input, 1)), (int)BlendModes0.y, UseAlpha0.y);
-            if (BlendModes0.z != 0) result = BlendTexture(result, Texture2.Sample(Sampler2, StageUV(input, 2)), (int)BlendModes0.z, UseAlpha0.z);
-            if (BlendModes0.w != 0) result = BlendTexture(result, Texture3.Sample(Sampler3, StageUV(input, 3)), (int)BlendModes0.w, UseAlpha0.w);
-            if (BlendModes1.x != 0) result = BlendTexture(result, Texture4.Sample(Sampler4, StageUV(input, 4)), (int)BlendModes1.x, UseAlpha1.x);
-            if (BlendModes1.y != 0) result = BlendTexture(result, Texture5.Sample(Sampler5, StageUV(input, 5)), (int)BlendModes1.y, UseAlpha1.y);
-            if (BlendModes1.z != 0) result = BlendTexture(result, Texture6.Sample(Sampler6, StageUV(input, 6)), (int)BlendModes1.z, UseAlpha1.z);
-            if (BlendModes1.w != 0) result = BlendTexture(result, Texture7.Sample(Sampler7, StageUV(input, 7)), (int)BlendModes1.w, UseAlpha1.w);
+            if (BlendModes0.x != 0 && BlendModes0.x != 6) result = BlendTexture(result, Texture0.Sample(Sampler0, BumpedStageUV(input, 0)), (int)BlendModes0.x, UseAlpha0.x);
+            if (BlendModes0.y != 0 && BlendModes0.y != 6) result = BlendTexture(result, Texture1.Sample(Sampler1, BumpedStageUV(input, 1)), (int)BlendModes0.y, UseAlpha0.y);
+            if (BlendModes0.z != 0 && BlendModes0.z != 6) result = BlendTexture(result, Texture2.Sample(Sampler2, BumpedStageUV(input, 2)), (int)BlendModes0.z, UseAlpha0.z);
+            if (BlendModes0.w != 0 && BlendModes0.w != 6) result = BlendTexture(result, Texture3.Sample(Sampler3, BumpedStageUV(input, 3)), (int)BlendModes0.w, UseAlpha0.w);
+            if (BlendModes1.x != 0 && BlendModes1.x != 6) result = BlendTexture(result, Texture4.Sample(Sampler4, BumpedStageUV(input, 4)), (int)BlendModes1.x, UseAlpha1.x);
+            if (BlendModes1.y != 0 && BlendModes1.y != 6) result = BlendTexture(result, Texture5.Sample(Sampler5, BumpedStageUV(input, 5)), (int)BlendModes1.y, UseAlpha1.y);
+            if (BlendModes1.z != 0 && BlendModes1.z != 6) result = BlendTexture(result, Texture6.Sample(Sampler6, BumpedStageUV(input, 6)), (int)BlendModes1.z, UseAlpha1.z);
+            if (BlendModes1.w != 0 && BlendModes1.w != 6) result = BlendTexture(result, Texture7.Sample(Sampler7, BumpedStageUV(input, 7)), (int)BlendModes1.w, UseAlpha1.w);
             if (RegionFlags.z != 0 && result.a <= RegionFlags.w) discard;
             result.rgb = saturate(result.rgb + ResolveSpecular(input));
             return ApplyFog(result, input.ViewDepth);
@@ -352,23 +410,36 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     }
 
     /// <summary>Creates an immutable RGBA8 texture from tightly packed row-major pixel data.</summary>
-    public D3D11Texture CreateTexture(int width, int height, ReadOnlySpan<byte> rgba8)
+    public D3D11Texture CreateTexture(int width, int height, ReadOnlySpan<byte> rgba8, bool mipmaps = false)
     {
         CheckAccess();
         ValidateTextureData(width, height, rgba8);
 
         var description = new Texture2DDescription(Format.R8G8B8A8_UNorm, (uint)width, (uint)height,
-            1, 1, BindFlags.ShaderResource, ResourceUsage.Immutable, CpuAccessFlags.None, 1, 0, ResourceOptionFlags.None);
+            1, mipmaps ? 0u : 1u, mipmaps ? BindFlags.ShaderResource | BindFlags.RenderTarget : BindFlags.ShaderResource,
+            mipmaps ? ResourceUsage.Default : ResourceUsage.Immutable, CpuAccessFlags.None, 1, 0,
+            mipmaps ? ResourceOptionFlags.GenerateMips : ResourceOptionFlags.None);
         ID3D11Texture2D? resource = null;
         ID3D11ShaderResourceView? view = null;
         try
         {
-            fixed (byte* pixels = rgba8)
+            if (mipmaps)
             {
-                var initialData = new SubresourceData((nint)pixels, checked((uint)(width * 4)), 0);
-                resource = _device!.CreateTexture2D(description, initialData);
+                resource = _device!.CreateTexture2D(description);
+                view = _device.CreateShaderResourceView(resource);
+                fixed (byte* pixels = rgba8)
+                    _context!.UpdateSubresource(resource, 0, null, (nint)pixels, checked((uint)(width * 4)), 0);
+                _context!.GenerateMips(view);
             }
-            view = _device!.CreateShaderResourceView(resource);
+            else
+            {
+                fixed (byte* pixels = rgba8)
+                {
+                    var initialData = new SubresourceData((nint)pixels, checked((uint)(width * 4)), 0);
+                    resource = _device!.CreateTexture2D(description, initialData);
+                }
+                view = _device!.CreateShaderResourceView(resource);
+            }
             var texture = new D3D11Texture(this, resource, view, width, height, mutable: false);
             _textures.Add(texture);
             return texture;
@@ -382,7 +453,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     }
 
     /// <summary>Creates a zero-initialized RGBA8 texture for GPU rendering and explicit pixel updates.</summary>
-    public D3D11Texture CreateMutableTexture(int width, int height)
+    public D3D11Texture CreateMutableTexture(int width, int height, bool mipmaps = false)
     {
         CheckAccess();
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
@@ -390,8 +461,8 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         _ = checked(checked(width * height) * 4);
 
         var description = new Texture2DDescription(Format.R8G8B8A8_UNorm, (uint)width, (uint)height,
-            1, 1, BindFlags.ShaderResource | BindFlags.RenderTarget, ResourceUsage.Default,
-            CpuAccessFlags.None, 1, 0, ResourceOptionFlags.None);
+            1, mipmaps ? 0u : 1u, BindFlags.ShaderResource | BindFlags.RenderTarget, ResourceUsage.Default,
+            CpuAccessFlags.None, 1, 0, mipmaps ? ResourceOptionFlags.GenerateMips : ResourceOptionFlags.None);
         ID3D11Texture2D? resource = null;
         ID3D11ShaderResourceView? shaderView = null;
         ID3D11RenderTargetView? renderView = null;
@@ -443,6 +514,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         {
             BindRenderTargets();
         }
+        texture.MarkMipmapsDirty();
     }
 
     /// <summary>
@@ -476,6 +548,37 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
                 sourceWidth, sourceHeight, destinationWidth, destinationHeight, out var region))
             return;
 
+        if (source is null)
+            ResolveBackBuffer();
+
+        if (_antialiasSampleCount > 1 && destination is null)
+        {
+            D3D11Texture? ownedSource = null;
+            try
+            {
+                var blitSource = source;
+                if (blitSource is null)
+                {
+                    ownedSource = CreateMutableTexture(_width, _height);
+                    using var backBuffer = _swapChain!.GetBuffer<ID3D11Texture2D>(0);
+                    _context!.CopyResource(ownedSource.Resource, backBuffer);
+                    blitSource = ownedSource;
+                }
+
+                Span<D3D11TextureRegion> regions = stackalloc D3D11TextureRegion[1]
+                {
+                    new(region.SourceX, region.SourceY, region.Width, region.Height,
+                        region.DestinationX, region.DestinationY, region.Width, region.Height)
+                };
+                DrawTextureRegions(blitSource, regions, alphaBlend: false);
+            }
+            finally
+            {
+                ownedSource?.Dispose();
+            }
+            return;
+        }
+
         ID3D11Texture2D? sourceBackBuffer = null;
         ID3D11Texture2D? destinationBackBuffer = null;
         ClearPipelineState();
@@ -486,7 +589,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             var sourceBox = new Box(region.SourceX, region.SourceY, 0,
                 region.SourceX + region.Width, region.SourceY + region.Height, 1);
 
-            if ((source is null && destination is null) || ReferenceEquals(source, destination))
+        if ((source is null && destination is null) || ReferenceEquals(source, destination))
             {
                 var temporaryDescription = new Texture2DDescription(Format.R8G8B8A8_UNorm,
                     (uint)region.Width, (uint)region.Height, 1, 1, BindFlags.None,
@@ -509,6 +612,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             sourceBackBuffer?.Dispose();
             BindRenderTargets();
         }
+        destination?.MarkMipmapsDirty();
     }
 
     /// <summary>Reads a texture or the backbuffer into tightly packed row-major RGBA8 bytes.</summary>
@@ -520,6 +624,8 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         var height = texture?.Height ?? _height;
         var rowBytes = checked(width * 4);
         var pixels = new byte[checked(rowBytes * height)];
+        if (texture is null)
+            ResolveBackBuffer();
         ID3D11Texture2D? backBuffer = null;
         ClearPipelineState();
         try
@@ -554,6 +660,45 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         }
     }
 
+    internal byte[] ReadTextureMipPixelsForTesting(D3D11Texture texture, int mipLevel)
+    {
+        CheckAccess();
+        ValidateTextureEndpoint(texture, nameof(texture));
+        ArgumentOutOfRangeException.ThrowIfNegative(mipLevel);
+        if (mipLevel >= texture.MipLevels) throw new ArgumentOutOfRangeException(nameof(mipLevel));
+        EnsureMipmapsGenerated(texture);
+
+        var width = Math.Max(1, texture.Width >> mipLevel);
+        var height = Math.Max(1, texture.Height >> mipLevel);
+        var pixels = new byte[checked(width * height * 4)];
+        ClearPipelineState();
+        try
+        {
+            var description = new Texture2DDescription(Format.R8G8B8A8_UNorm, (uint)width, (uint)height,
+                1, 1, BindFlags.None, ResourceUsage.Staging, CpuAccessFlags.Read, 1, 0, ResourceOptionFlags.None);
+            using var staging = _device!.CreateTexture2D(description);
+            _context!.CopySubresourceRegion(staging, 0, 0, 0, 0, texture.Resource, (uint)mipLevel, null);
+            var mapped = _context.Map(staging, 0, MapMode.Read);
+            try
+            {
+                var rowBytes = checked(width * 4);
+                var mappedPixels = new ReadOnlySpan<byte>((void*)mapped.DataPointer, checked((int)(mapped.RowPitch * (uint)height)));
+                for (var y = 0; y < height; y++)
+                    mappedPixels.Slice(checked(y * (int)mapped.RowPitch), rowBytes)
+                        .CopyTo(pixels.AsSpan(checked(y * rowBytes), rowBytes));
+            }
+            finally
+            {
+                _context.Unmap(staging, 0);
+            }
+            return pixels;
+        }
+        finally
+        {
+            BindRenderTargets();
+        }
+    }
+
     /// <summary>Uploads one tightly packed RGBA8 rectangle; null targets the backbuffer.</summary>
     public void UpdateTexturePixels(
         D3D11Texture? texture,
@@ -570,6 +715,15 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         ValidateTextureData(width, height, rgba8);
         ValidateViewport(x, y, width, height, texture?.Width ?? _width, texture?.Height ?? _height);
 
+        if (_antialiasSampleCount > 1 && texture is null)
+        {
+            using var upload = CreateMutableTexture(width, height);
+            UpdateTexturePixels(upload, 0, 0, width, height, rgba8);
+            DrawTextureRegion(upload, 0, 0, width, height, x, y, width, height,
+                tint: Vector4.One, alphaBlend: false);
+            return;
+        }
+
         ID3D11Texture2D? backBuffer = null;
         ClearPipelineState();
         try
@@ -578,6 +732,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             var box = new Box(x, y, 0, checked(x + width), checked(y + height), 1);
             fixed (byte* pixels = rgba8)
                 _context!.UpdateSubresource(destination, 0, box, (nint)pixels, checked((uint)(width * 4)), 0);
+            texture?.MarkMipmapsDirty();
         }
         finally
         {
@@ -603,12 +758,15 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         D3D11Fog? fog = null,
         Matrix4x4? worldView = null,
         D3D11LightingDrawState? lightingDrawState = null,
-        Matrix4x4? world = null)
+        Matrix4x4? world = null,
+        uint? indexCount = null)
     {
         CheckAccess();
         ArgumentNullException.ThrowIfNull(mesh);
         if (!ReferenceEquals(mesh.Owner, this)) throw new ArgumentException("The mesh belongs to a different renderer.", nameof(mesh));
         mesh.ThrowIfDisposed();
+        var activeIndexCount = indexCount ?? mesh.IndexCount;
+        if (activeIndexCount > mesh.IndexCount) throw new ArgumentOutOfRangeException(nameof(indexCount));
         if (layers.Length > 8) throw new ArgumentOutOfRangeException(nameof(layers), "D3D11 supports at most eight texture stages here.");
         var color = materialColor ?? Vector4.One;
         var drawState = lightingDrawState ?? D3D11LightingDrawState.Default;
@@ -631,14 +789,20 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         {
             var layer = layers[i];
             if ((uint)layer.CoordinateSet > 1) throw new ArgumentOutOfRangeException(nameof(layers), "Texture coordinate set must be zero or one.");
-            if (layer.Blend is not (0 or 2 or 3 or 5))
+            if (layer.Blend is not (0 or 1 or 2 or 3 or 5 or 6))
                 throw new ArgumentOutOfRangeException(nameof(layers), $"Texture blend mode {layer.Blend} is not supported.");
+            if (layer.BumpMatrix is { } bumpMatrix &&
+                (!float.IsFinite(bumpMatrix.X) || !float.IsFinite(bumpMatrix.Y) ||
+                 !float.IsFinite(bumpMatrix.Z) || !float.IsFinite(bumpMatrix.W)))
+                throw new ArgumentOutOfRangeException(nameof(layers), "Bump matrix coefficients must be finite.");
             if (layer.Texture is not null)
             {
                 if (!ReferenceEquals(layer.Texture.Owner, this)) throw new ArgumentException("A texture belongs to a different renderer.", nameof(layers));
                 layer.Texture.ThrowIfDisposed();
             }
         }
+
+        EnsureMipmapsGenerated(layers);
 
         UploadTransform(worldViewProjection, worldView ?? Matrix4x4.Identity, world ?? Matrix4x4.Identity);
         UploadMaterial(layers, color, fog: fog, effects: drawState.Effects, shininess: drawState.Shininess);
@@ -654,7 +818,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         SetPixelResources(layers);
         _context.PSSetConstantBuffer(1, _materialBuffer!);
         BindLightingDrawState(drawState, alphaBlend);
-        _context.DrawIndexed(mesh.IndexCount, 0, 0);
+        _context.DrawIndexed(activeIndexCount, 0, 0);
     }
 
     /// <summary>
@@ -710,6 +874,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         foreach (var region in regions)
             _ = TryClipRegion(source, region, targetWidth, targetHeight, out _);
         if (regions.IsEmpty) return;
+        EnsureMipmapsGenerated(source);
         ID3D11ShaderResourceView sourceView = source.ShaderResourceView;
         ClearPipelineState();
         try
@@ -717,7 +882,8 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             if (ReferenceEquals(source, destination))
             {
                 EnsureBlitScratch(source.Width, source.Height);
-                _context!.CopyResource(_blitScratch!, source.Resource);
+                var sourceBox = new Box(0, 0, 0, source.Width, source.Height, 1);
+                _context!.CopySubresourceRegion(_blitScratch!, 0, 0, 0, 0, source.Resource, 0, sourceBox);
                 sourceView = _blitScratchView!;
             }
 
@@ -756,6 +922,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
                 if (vertexCount == 0) continue;
                 Upload(_blitVertexBuffer!, MemoryMarshal.AsBytes((ReadOnlySpan<D3D11BlitVertex>)vertices[..vertexCount]));
                 _context.Draw((uint)vertexCount, 0);
+                destination?.MarkMipmapsDirty();
             }
         }
         finally
@@ -862,6 +1029,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     public void Present(bool vsync = true)
     {
         CheckAccess();
+        ResolveBackBuffer();
         _swapChain!.Present(vsync ? 1u : 0u, PresentFlags.None).CheckError();
     }
 
@@ -873,13 +1041,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
         if (width == _width && height == _height) return;
 
-        ClearPipelineState();
-        _renderTarget?.Dispose();
-        _renderTarget = null;
-        _depthView?.Dispose();
-        _depthView = null;
-        _depthTexture?.Dispose();
-        _depthTexture = null;
+        ReleaseWindowTargets();
         _swapChain!.ResizeBuffers(0, (uint)width, (uint)height, Format.Unknown, SwapChainFlags.None).CheckError();
         _width = width;
         _height = height;
@@ -902,6 +1064,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         ArgumentOutOfRangeException.ThrowIfNegative(y);
         if (x >= _width || y >= _height) throw new ArgumentOutOfRangeException(nameof(x));
 
+        ResolveBackBuffer();
         using var source = _swapChain!.GetBuffer<ID3D11Texture2D>(0);
         var description = source.Description;
         description.Usage = ResourceUsage.Staging;
@@ -1030,9 +1193,42 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     {
         _viewport = new Viewport(0, 0, width, height, 0, 1);
         using var backBuffer = _swapChain!.GetBuffer<ID3D11Texture2D>(0);
-        _renderTarget = _device!.CreateRenderTargetView(backBuffer);
-        _depthTexture = _device.CreateTexture2D(Format.D32_Float, (uint)width, (uint)height,
-            mipLevels: 1, arraySize: 1, bindFlags: BindFlags.DepthStencil);
+        if (_antialiasSampleCount > 1)
+        {
+            _antialiasColorTexture = _device!.CreateTexture2D(new Texture2DDescription
+            {
+                Width = (uint)width,
+                Height = (uint)height,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = BackBufferFormat,
+                SampleDescription = new SampleDescription((uint)_antialiasSampleCount, (uint)_antialiasQuality),
+                Usage = ResourceUsage.Default,
+                BindFlags = BindFlags.RenderTarget,
+                CPUAccessFlags = CpuAccessFlags.None,
+                MiscFlags = ResourceOptionFlags.None
+            });
+            _renderTarget = _device.CreateRenderTargetView(_antialiasColorTexture);
+            _depthTexture = _device.CreateTexture2D(new Texture2DDescription
+            {
+                Width = (uint)width,
+                Height = (uint)height,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = Format.D32_Float,
+                SampleDescription = new SampleDescription((uint)_antialiasSampleCount, (uint)_antialiasQuality),
+                Usage = ResourceUsage.Default,
+                BindFlags = BindFlags.DepthStencil,
+                CPUAccessFlags = CpuAccessFlags.None,
+                MiscFlags = ResourceOptionFlags.None
+            });
+        }
+        else
+        {
+            _renderTarget = _device!.CreateRenderTargetView(backBuffer);
+            _depthTexture = _device.CreateTexture2D(Format.D32_Float, (uint)width, (uint)height,
+                mipLevels: 1, arraySize: 1, bindFlags: BindFlags.DepthStencil);
+        }
         _depthView = _device.CreateDepthStencilView(_depthTexture);
         BindRenderTargets();
     }
@@ -1172,6 +1368,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             var uv = layer.UvTransform ?? Matrix3x2.Identity;
             constants.UvRowsX[i] = new Vector4(uv.M11, uv.M21, uv.M31, layer.CoordinateSet);
             constants.UvRowsY[i] = new Vector4(uv.M12, uv.M22, uv.M32, 0);
+            constants.BumpMatrices[i] = layer.BumpMatrix ?? Vector4.Zero;
             var enabled = layer.Texture is not null && layer.Blend != 0;
             var blend = enabled ? layer.Blend : 0;
             var component = i & 3;
@@ -1207,6 +1404,21 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         _context.PSSetSamplers(0, 8, _pixelSamplers);
     }
 
+    private void EnsureMipmapsGenerated(ReadOnlySpan<D3D11TextureLayer> layers)
+    {
+        foreach (var layer in layers)
+            if (layer.Texture is { MipmapsDirty: true } texture)
+                EnsureMipmapsGenerated(texture);
+    }
+
+    private void EnsureMipmapsGenerated(D3D11Texture texture)
+    {
+        if (!texture.MipmapsDirty) return;
+        ClearPipelineState();
+        _context!.GenerateMips(texture.ShaderResourceView);
+        texture.MarkMipmapsClean();
+    }
+
     private static void SetComponent(ref Vector4 vector, int component, float value)
     {
         switch (component)
@@ -1238,6 +1450,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         public Vector4 RegionFlags;
         public StageVectors UvRowsX;
         public StageVectors UvRowsY;
+        public StageVectors BumpMatrices;
         public Vector4 FogColor;
         public Vector4 FogParameters;
         public Vector4 Shininess;
@@ -1362,6 +1575,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         _renderTarget?.Dispose(); _renderTarget = null;
         _depthView?.Dispose(); _depthView = null;
         _depthTexture?.Dispose(); _depthTexture = null;
+        _antialiasColorTexture?.Dispose(); _antialiasColorTexture = null;
         _swapChain?.Dispose(); _swapChain = null;
         _context?.Dispose(); _context = null;
         _device?.Dispose(); _device = null;

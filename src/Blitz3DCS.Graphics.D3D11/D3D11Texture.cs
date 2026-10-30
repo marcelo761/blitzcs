@@ -6,6 +6,7 @@ namespace Blitz3DCS.Graphics.D3D11;
 public sealed class D3D11Texture : IDisposable
 {
     private bool _disposed;
+    private bool _mipmapsDirty;
 
     internal D3D11Texture(
         D3D11Renderer owner,
@@ -33,6 +34,18 @@ public sealed class D3D11Texture : IDisposable
 
     public int Width { get; }
     public int Height { get; }
+    public int MipLevels => checked((int)Resource.Description.MipLevels);
+
+    internal bool HasMipmaps => MipLevels > 1;
+    internal bool MipmapsDirty => _mipmapsDirty;
+
+    internal void MarkMipmapsDirty()
+    {
+        if (HasMipmaps)
+            _mipmapsDirty = true;
+    }
+
+    internal void MarkMipmapsClean() => _mipmapsDirty = false;
 
     public void Dispose()
     {
