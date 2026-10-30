@@ -13,6 +13,18 @@ public sealed class B3dSkinningBuffer
     private readonly Matrix4x4[] _normalMatrices;
     private readonly Matrix4x4[] _poseMatrices;
     private bool _skinMatricesPrepared;
+    private readonly bool _legacy = EngineOptimizations.Disabled;
+    // Flattened per-vertex data for the fast path (built once; the source mesh is immutable after load).
+    private readonly Vector3[] _srcPosition;
+    private readonly Vector3[] _srcNormal;
+    private readonly bool[] _hasNormal;
+    private readonly int[] _influenceStart;
+    private readonly int[] _influenceBone;
+    private readonly float[] _influenceWeight;
+    private readonly NormalBasis[] _normalBasis;
+
+    /// <summary>Test hook: forces the original per-vertex implementation for this buffer.</summary>
+    internal bool ForceLegacy { get; set; }
 
     /// <summary>The mesh node whose vertices this buffer skins.</summary>
     public B3dNode MeshNode { get; }
@@ -53,6 +65,33 @@ public sealed class B3dSkinningBuffer
         _skinMatrices = new Matrix4x4[_bones.Length];
         _normalMatrices = new Matrix4x4[_bones.Length];
         _poseMatrices = new Matrix4x4[pose.Count];
+        _normalBasis = new NormalBasis[_bones.Length];
+
+        var meshVertices = meshNode.Mesh.Vertices;
+        var count = meshVertices.Count;
+        _srcPosition = new Vector3[count];
+        _srcNormal = new Vector3[count];
+        _hasNormal = new bool[count];
+        _influenceStart = new int[count + 1];
+        var total = 0;
+        for (var v = 0; v < count; v++) total += _influences[v].Length;
+        _influenceBone = new int[total];
+        _influenceWeight = new float[total];
+        var cursor = 0;
+        for (var v = 0; v < count; v++)
+        {
+            var vertex = meshVertices[v];
+            _srcPosition[v] = ToVector3(vertex.Position);
+            if (vertex.Normal is { } n) { _srcNormal[v] = ToVector3(n); _hasNormal[v] = true; }
+            _influenceStart[v] = cursor;
+            foreach (var influence in _influences[v])
+            {
+                _influenceBone[cursor] = influence.BoneIndex;
+                _influenceWeight[cursor] = influence.Weight;
+                cursor++;
+            }
+        }
+        _influenceStart[count] = cursor;
     }
 
     /// <summary>Skins positions and optional normals without allocating per frame.</summary>
@@ -87,6 +126,79 @@ public sealed class B3dSkinningBuffer
         if (positions.Length != vertices.Count) throw new ArgumentException("Position output length must match the mesh vertex count.", nameof(positions));
         if (!normals.IsEmpty && normals.Length != vertices.Count) throw new ArgumentException("Normal output length must match the mesh vertex count.", nameof(normals));
 
+        if (_legacy || ForceLegacy) { DeformIntoCoreLegacy(currentWorldMatrices, positions, normals); return; }
+        DeformIntoFast(currentWorldMatrices, positions, normals);
+    }
+
+    private void PrepareBones(ReadOnlySpan<Matrix4x4> currentWorldMatrices)
+    {
+        if (!Matrix4x4.Invert(currentWorldMatrices[_meshNodeIndex], out var inverseCurrentMesh))
+            throw new InvalidOperationException("The current mesh transform is singular.");
+        for (var boneIndex = 0; boneIndex < _bones.Length; boneIndex++)
+        {
+            var binding = _bones[boneIndex];
+            var skin = binding.InverseBind * currentWorldMatrices[binding.NodeIndex] * inverseCurrentMesh;
+            _skinMatrices[boneIndex] = skin;
+            _normalMatrices[boneIndex] = skin;
+            // Same operations as TransformNormal, hoisted out of the per-vertex loop.
+            var x = Vector3.TransformNormal(Vector3.UnitX, skin);
+            var y = Vector3.TransformNormal(Vector3.UnitY, skin);
+            var z = Vector3.TransformNormal(Vector3.UnitZ, skin);
+            _normalBasis[boneIndex] = new NormalBasis(Vector3.Cross(y, z), Vector3.Cross(z, x), Vector3.Cross(x, y));
+        }
+        _skinMatricesPrepared = true;
+    }
+
+    private void DeformIntoFast(ReadOnlySpan<Matrix4x4> currentWorldMatrices,
+        Span<B3dVector3> positions, Span<B3dVector3> normals)
+    {
+        PrepareBones(currentWorldMatrices);
+        var wantNormals = !normals.IsEmpty;
+        var skinMatrices = _skinMatrices;
+        var basis = _normalBasis;
+        var start = _influenceStart;
+        var bones = _influenceBone;
+        var weights = _influenceWeight;
+        for (var v = 0; v < positions.Length; v++)
+        {
+            var first = start[v];
+            var end = start[v + 1];
+            var source = _srcPosition[v];
+            if (first == end)
+            {
+                var p0 = Vector3.Transform(source, skinMatrices[0]);
+                positions[v] = new B3dVector3(p0.X, p0.Y, p0.Z);
+                if (wantNormals)
+                    normals[v] = _hasNormal[v] ? ToB3d(ApplyBasis(basis[0], _srcNormal[v])) : default;
+                continue;
+            }
+            var position = Vector3.Zero;
+            var normalSum = Vector3.Zero;
+            var hasNormal = wantNormals && _hasNormal[v];
+            var sourceNormal = _srcNormal[v];
+            for (var i = first; i < end; i++)
+            {
+                var bone = bones[i];
+                var weight = weights[i];
+                position += Vector3.Transform(source, skinMatrices[bone]) * weight;
+                if (hasNormal) normalSum += ApplyBasis(basis[bone], sourceNormal) * weight;
+            }
+            positions[v] = new B3dVector3(position.X, position.Y, position.Z);
+            if (hasNormal)
+            {
+                if (end - first > 1 && normalSum.LengthSquared() > 0) normalSum = Vector3.Normalize(normalSum);
+                normals[v] = new B3dVector3(normalSum.X, normalSum.Y, normalSum.Z);
+            }
+            else if (wantNormals) normals[v] = default;
+        }
+    }
+
+    private static Vector3 ApplyBasis(in NormalBasis b, Vector3 n) => b.YZ * n.X + b.ZX * n.Y + b.XY * n.Z;
+
+    private void DeformIntoCoreLegacy(ReadOnlySpan<Matrix4x4> currentWorldMatrices,
+        Span<B3dVector3> positions, Span<B3dVector3> normals)
+    {
+        var vertices = MeshNode.Mesh!.Vertices;
         if (!Matrix4x4.Invert(currentWorldMatrices[_meshNodeIndex], out var inverseCurrentMesh))
             throw new InvalidOperationException("The current mesh transform is singular.");
         for (var boneIndex = 0; boneIndex < _bones.Length; boneIndex++)
@@ -149,6 +261,22 @@ public sealed class B3dSkinningBuffer
         if (normals.Length != vertices.Count)
             throw new ArgumentException("Normal output length must match the mesh vertex count.", nameof(normals));
 
+        if (!(_legacy || ForceLegacy))
+        {
+            for (var v = 0; v < normals.Length; v++)
+            {
+                var first = _influenceStart[v];
+                var end = _influenceStart[v + 1];
+                var n = new Vector3(sourceNormals[v].X, sourceNormals[v].Y, sourceNormals[v].Z);
+                if (first == end) { normals[v] = ToB3d(ApplyBasis(_normalBasis[0], n)); continue; }
+                var sum = Vector3.Zero;
+                for (var i = first; i < end; i++)
+                    sum += ApplyBasis(_normalBasis[_influenceBone[i]], n) * _influenceWeight[i];
+                if (end - first > 1 && sum.LengthSquared() > 0) sum = Vector3.Normalize(sum);
+                normals[v] = ToB3d(sum);
+            }
+            return;
+        }
         for (var vertexIndex = 0; vertexIndex < vertices.Count; vertexIndex++)
         {
             var influences = _influences[vertexIndex];
@@ -262,6 +390,7 @@ public sealed class B3dSkinningBuffer
     }
 
     private static B3dVector3 ToB3d(Vector3 value) => new(value.X, value.Y, value.Z);
+    private readonly record struct NormalBasis(Vector3 YZ, Vector3 ZX, Vector3 XY);
     private readonly record struct BoneBinding(int NodeIndex, Matrix4x4 InverseBind);
     private readonly record struct VertexInfluence(int BoneIndex, float Weight);
 }
