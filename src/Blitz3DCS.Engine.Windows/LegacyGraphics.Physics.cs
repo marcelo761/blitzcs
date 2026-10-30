@@ -9,6 +9,7 @@ public static partial class LegacyGraphics
     private static long _collisionGeometrySelectionVersion = long.MinValue;
     private static int _collisionGeometryMeshCount = -1;
     private static readonly List<MeshEntity> PolygonCollisionMeshes = [];
+    private static long _collisionPreparedEpoch = -1;
 
     internal static int PolygonCollisionMeshCountForTesting => PolygonCollisionMeshes.Count;
 
@@ -49,7 +50,10 @@ public static partial class LegacyGraphics
             _collisionGeometrySelectionScene = scene;
             _collisionGeometrySelectionVersion = selectionVersion;
             _collisionGeometryMeshCount = meshCount;
+            _collisionPreparedEpoch = -1;
         }
+        // No surface changed since the last full pass and the mesh selection is unchanged: nothing to refresh.
+        if (!EngineOptimizations.Disabled && _collisionPreparedEpoch == SurfaceState.MutationEpoch) return;
 
         foreach (var mesh in PolygonCollisionMeshes)
         {
@@ -79,6 +83,7 @@ public static partial class LegacyGraphics
             scene.SetCollisionTriangles(mesh.Entity, geometry.CollisionTriangles);
             mesh.CollisionVersion = version;
         }
+        _collisionPreparedEpoch = SurfaceState.MutationEpoch;
     }
 
     private static void ClearCollisionGeometrySelectionCache()
@@ -87,6 +92,7 @@ public static partial class LegacyGraphics
         _collisionGeometrySelectionScene = null;
         _collisionGeometrySelectionVersion = long.MinValue;
         _collisionGeometryMeshCount = -1;
+        _collisionPreparedEpoch = -1;
     }
 
     private static SceneVector3 ToSceneVector(Vector3 vector) => new(vector.X, vector.Y, vector.Z);

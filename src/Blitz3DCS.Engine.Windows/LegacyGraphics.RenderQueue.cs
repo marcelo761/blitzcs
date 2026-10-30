@@ -6,7 +6,10 @@ namespace Blitz3DCS.Engine.Windows;
 
 public static partial class LegacyGraphics
 {
-    private static readonly List<SceneDraw> SceneDraws = [];
+    private static SceneDraw[] _sceneDraws = new SceneDraw[256];
+    private static int _sceneDrawCount;
+    private static int[] _drawOrder = new int[256];
+    private static readonly SceneDrawIndexComparer IndexComparer = new();
     private static readonly List<int> RenderTraversal = [];
     private static int _trianglesRendered;
 
@@ -23,13 +26,19 @@ public static partial class LegacyGraphics
         GetMesh(entity).AutoFade = (near, far);
     }
 
+    private static void ClearSceneDraws()
+    {
+        Array.Clear(_sceneDraws, 0, _sceneDrawCount);
+        _sceneDrawCount = 0;
+    }
+
     public static int TrisRendered() => _trianglesRendered;
 
     private static void DrawSceneMeshes(D3D11Renderer renderer, SceneGraph scene, CameraState camera,
         Matrix4x4 cameraWorld, Matrix4x4 view, Matrix4x4 projection)
     {
         var traversalStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
-        SceneDraws.Clear();
+        _sceneDrawCount = 0;
         _trianglesRendered = 0;
         var eye = new Vector3(cameraWorld.M41, cameraWorld.M42, cameraWorld.M43);
         scene.CopyVisibleEntityIds(RenderTraversal);
@@ -74,15 +83,35 @@ public static partial class LegacyGraphics
                 color.W *= fade;
                 var blend = ResolveMaterialBlend(ComposeBlend(surface.Material, material), stages, transparent,
                     color.W, surface.Material.Effects | material.Effects);
-                SceneDraws.Add(new SceneDraw(entity, surface, index, world, wvp, color, blend,
-                    entity.Order, distanceSquared, entityIndex));
+                if (_sceneDrawCount == _sceneDraws.Length)
+                    Array.Resize(ref _sceneDraws, _sceneDraws.Length * 2);
+                _sceneDraws[_sceneDrawCount++] = new SceneDraw(entity, surface, index, world, wvp, color, blend,
+                    entity.Order, distanceSquared, entityIndex);
             }
         }
-        SceneDraws.Sort(SceneDrawComparer.Instance);
+        var drawCount = _sceneDrawCount;
+        var draws = _sceneDraws;
+        if (_drawOrder.Length < drawCount) _drawOrder = new int[draws.Length];
+        var order = _drawOrder;
+        for (var i = 0; i < drawCount; i++) order[i] = i;
+        // The comparer is a strict total order (entity index + surface index are unique per draw),
+        // so an unstable sort over an index array yields the same sequence as sorting the structs.
+        if (EngineOptimizations.Disabled)
+            Array.Sort(draws, 0, drawCount, SceneDrawComparer.Instance);
+        else
+        {
+            IndexComparer.Draws = draws;
+            Array.Sort(order, 0, drawCount, IndexComparer);
+            IndexComparer.Draws = null;
+        }
+        D3D11Fog? cameraFog = null;
+        if (drawCount > 0) cameraFog = GetCameraFogForRendering(camera.Entity);
+        var legacyOrder = EngineOptimizations.Disabled;
         var submitStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         if (EngineProfile.Enabled) EngineProfile.AddTicks(EngineProfile.Traversal, submitStart - traversalStart);
-        foreach (var draw in SceneDraws)
+        for (var drawIndex = 0; drawIndex < drawCount; drawIndex++)
         {
+            ref readonly var draw = ref draws[legacyOrder ? drawIndex : order[drawIndex]];
             var material = draw.Entity.Material;
             var surfaceMaterial = draw.Surface.Material;
             for (var index = 0; index < RenderLayers.Length; index++)
@@ -102,7 +131,7 @@ public static partial class LegacyGraphics
                 gpuMesh = draw.Surface.GpuMesh!;
             }
             var effects = surfaceMaterial.Effects | material.Effects;
-            var fog = (effects & 8) != 0 ? null : GetCameraFogForRendering(camera.Entity);
+            var fog = (effects & 8) != 0 ? null : cameraFog;
             var depthMode = draw.Order != 0 ? 2 : draw.Blend != 0 ? 1 : 0;
             var state = new D3D11LightingDrawState(effects, surfaceMaterial.Shininess + material.Shininess, draw.Blend, depthMode, _wireframe);
             renderer.DrawMesh(gpuMesh, draw.WorldViewProjection, RenderLayers, draw.Blend == 1, draw.Color, fog,
@@ -119,10 +148,18 @@ public static partial class LegacyGraphics
         internal int Category => Order > 0 ? 0 : Order < 0 ? 3 : Blend == 0 ? 1 : 2;
     }
 
+    private sealed class SceneDrawIndexComparer : IComparer<int>
+    {
+        internal SceneDraw[]? Draws;
+        public int Compare(int left, int right) => SceneDrawComparer.Instance.CompareRef(in Draws![left], in Draws[right]);
+    }
+
     private sealed class SceneDrawComparer : IComparer<SceneDraw>
     {
         internal static readonly SceneDrawComparer Instance = new();
-        public int Compare(SceneDraw left, SceneDraw right)
+        public int Compare(SceneDraw left, SceneDraw right) => CompareRef(in left, in right);
+
+        internal int CompareRef(in SceneDraw left, in SceneDraw right)
         {
             var comparison = left.Category.CompareTo(right.Category);
             if (comparison != 0) return comparison;

@@ -138,7 +138,7 @@ public static partial class LegacyGraphics
     {
         CheckThreadIfStarted();
         if (entity == 0) return;
-        SceneDraws.Clear();
+        ClearSceneDraws();
         var scene = RequireScene();
         var pending = new Stack<int>();
         var subtree = new List<int>();
@@ -168,6 +168,7 @@ public static partial class LegacyGraphics
                 surface.GpuMesh?.Dispose();
                 surface.Material.Dispose();
                 Surfaces.Remove(surfaceHandle);
+                SurfaceState.MutationEpoch++;
             }
         }
         scene.FreeEntity(entity);
@@ -187,6 +188,7 @@ public static partial class LegacyGraphics
             var surface = new SurfaceState(handle, mesh) { Material = material };
             Surfaces.Add(handle, surface);
             owner.SurfaceHandles.Add(handle);
+            SurfaceState.MutationEpoch++;
             return handle;
         }
         catch
@@ -481,7 +483,7 @@ public static partial class LegacyGraphics
     internal static void ResetForTests()
     {
         ClearCollisionGeometrySelectionCache();
-        SceneDraws.Clear();
+        ClearSceneDraws();
         RenderTraversal.Clear();
         _trianglesRendered = 0;
         EndGraphics();
@@ -591,6 +593,8 @@ public static partial class LegacyGraphics
         public int References { get; set; } = 1;
         public List<int> SurfaceHandles { get; } = [];
         public long CollisionVersion { get; set; } = -1;
+        public long CachedVersion { get; set; }
+        public long CachedVersionEpoch { get; set; } = -1;
         public SceneCollisionTriangle[] CollisionTriangles { get; set; } = [];
         public long BoundsVersion { get; set; } = -1;
         public Vector3 BoundsMinimum { get; set; }
@@ -608,10 +612,12 @@ public static partial class LegacyGraphics
         public D3D11Mesh? GpuMesh { get; set; }
         private bool _dirty = true;
         public long Version { get; private set; }
+        /// <summary>Bumped on any surface content change or surface add/remove; lets per-frame version scans be skipped.</summary>
+        internal static long MutationEpoch;
         public bool Dirty
         {
             get => _dirty;
-            set { _dirty = value; if (value) Version++; }
+            set { _dirty = value; if (value) { Version++; MutationEpoch++; } }
         }
     }
 

@@ -6,8 +6,12 @@ public static partial class LegacyGraphics
 {
     private static long GeometryVersion(MeshGeometry geometry)
     {
+        var epoch = SurfaceState.MutationEpoch;
+        if (!EngineOptimizations.Disabled && geometry.CachedVersionEpoch == epoch) return geometry.CachedVersion;
         long version = geometry.SurfaceHandles.Count;
         foreach (var handle in geometry.SurfaceHandles) version += Surfaces[handle].Version;
+        geometry.CachedVersion = version;
+        geometry.CachedVersionEpoch = epoch;
         return version;
     }
 
