@@ -163,9 +163,11 @@ internal static class EngineProfile
         "UpdateWorld", "anim", "collision", "sceneUpdate", "RenderWorld", "skinning", "traversal+sort", "submit(incl.gpu-upload)",
         "2D", "CopyRect", "present", "frame", "mipgen", "dynVB", "texUpload", "readback"
     ];
-    internal const int DrawCalls = 0, Tris = 1, BlitDraws = 2, ClearStates = 3, CbMaps = 4, Resolves = 5, ReadbackCount = 6, MipCount = 7, DynCount = 8, TexCount = 9;
+    internal const int DrawCalls = 0, Tris = 1, BlitDraws = 2, ClearStates = 3, CbMaps = 4, Resolves = 5, ReadbackCount = 6, MipCount = 7, DynCount = 8, TexCount = 9,
+        SkippedBinds = 10, BatchedBlits = 11, SkippedCbMaps = 12;
     internal static readonly string[] CounterNames =
-        ["draws", "tris", "blitDraws", "pipelineResets", "cbMaps", "resolves", "READBACKS", "mips", "dynUploads", "texUploads"];
+        ["draws", "tris", "blitDraws", "pipelineResets", "cbMaps", "resolves", "READBACKS", "mips", "dynUploads", "texUploads",
+            "skippedBinds", "blitBatched", "cbMapsSkipped"];
 
     internal static void AddTicks(int phase, long ticks)
     {
@@ -244,6 +246,9 @@ internal static class EngineProfile
         p.AddCount(MipCount, v[D3D11FrameCounters.MipGenerations]);
         p.AddCount(DynCount, v[D3D11FrameCounters.DynamicVertexUploads]);
         p.AddCount(TexCount, v[D3D11FrameCounters.TextureUploads]);
+        p.AddCount(SkippedBinds, v[D3D11FrameCounters.SkippedBinds]);
+        p.AddCount(BatchedBlits, v[D3D11FrameCounters.BatchedBlitOps]);
+        p.AddCount(SkippedCbMaps, v[D3D11FrameCounters.SkippedConstantBufferMaps]);
         Array.Clear(v);
         var now = Stopwatch.GetTimestamp();
         p.AddTicks(Frame, now - _frameStart);

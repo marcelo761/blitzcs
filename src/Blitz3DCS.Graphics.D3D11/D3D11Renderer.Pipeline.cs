@@ -14,6 +14,9 @@ public sealed unsafe partial class D3D11Renderer
 
     private readonly PipelineStateTracker _tracker = new(Optimize);
     private readonly BlitBatcher _blits = new();
+    private BlitBatcher.FlushHandler? _drawBlitBatchCache;
+    // Cached once: a method-group conversion allocates a new delegate on every call.
+    private BlitBatcher.FlushHandler _drawBlitBatch => _drawBlitBatchCache ??= DrawBlitBatch;
     private readonly object?[] _srvDesired = new object?[PipelineStateTracker.ResourceSlots];
     private readonly object?[] _samplerDesired = new object?[PipelineStateTracker.ResourceSlots];
     private static readonly object TriangleListTopology = new();
@@ -131,7 +134,7 @@ public sealed unsafe partial class D3D11Renderer
 
     private void FlushBlits()
     {
-        if (_blits.Pending > 0) _blits.Flush(DrawBlitBatch);
+        if (_blits.Pending > 0) _blits.Flush(_drawBlitBatch);
     }
 
     private static bool SameBytes<T>(in T a, in T b) where T : unmanaged =>

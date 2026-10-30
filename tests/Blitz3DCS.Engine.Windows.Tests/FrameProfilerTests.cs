@@ -26,6 +26,29 @@ public sealed class FrameProfilerTests
     }
 
     [Fact]
+    public void ReportsD3D11OptimizationCountersAsPerFrameAverages()
+    {
+        var lines = new List<string>();
+        var profiler = new FrameProfiler(["a"], EngineProfile.CounterNames, 2, 1000, lines.Add);
+        // Frame 1 and frame 2 counts; the printed value is the per-frame average over the window.
+        long[][] perFrame =
+        [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 3, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 5, 10],
+        ];
+        foreach (var frame in perFrame)
+        {
+            profiler.AddTicks(0, 10);
+            for (var c = 0; c < frame.Length; c++) profiler.AddCount(c, frame[c]);
+            profiler.EndFrame(0, 0, 0, 0);
+        }
+        var line = Assert.Single(lines);
+        Assert.Contains(" skippedBinds=4.0", line);
+        Assert.Contains(" blitBatched=4.0", line);
+        Assert.Contains(" cbMapsSkipped=5.0", line);
+    }
+
+    [Fact]
     public void FlushReportsPartialWindowOnce()
     {
         var lines = new List<string>();

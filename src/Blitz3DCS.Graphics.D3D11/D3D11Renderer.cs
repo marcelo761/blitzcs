@@ -888,7 +888,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             foreach (var region in regions)
             {
                 if (!TryClipRegion(source, region, targetWidth, targetHeight, out var clipped)) continue;
-                _blits.Add(key, clipped, DrawBlitBatch);
+                _blits.Add(key, clipped, _drawBlitBatch);
                 if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.BatchedBlitOps);
             }
             return;

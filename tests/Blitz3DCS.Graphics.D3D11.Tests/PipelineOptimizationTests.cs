@@ -142,4 +142,37 @@ public sealed class PipelineOptimizationTests
         batcher.Flush(Flush);
         Assert.Equal(0, calls);
     }
+
+    private static int _zeroAllocFlushes;
+    private static void CountFlush(in BlitBatchKey key, ReadOnlySpan<ClippedTextureRegion> quads) => _zeroAllocFlushes += quads.Length;
+
+    [Fact]
+    public void BatcherAndTrackerAllocateNothingInSteadyState()
+    {
+        var batcher = new BlitBatcher();
+        var tracker = new PipelineStateTracker();
+        BlitBatcher.FlushHandler flush = CountFlush;
+        var texture = new object();
+        var other = new object();
+        var desired = new object?[PipelineStateTracker.ResourceSlots];
+        void Run()
+        {
+            for (var i = 0; i < 300; i++)
+            {
+                var key = Key(i % 50 == 0 ? other : texture);
+                batcher.Add(key, Quad(i), flush);
+                tracker.Changed(PipelineSlot.PixelShader, i % 2 == 0 ? texture : other);
+                tracker.ViewportChanged(0, 0, 640 + i % 2, 480, 0, 1);
+                desired[i % 8] = i % 3 == 0 ? texture : other;
+                tracker.DirtyShaderResources(desired, out _, out _);
+                tracker.DirtySamplers(desired, out _, out _);
+            }
+            batcher.Flush(flush);
+        }
+        Run();
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        Run();
+        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        Assert.True(_zeroAllocFlushes > 0);
+    }
 }
