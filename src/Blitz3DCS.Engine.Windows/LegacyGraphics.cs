@@ -185,10 +185,11 @@ public static partial class LegacyGraphics
         var handle = _nextSurfaceHandle--;
         try
         {
-            var surface = new SurfaceState(handle, mesh) { Material = material };
+            var surface = new SurfaceState(handle, mesh) { Material = material, Geometry = owner.Geometry };
             Surfaces.Add(handle, surface);
             owner.SurfaceHandles.Add(handle);
             SurfaceState.MutationEpoch++;
+            MarkGeometryChanged(owner.Geometry);
             return handle;
         }
         catch
@@ -600,6 +601,10 @@ public static partial class LegacyGraphics
         public int References { get; set; } = 1;
         public List<int> SurfaceHandles { get; } = [];
         public long CollisionVersion { get; set; } = -1;
+        /// <summary>Member of the maintained collision-relevant set (owned by PrepareCollisionGeometry).</summary>
+        public bool InCollisionSet { get; set; }
+        /// <summary>Queued for re-preparation because one of its surfaces changed since the last prepare.</summary>
+        public bool CollisionPending { get; set; }
         public long CachedVersion { get; set; }
         public long CachedVersionEpoch { get; set; } = -1;
         public SceneCollisionTriangle[] CollisionTriangles { get; set; } = [];
@@ -613,6 +618,8 @@ public static partial class LegacyGraphics
     {
         public int Handle { get; } = handle;
         public int OwnerMesh { get; } = ownerMesh;
+        /// <summary>Owning geometry; surface edits notify only this geometry's collision state.</summary>
+        public MeshGeometry? Geometry { get; init; }
         public List<D3D11Vertex> Vertices { get; } = [];
         public List<uint> Indices { get; } = [];
         public EntityMaterial Material { get; set; } = new();
@@ -624,7 +631,7 @@ public static partial class LegacyGraphics
         public bool Dirty
         {
             get => _dirty;
-            set { _dirty = value; if (value) { Version++; MutationEpoch++; } }
+            set { _dirty = value; if (value) { Version++; MutationEpoch++; if (Geometry is { InCollisionSet: true } g) MarkGeometryChanged(g); } }
         }
     }
 
