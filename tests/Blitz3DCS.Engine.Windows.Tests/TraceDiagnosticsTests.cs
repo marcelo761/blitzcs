@@ -97,4 +97,58 @@ public sealed class TraceDiagnosticsTests
         Assert.Equal("LoadMesh=2 FreeEntity=1", TraceCall.FormatCounts([0, 2, 0, 0, 0, 1, 0, 0]));
         Assert.Equal("none", TraceCall.FormatCounts(new long[8]));
     }
+
+    [Fact]
+    public void DistanceIsNotAvailableInsteadOfZeroWithoutCamera()
+    {
+        var d = EngineTrace.Distance(new Vector3(3, 4, 0), null);
+        Assert.True(float.IsNaN(d));
+        Assert.Equal(5f, EngineTrace.Distance(new Vector3(3, 4, 0), Vector3.Zero));
+        var line = EngineTrace.FormatAnimatedLine(1, "x/guard.b3d", true, true, new Vector3(1, 2, 3), d, null, 0, 0);
+        Assert.Contains("dist=n/a inFrustum=n/a", line);
+    }
+
+    [Fact]
+    public void CameraPrefersTheLastRenderedOneWhileItExists()
+    {
+        Assert.Equal(7, EngineTrace.PickCamera(7, true, 4));
+        Assert.Equal(4, EngineTrace.PickCamera(7, false, 4));
+        Assert.Equal(4, EngineTrace.PickCamera(0, false, 4));
+        Assert.Equal(0, EngineTrace.PickCamera(0, false, 0));
+    }
+
+    [Fact]
+    public void SelectorRanksCollidingThenMovingTypedEntities()
+    {
+        var sel = new CollisionTraceSelector(2);
+        CollisionTraceSelector.Candidate C(int id, int type, int n, float x) => new(id, type, n, new Vector3(x, 0, 0));
+        sel.Select([C(1, 1, 0, 0), C(2, 1, 0, 0)]);
+        var picks = sel.Select([C(1, 1, 0, 5), C(2, 2, 3, 0), C(3, 0, 9, 9), C(4, 3, 0, 0), C(5, 1, 0, 0)]);
+        Assert.Equal([2, 1], picks.Select(p => p.Id));
+        Assert.Equal(5f, picks[1].Delta.X);
+        Assert.Equal(3, picks[0].Collisions);
+        var still = new CollisionTraceSelector();
+        still.Select([C(9, 1, 0, 1)]);
+        Assert.Empty(still.Select([C(9, 1, 0, 1)]));
+    }
+
+    [Fact]
+    public void SamplerKeepsFirstThenOneInNAndAlwaysBypasses()
+    {
+        var s = new TraceSampler(3, 10);
+        var logged = Enumerable.Range(1, 33).Count(_ => s.ShouldLog("CreateMesh", false));
+        Assert.Equal(3 + 3, logged);   // calls 1-3, then 13, 23, 33
+        Assert.True(s.ShouldLog("CreateMesh", true));
+        var stats = s.TakeStats();
+        Assert.Equal("[trace-stats] calls seen/logged: CreateMesh=34/7", stats);
+        Assert.Null(s.TakeStats());
+    }
+
+    [Fact]
+    public void MaxLinesParsingDefaultsTo400000()
+    {
+        Assert.Equal(400_000, EngineTrace.ParseMaxLines(null));
+        Assert.Equal(400_000, EngineTrace.ParseMaxLines("0"));
+        Assert.Equal(1234, EngineTrace.ParseMaxLines("1234"));
+    }
 }

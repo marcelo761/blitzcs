@@ -335,6 +335,7 @@ public static partial class LegacyGraphics
         EnsureSingleCamera();
         var camera = Cameras.Values.FirstOrDefault(state => state.ProjectionMode != 0 && scene.IsVisibleInHierarchy(state.Entity));
         if (camera is null) return;
+        if (EngineTrace.Entities) _lastRenderCamera = camera.Entity;
         var viewport = camera.Viewport ?? (0, 0, _width, _height);
         D3D11Renderer.ValidateViewport(viewport.X, viewport.Y, viewport.Width, viewport.Height, _width, _height);
         renderer.Clear(camera.ClearColor.R, camera.ClearColor.G, camera.ClearColor.B, camera.ClearColorEnabled, camera.ClearDepthEnabled);

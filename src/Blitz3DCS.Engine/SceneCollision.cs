@@ -147,6 +147,15 @@ public sealed partial class SceneGraph
 
     public int CountCollisions(int entity) => GetCollisionState(entity).Collisions.Count;
 
+    /// <summary>Diagnostics: (entity, collision type, current collision count) for every entity with a nonzero type.</summary>
+    public List<(int Entity, int Type, int Collisions)> CopyTypedCollisionEntities()
+    {
+        var result = new List<(int, int, int)>();
+        foreach (var pair in _collisionEntities)
+            if (pair.Value.Type != 0) result.Add((pair.Key, pair.Value.Type, pair.Value.Collisions.Count));
+        return result;
+    }
+
     public int EntityCollided(int entity, int collisionType)
     {
         var collisions = GetCollisionState(entity).Collisions;

@@ -98,6 +98,10 @@ public static partial class LegacyGraphics
         catch (Exception e) when (EngineTrace.Failed("EntityFX", e, $"entity={entity}")) { throw; }
     }
 
+    private static int _lastRenderCamera;
+    private static readonly CollisionTraceSelector PlayerSelector = new();
+    private static readonly Dictionary<int, CollisionSampler> EntitySamplers = [];
+
     /// <summary>Called from Flip when a trace gate is on; emits the once-per-second snapshots.</summary>
     private static void TraceFrame()
     {
@@ -105,16 +109,30 @@ public static partial class LegacyGraphics
         try
         {
             var scene = RequireScene();
-            var camera = Cameras.Values.FirstOrDefault(state => state.ProjectionMode != 0 && scene.IsVisibleInHierarchy(state.Entity));
-            if (EngineTrace.Entities) TraceAnimatedEntities(scene, camera?.Entity ?? 0);
-            if (EngineTrace.Collision && camera is not null)
+            var fallback = Cameras.Values.FirstOrDefault(state => state.ProjectionMode != 0 && scene.IsVisibleInHierarchy(state.Entity))?.Entity ?? 0;
+            var camera = EngineTrace.PickCamera(_lastRenderCamera, Cameras.ContainsKey(_lastRenderCamera), fallback);
+            if (EngineTrace.Entities)
             {
-                var player = scene.GetParent(camera.Entity);
-                if (player != 0) EngineTrace.Log(PlayerSampler.Sample(scene, player));
-                else EngineTrace.Log("[collision] active camera has no parent entity");
+                TraceAnimatedEntities(scene, camera);
+                if (EngineTrace.TakeStatsLine() is { } stats) EngineTrace.Log(stats);
             }
+            if (EngineTrace.Collision) TraceCollisions(scene);
         }
         catch (Exception e) { EngineTrace.Log($"[trace] snapshot failed: {e.GetType().Name}: {e.Message}"); }
+    }
+
+    private static void TraceCollisions(SceneGraph scene)
+    {
+        var candidates = scene.CopyTypedCollisionEntities().Select(c =>
+            new CollisionTraceSelector.Candidate(c.Entity, c.Type, c.Collisions,
+                new Vector3(scene.EntityX(c.Entity, true), scene.EntityY(c.Entity, true), scene.EntityZ(c.Entity, true))));
+        var picks = PlayerSelector.Select(candidates);
+        if (picks.Count == 0) { EngineTrace.Log("[collision] no moving or colliding typed entity"); return; }
+        foreach (var pick in picks)
+        {
+            if (!EntitySamplers.TryGetValue(pick.Id, out var sampler)) EntitySamplers[pick.Id] = sampler = new CollisionSampler();
+            EngineTrace.Log(sampler.Sample(scene, pick));
+        }
     }
 
     private static void TraceAnimatedEntities(SceneGraph scene, int camera)
@@ -127,12 +145,12 @@ public static partial class LegacyGraphics
             {
                 var world = scene.GetWorldTransform(id).Position;
                 var pos = new Vector3(world.X, world.Y, world.Z);
-                var dist = 0f;
-                var inView = false;
-                if (camera != 0)
+                var dist = float.NaN;
+                bool? inView = null;
+                if (camera != 0 && Cameras.ContainsKey(camera))
                 {
                     var cam = scene.GetWorldTransform(camera).Position;
-                    dist = Vector3.Distance(pos, new Vector3(cam.X, cam.Y, cam.Z));
+                    dist = EngineTrace.Distance(pos, new Vector3(cam.X, cam.Y, cam.Z));
                     inView = EntityInView(id, camera) != 0;
                 }
                 var seq = -1; var time = -1f;
