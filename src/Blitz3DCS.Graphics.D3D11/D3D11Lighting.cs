@@ -127,10 +127,10 @@ public sealed unsafe partial class D3D11Renderer
 
     private void BindLightingDrawState(D3D11LightingDrawState state, bool alphaBlend)
     {
-        _context!.VSSetConstantBuffer(2, _lightingBuffer!);
-        _context.PSSetConstantBuffer(2, _lightingBuffer!);
+        BindVsConstantBuffer(2, _lightingBuffer!);
+        BindPsConstantBuffer(2, _lightingBuffer!);
         var noCull = (state.Effects & 16) != 0;
-        _context.RSSetState(state.Wireframe
+        BindRasterizerState(state.Wireframe
             ? noCull ? _wireframeNoCullRasterizerState : _wireframeRasterizerState
             : noCull ? _noCullRasterizerState : null);
         var blend = state.Blend switch
@@ -140,8 +140,8 @@ public sealed unsafe partial class D3D11Renderer
             1 => _alphaBlendState,
             _ => alphaBlend ? _alphaBlendState : null,
         };
-        _context.OMSetBlendState(blend, null, uint.MaxValue);
-        _context.OMSetDepthStencilState(state.DepthMode switch
+        BindBlendState(blend);
+        BindDepthStencilState(state.DepthMode switch
         {
             1 => _readOnlyDepthState,
             2 => _disabledDepthState,

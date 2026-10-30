@@ -349,19 +349,19 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             effects: D3D11LightingDrawState.Default.Effects);
 
         BindRenderTargets();
-        _context!.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
-        _context.IASetInputLayout(_inputLayout!);
-        _context.IASetVertexBuffer(0, _vertexBuffer!, (uint)Marshal.SizeOf<D3D11Vertex>(), 0);
-        _context.IASetIndexBuffer(_indexBuffer!, Format.R32_UInt, 0);
-        _context.VSSetShader(_vertexShader!);
-        _context.VSSetConstantBuffer(0, _transformBuffer!);
-        _context.VSSetConstantBuffer(1, _materialBuffer!);
-        _context.PSSetShader(_colorPixelShader!);
-        _context.PSSetConstantBuffer(1, _materialBuffer!);
-        _context.VSSetConstantBuffer(2, _lightingBuffer!);
+        BindTriangleList();
+        BindInputLayout(_inputLayout!);
+        BindVertexBuffer(_vertexBuffer!, (uint)Marshal.SizeOf<D3D11Vertex>());
+        BindIndexBuffer(_indexBuffer!);
+        BindVertexShader(_vertexShader!);
+        BindVsConstantBuffer(0, _transformBuffer!);
+        BindVsConstantBuffer(1, _materialBuffer!);
+        BindPixelShader(_colorPixelShader!);
+        BindPsConstantBuffer(1, _materialBuffer!);
+        BindVsConstantBuffer(2, _lightingBuffer!);
         BindLightingDrawState(D3D11LightingDrawState.Default, alphaBlend: false);
         SetPixelResources(ReadOnlySpan<D3D11TextureLayer>.Empty);
-        _context.DrawIndexed((uint)indices.Length, 0, 0);
+        _context!.DrawIndexed((uint)indices.Length, 0, 0);
     }
 
     /// <summary>Creates immutable GPU buffers for geometry that will be drawn repeatedly.</summary>
@@ -810,18 +810,18 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         UploadTransform(worldViewProjection, worldView ?? Matrix4x4.Identity, world ?? Matrix4x4.Identity);
         UploadMaterial(layers, color, fog: fog, effects: drawState.Effects, shininess: drawState.Shininess);
         BindRenderTargets();
-        _context!.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
-        _context.IASetInputLayout(_inputLayout!);
-        _context.IASetVertexBuffer(0, mesh.VertexBuffer, (uint)Marshal.SizeOf<D3D11Vertex>(), 0);
-        _context.IASetIndexBuffer(mesh.IndexBuffer, Format.R32_UInt, 0);
-        _context.VSSetShader(_vertexShader!);
-        _context.VSSetConstantBuffer(0, _transformBuffer!);
-        _context.VSSetConstantBuffer(1, _materialBuffer!);
-        _context.PSSetShader(_texturedPixelShader!);
+        BindTriangleList();
+        BindInputLayout(_inputLayout!);
+        BindVertexBuffer(mesh.VertexBuffer, (uint)Marshal.SizeOf<D3D11Vertex>());
+        BindIndexBuffer(mesh.IndexBuffer);
+        BindVertexShader(_vertexShader!);
+        BindVsConstantBuffer(0, _transformBuffer!);
+        BindVsConstantBuffer(1, _materialBuffer!);
+        BindPixelShader(_texturedPixelShader!);
         SetPixelResources(layers);
-        _context.PSSetConstantBuffer(1, _materialBuffer!);
+        BindPsConstantBuffer(1, _materialBuffer!);
         BindLightingDrawState(drawState, alphaBlend);
-        _context.DrawIndexed(activeIndexCount, 0, 0);
+        _context!.DrawIndexed(activeIndexCount, 0, 0);
         if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.MeshDraws); D3D11FrameCounters.Add(D3D11FrameCounters.Triangles, activeIndexCount / 3); D3D11FrameCounters.Add(D3D11FrameCounters.ConstantBufferMaps, 2); }
     }
 
@@ -860,7 +860,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         bool alphaBlend = true,
         D3D11Texture? destination = null)
     {
-        CheckAccess();
+        CheckAccessNoFlush();
         ArgumentNullException.ThrowIfNull(source);
         ValidateTextureEndpoint(source, nameof(source));
         ValidateTextureEndpoint(destination, nameof(destination));
@@ -878,6 +878,23 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         foreach (var region in regions)
             _ = TryClipRegion(source, region, targetWidth, targetHeight, out _);
         if (regions.IsEmpty) return;
+
+        if (Optimize && destination is null)
+        {
+            // Backbuffer quads with identical state accumulate and draw together (flushed by the next renderer call).
+            if (source.MipmapsDirty) FlushBlits();
+            EnsureMipmapsGenerated(source);
+            var key = new BlitBatchKey(source, color, alphaBlend, targetWidth, targetHeight);
+            foreach (var region in regions)
+            {
+                if (!TryClipRegion(source, region, targetWidth, targetHeight, out var clipped)) continue;
+                _blits.Add(key, clipped, DrawBlitBatch);
+                if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.BatchedBlitOps);
+            }
+            return;
+        }
+
+        FlushBlits();
         EnsureMipmapsGenerated(source);
         ID3D11ShaderResourceView sourceView = source.ShaderResourceView;
         ClearPipelineState();
@@ -892,48 +909,92 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             }
 
             var targetView = destination?.RenderTargetView ?? _renderTarget!;
-            _context!.OMSetRenderTargets(targetView, null);
-            _context.RSSetViewport(new Viewport(0, 0, targetWidth, targetHeight, 0, 1));
-            UploadTransform(Matrix4x4.Identity, Matrix4x4.Identity);
-            _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
-            _context.IASetInputLayout(_blitInputLayout!);
-            _context.IASetVertexBuffer(0, _blitVertexBuffer!, (uint)Marshal.SizeOf<D3D11BlitVertex>(), 0);
-            _context.VSSetShader(_blitVertexShader!);
-            _context.VSSetConstantBuffer(0, _transformBuffer!);
-            _context.VSSetConstantBuffer(1, _materialBuffer!);
-            _context.PSSetShader(_texturedPixelShader!);
-            var layer = new D3D11TextureLayer(source, Blend: 2, UseAlpha: true, ClampU: true, ClampV: true);
-            UploadMaterial(MemoryMarshal.CreateReadOnlySpan(ref layer, 1), color, clampRegion: true);
-            SetPixelResources(MemoryMarshal.CreateReadOnlySpan(ref layer, 1));
-            _pixelShaderResources[0] = sourceView;
-            _context.PSSetShaderResources(0, 8, _pixelShaderResources);
-            _context.PSSetConstantBuffer(1, _materialBuffer!);
-            _context.OMSetBlendState(alphaBlend ? _alphaBlendState : null, null, uint.MaxValue);
-
-            const int MaxRegionsPerDraw = 128;
-            const int VerticesPerRegion = 6;
-            Span<D3D11BlitVertex> vertices = stackalloc D3D11BlitVertex[MaxRegionsPerDraw * VerticesPerRegion];
-            var regionIndex = 0;
-            while (regionIndex < regions.Length)
-            {
-                var vertexCount = 0;
-                while (regionIndex < regions.Length && vertexCount < vertices.Length)
-                {
-                    var region = regions[regionIndex++];
-                    if (!TryClipRegion(source, region, targetWidth, targetHeight, out var clipped)) continue;
-                    AppendBlitQuad(vertices, ref vertexCount, clipped, targetWidth, targetHeight, source.Width, source.Height);
-                }
-                if (vertexCount == 0) continue;
-                Upload(_blitVertexBuffer!, MemoryMarshal.AsBytes((ReadOnlySpan<D3D11BlitVertex>)vertices[..vertexCount]));
-                _context.Draw((uint)vertexCount, 0);
-                if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.BlitDraws); D3D11FrameCounters.Add(D3D11FrameCounters.ConstantBufferMaps, 3); }
-                destination?.MarkMipmapsDirty();
-            }
+            BindTargetAndViewport(targetView, null, new Viewport(0, 0, targetWidth, targetHeight, 0, 1));
+            DrawBlitQuads(source, sourceView, color, alphaBlend, targetWidth, targetHeight, regions, destination);
         }
         finally
         {
             BindRenderTargets();
         }
+    }
+
+    private void DrawBlitBatch(in BlitBatchKey key, ReadOnlySpan<ClippedTextureRegion> quads)
+    {
+        var source = (D3D11Texture)key.Source;
+        // 3D draws leave the rasterizer state they used; blits always draw with the default (post-ClearState) state.
+        BindRasterizerState(null);
+        BindTargetAndViewport(_renderTarget!, null, new Viewport(0, 0, key.TargetWidth, key.TargetHeight, 0, 1));
+        DrawBlitQuads(source, source.ShaderResourceView, key.Tint, key.AlphaBlend, key.TargetWidth, key.TargetHeight, quads, null);
+    }
+
+    private void DrawBlitQuads(
+        D3D11Texture source, ID3D11ShaderResourceView sourceView, Vector4 color, bool alphaBlend,
+        int targetWidth, int targetHeight, ReadOnlySpan<D3D11TextureRegion> regions, D3D11Texture? destination)
+    {
+        BeginBlitState(source, sourceView, color, alphaBlend);
+        const int MaxRegionsPerDraw = 128;
+        const int VerticesPerRegion = 6;
+        Span<D3D11BlitVertex> vertices = stackalloc D3D11BlitVertex[MaxRegionsPerDraw * VerticesPerRegion];
+        var regionIndex = 0;
+        while (regionIndex < regions.Length)
+        {
+            var vertexCount = 0;
+            while (regionIndex < regions.Length && vertexCount < vertices.Length)
+            {
+                var region = regions[regionIndex++];
+                if (!TryClipRegion(source, region, targetWidth, targetHeight, out var clipped)) continue;
+                AppendBlitQuad(vertices, ref vertexCount, clipped, targetWidth, targetHeight, source.Width, source.Height);
+            }
+            if (vertexCount == 0) continue;
+            EmitBlitDraw(vertices[..vertexCount]);
+            destination?.MarkMipmapsDirty();
+        }
+    }
+
+    private void DrawBlitQuads(
+        D3D11Texture source, ID3D11ShaderResourceView sourceView, Vector4 color, bool alphaBlend,
+        int targetWidth, int targetHeight, ReadOnlySpan<ClippedTextureRegion> quads, D3D11Texture? destination)
+    {
+        BeginBlitState(source, sourceView, color, alphaBlend);
+        const int MaxRegionsPerDraw = 128;
+        Span<D3D11BlitVertex> vertices = stackalloc D3D11BlitVertex[MaxRegionsPerDraw * 6];
+        for (var offset = 0; offset < quads.Length; offset += MaxRegionsPerDraw)
+        {
+            var vertexCount = 0;
+            var end = Math.Min(quads.Length, offset + MaxRegionsPerDraw);
+            for (var i = offset; i < end; i++)
+                AppendBlitQuad(vertices, ref vertexCount, quads[i], targetWidth, targetHeight, source.Width, source.Height);
+            EmitBlitDraw(vertices[..vertexCount]);
+            destination?.MarkMipmapsDirty();
+        }
+    }
+
+    private void BeginBlitState(D3D11Texture source, ID3D11ShaderResourceView sourceView, Vector4 color, bool alphaBlend)
+    {
+        UploadTransform(Matrix4x4.Identity, Matrix4x4.Identity);
+        BindTriangleList();
+        BindInputLayout(_blitInputLayout!);
+        BindVertexBuffer(_blitVertexBuffer!, (uint)Marshal.SizeOf<D3D11BlitVertex>());
+        BindVertexShader(_blitVertexShader!);
+        BindVsConstantBuffer(0, _transformBuffer!);
+        BindVsConstantBuffer(1, _materialBuffer!);
+        BindPixelShader(_texturedPixelShader!);
+        var layer = new D3D11TextureLayer(source, Blend: 2, UseAlpha: true, ClampU: true, ClampV: true);
+        UploadMaterial(MemoryMarshal.CreateReadOnlySpan(ref layer, 1), color, clampRegion: true);
+        Array.Clear(_pixelShaderResources);
+        Array.Clear(_pixelSamplers);
+        _pixelShaderResources[0] = sourceView;
+        _pixelSamplers[0] = _textureSamplers[3]!;
+        BindPixelResources();
+        BindPsConstantBuffer(1, _materialBuffer!);
+        BindBlendState(alphaBlend ? _alphaBlendState : null);
+    }
+
+    private void EmitBlitDraw(ReadOnlySpan<D3D11BlitVertex> vertices)
+    {
+        Upload(_blitVertexBuffer!, MemoryMarshal.AsBytes(vertices));
+        _context!.Draw((uint)vertices.Length, 0);
+        if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.BlitDraws); D3D11FrameCounters.Add(D3D11FrameCounters.ConstantBufferMaps, 3); }
     }
 
     private static bool TryClipRegion(
@@ -1017,10 +1078,6 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         vertices[vertexCount++] = bottomRight;
     }
 
-    private readonly record struct ClippedTextureRegion(
-        int SourceX, int SourceY, int SourceWidth, int SourceHeight,
-        float DestinationX, float DestinationY, float DestinationWidth, float DestinationHeight);
-
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct D3D11BlitVertex(Vector3 position, Vector4 color, Vector2 texCoord, Vector4 regionUvBounds)
     {
@@ -1036,6 +1093,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         CheckAccess();
         var profileStart = D3D11FrameCounters.Enabled ? D3D11FrameCounters.Now() : 0;
         ResolveBackBuffer();
+        CountSkips();
         _swapChain!.Present(vsync ? 1u : 0u, PresentFlags.None).CheckError();
         if (D3D11FrameCounters.Enabled) D3D11FrameCounters.AddSince(D3D11FrameCounters.PresentTicks, profileStart);
     }
@@ -1333,8 +1391,14 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
 
     private void UploadTransform(in Matrix4x4 worldViewProjection, in Matrix4x4 worldView, in Matrix4x4 world)
     {
-        var normal = Matrix4x4.Identity;
-        if (Matrix4x4.Invert(world, out var inverseWorld)) normal = Matrix4x4.Transpose(inverseWorld);
+        Matrix4x4 normal;
+        if (Optimize && _hasLastNormal && world == _lastWorld) normal = _lastNormal;
+        else
+        {
+            normal = Matrix4x4.Identity;
+            if (Matrix4x4.Invert(world, out var inverseWorld)) normal = Matrix4x4.Transpose(inverseWorld);
+            _lastWorld = world; _lastNormal = normal; _hasLastNormal = true;
+        }
         var transformed = new TransformConstants
         {
             WorldViewProjection = Matrix4x4.Transpose(worldViewProjection),
@@ -1342,15 +1406,21 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             World = Matrix4x4.Transpose(world),
             NormalMatrix = Matrix4x4.Transpose(normal),
         };
+        if (Optimize && _hasLastTransform && SameBytes(transformed, _lastTransform))
+        {
+            if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.SkippedConstantBufferMaps);
+            return;
+        }
         var mapped = _context!.Map(_transformBuffer!, 0, MapMode.WriteDiscard);
         try { *(TransformConstants*)mapped.DataPointer = transformed; }
         finally { _context.Unmap(_transformBuffer!, 0); }
+        _lastTransform = transformed;
+        _hasLastTransform = true;
     }
 
     private void BindRenderTargets()
     {
-        _context!.OMSetRenderTargets(_renderTarget!, _depthView!);
-        _context.RSSetViewport(_viewport);
+        BindTargetAndViewport(_renderTarget!, _depthView!, _viewport);
     }
 
     private void UploadMaterial(ReadOnlySpan<D3D11TextureLayer> layers, Vector4 color, bool clampRegion = false, D3D11Fog? fog = null,
@@ -1390,9 +1460,16 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
                 SetComponent(ref constants.Alpha1, component, enabled && layer.UseAlpha ? 1 : 0);
             }
         }
+        if (Optimize && _hasLastMaterial && SameBytes(constants, _lastMaterial))
+        {
+            if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.SkippedConstantBufferMaps);
+            return;
+        }
         var mapped = _context!.Map(_materialBuffer!, 0, MapMode.WriteDiscard);
         try { *(MaterialConstants*)mapped.DataPointer = constants; }
         finally { _context.Unmap(_materialBuffer!, 0); }
+        _lastMaterial = constants;
+        _hasLastMaterial = true;
     }
 
     private void SetPixelResources(ReadOnlySpan<D3D11TextureLayer> layers)
@@ -1407,8 +1484,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             var samplerIndex = (layer.ClampU ? 1 : 0) | (layer.ClampV ? 2 : 0);
             _pixelSamplers[i] = _textureSamplers[samplerIndex]!;
         }
-        _context!.PSSetShaderResources(0, 8, _pixelShaderResources);
-        _context.PSSetSamplers(0, 8, _pixelSamplers);
+        BindPixelResources();
     }
 
     private void EnsureMipmapsGenerated(ReadOnlySpan<D3D11TextureLayer> layers)
@@ -1474,6 +1550,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         _context?.ClearState();
         Array.Clear(_pixelShaderResources);
         Array.Clear(_pixelSamplers);
+        ResetShadowState();
     }
 
     private static void ValidateColor(float value, string parameter)
@@ -1482,6 +1559,12 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     }
 
     private void CheckAccess()
+    {
+        CheckAccessNoFlush();
+        FlushBlits();
+    }
+
+    private void CheckAccessNoFlush()
     {
         if (Environment.CurrentManagedThreadId != _threadId)
             throw new InvalidOperationException("D3D11 renderer access must stay on its creating thread.");
@@ -1495,6 +1578,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         if (!ReferenceEquals(mesh.Owner, this)) throw new ArgumentException("The mesh belongs to a different renderer.", nameof(mesh));
         if (_meshes.Remove(mesh))
         {
+            FlushBlits();
             ClearPipelineState();
             mesh.DisposeFromRenderer();
         }
@@ -1507,6 +1591,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         if (!ReferenceEquals(texture.Owner, this)) throw new ArgumentException("The texture belongs to a different renderer.", nameof(texture));
         if (_textures.Remove(texture))
         {
+            FlushBlits();
             ClearPipelineState();
             texture.DisposeFromRenderer();
         }
@@ -1597,6 +1682,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             throw new InvalidOperationException("D3D11 renderer must be disposed on its creating thread.");
         if (_disposed) return;
         _disposed = true;
+        _blits.Discard();
         ReleaseGraphicsResources();
         if (_window is not null)
         {
