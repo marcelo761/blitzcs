@@ -406,7 +406,9 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         mesh.ThrowIfDisposed();
         if (!mesh.IsDynamic) throw new ArgumentException("The mesh must have been created with CreateDynamicMesh.", nameof(mesh));
         if (vertices.Length != mesh.VertexCount) throw new ArgumentException("Vertex updates must preserve the mesh vertex count.", nameof(vertices));
+        var profileStart = D3D11FrameCounters.Enabled ? D3D11FrameCounters.Now() : 0;
         Upload(mesh.VertexBuffer, MemoryMarshal.AsBytes(vertices));
+        if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.DynamicVertexUploads); D3D11FrameCounters.AddSince(D3D11FrameCounters.DynamicUploadTicks, profileStart); }
     }
 
     /// <summary>Creates an immutable RGBA8 texture from tightly packed row-major pixel data.</summary>
@@ -619,6 +621,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     public byte[] ReadTexturePixels(D3D11Texture? texture = null)
     {
         CheckAccess();
+        if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.Readbacks);
         ValidateTextureEndpoint(texture, nameof(texture));
         var width = texture?.Width ?? _width;
         var height = texture?.Height ?? _height;
@@ -819,6 +822,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         _context.PSSetConstantBuffer(1, _materialBuffer!);
         BindLightingDrawState(drawState, alphaBlend);
         _context.DrawIndexed(activeIndexCount, 0, 0);
+        if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.MeshDraws); D3D11FrameCounters.Add(D3D11FrameCounters.Triangles, activeIndexCount / 3); D3D11FrameCounters.Add(D3D11FrameCounters.ConstantBufferMaps, 2); }
     }
 
     /// <summary>
@@ -922,6 +926,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
                 if (vertexCount == 0) continue;
                 Upload(_blitVertexBuffer!, MemoryMarshal.AsBytes((ReadOnlySpan<D3D11BlitVertex>)vertices[..vertexCount]));
                 _context.Draw((uint)vertexCount, 0);
+                if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.BlitDraws); D3D11FrameCounters.Add(D3D11FrameCounters.ConstantBufferMaps, 3); }
                 destination?.MarkMipmapsDirty();
             }
         }
@@ -1029,8 +1034,10 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     public void Present(bool vsync = true)
     {
         CheckAccess();
+        var profileStart = D3D11FrameCounters.Enabled ? D3D11FrameCounters.Now() : 0;
         ResolveBackBuffer();
         _swapChain!.Present(vsync ? 1u : 0u, PresentFlags.None).CheckError();
+        if (D3D11FrameCounters.Enabled) D3D11FrameCounters.AddSince(D3D11FrameCounters.PresentTicks, profileStart);
     }
 
     /// <summary>Recreates back-buffer and depth resources at the given size after the host window is resized.</summary>
@@ -1415,8 +1422,10 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     {
         if (!texture.MipmapsDirty) return;
         ClearPipelineState();
+        var profileStart = D3D11FrameCounters.Enabled ? D3D11FrameCounters.Now() : 0;
         _context!.GenerateMips(texture.ShaderResourceView);
         texture.MarkMipmapsClean();
+        if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.MipGenerations); D3D11FrameCounters.AddSince(D3D11FrameCounters.MipTicks, profileStart); }
     }
 
     private static void SetComponent(ref Vector4 vector, int component, float value)
@@ -1461,6 +1470,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
 
     private void ClearPipelineState()
     {
+        if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.ClearPipelineStates);
         _context?.ClearState();
         Array.Clear(_pixelShaderResources);
         Array.Clear(_pixelSamplers);

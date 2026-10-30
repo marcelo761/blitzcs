@@ -13,6 +13,13 @@ public static partial class LegacyGraphics
     /// <summary>Draws a filled or one-pixel outlined rectangle in the current drawing color.</summary>
     public static void Rect(int x, int y, int width, int height, int solid = 1)
     {
+        var profileStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+        try { RectImpl(x, y, width, height, solid); }
+        finally { if (EngineProfile.Enabled) EngineProfile.Add(EngineProfile.Draw2D, profileStart); }
+    }
+
+    private static void RectImpl(int x, int y, int width, int height, int solid)
+    {
         CheckThreadIfStarted();
         EnsureNoBufferLocked();
         if (width <= 0 || height <= 0) return;

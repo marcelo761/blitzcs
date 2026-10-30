@@ -50,6 +50,7 @@ public static partial class LegacyGraphics
     /// <summary>Closes the display and releases renderer resources; scene entities and CPU geometry remain alive.</summary>
     public static void EndGraphics()
     {
+        if (EngineProfile.Enabled) EngineProfile.Flush();
         CheckThreadIfStarted();
         BlitzMovie_Close();
         ClosePlaneGpuMeshes();
@@ -87,7 +88,9 @@ public static partial class LegacyGraphics
     public static void Flip(int sync = 1)
     {
         EnsureNoBufferLocked();
+        var profileStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         RequireRenderer().Present(sync != 0);
+        if (EngineProfile.Enabled) { EngineProfile.Add(EngineProfile.Present, profileStart); EngineProfile.EndFrame(); }
     }
 
     public static int GraphicsWidth() => _renderer is null ? 0 : _width;
@@ -315,6 +318,13 @@ public static partial class LegacyGraphics
     /// <summary>Clears and draws every graphics mesh using the scene's sole camera.</summary>
     public static void RenderWorld(float tween = 1)
     {
+        var profileStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+        try { RenderWorldCore(tween); }
+        finally { if (EngineProfile.Enabled) EngineProfile.Add(EngineProfile.RenderWorld, profileStart); }
+    }
+
+    private static void RenderWorldCore(float tween)
+    {
         CheckThreadIfStarted();
         EnsureNoBufferLocked();
         if (GraphicsBuffer() != BackBuffer())
@@ -333,7 +343,9 @@ public static partial class LegacyGraphics
         if (!Matrix4x4.Invert(cameraWorld, out var view))
             throw new InvalidOperationException("The camera transform is not invertible.");
         var projection = CreateCameraProjection(camera, viewport.Width, viewport.Height);
+        var skinStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         PrepareAnimatedGeometry();
+        if (EngineProfile.Enabled) EngineProfile.Add(EngineProfile.Skinning, skinStart);
         Span<LegacyLightSnapshot> sourceLights = stackalloc LegacyLightSnapshot[8];
         Span<D3D11Light> lights = stackalloc D3D11Light[8];
         var lightCount = CopyVisibleLightsForRendering(sourceLights);

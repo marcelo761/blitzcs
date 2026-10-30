@@ -397,6 +397,14 @@ public static partial class LegacyGraphics
     public static void CopyRect(int sourceX, int sourceY, int width, int height, int destinationX, int destinationY,
         int sourceBuffer = 0, int destinationBuffer = 0)
     {
+        var profileStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+        try { CopyRectImpl(sourceX, sourceY, width, height, destinationX, destinationY, sourceBuffer, destinationBuffer); }
+        finally { if (EngineProfile.Enabled) EngineProfile.Add(EngineProfile.Copy, profileStart); }
+    }
+
+    private static void CopyRectImpl(int sourceX, int sourceY, int width, int height, int destinationX, int destinationY,
+        int sourceBuffer, int destinationBuffer)
+    {
         CheckThreadIfStarted();
         var renderer = RequireRenderer();
         var source = GetBuffer(ResolveBufferHandle(sourceBuffer));

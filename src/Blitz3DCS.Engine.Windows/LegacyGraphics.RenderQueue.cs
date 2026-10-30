@@ -28,6 +28,7 @@ public static partial class LegacyGraphics
     private static void DrawSceneMeshes(D3D11Renderer renderer, SceneGraph scene, CameraState camera,
         Matrix4x4 cameraWorld, Matrix4x4 view, Matrix4x4 projection)
     {
+        var traversalStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         SceneDraws.Clear();
         _trianglesRendered = 0;
         var eye = new Vector3(cameraWorld.M41, cameraWorld.M42, cameraWorld.M43);
@@ -78,6 +79,8 @@ public static partial class LegacyGraphics
             }
         }
         SceneDraws.Sort(SceneDrawComparer.Instance);
+        var submitStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+        if (EngineProfile.Enabled) EngineProfile.AddTicks(EngineProfile.Traversal, submitStart - traversalStart);
         foreach (var draw in SceneDraws)
         {
             var material = draw.Entity.Material;
@@ -106,6 +109,7 @@ public static partial class LegacyGraphics
                 draw.World * view, state, draw.World, draw.Entity.Plane is { } activePlane ? (uint)activePlane.Grid.IndexCount : null);
             _trianglesRendered += draw.Entity.Plane is { } renderedPlane ? renderedPlane.Grid.IndexCount / 3 : draw.Surface.Indices.Count / 3;
         }
+        if (EngineProfile.Enabled) EngineProfile.Add(EngineProfile.Submit, submitStart);
     }
 
     private readonly record struct SceneDraw(MeshEntity Entity, SurfaceState Surface, int SurfaceIndex,

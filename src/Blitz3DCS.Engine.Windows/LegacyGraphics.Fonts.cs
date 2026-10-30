@@ -99,6 +99,13 @@ public static partial class LegacyGraphics
 
     public static void Text(int x, int y, string text, int centerX = 0, int centerY = 0)
     {
+        var profileStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+        try { TextImpl(x, y, text, centerX, centerY); }
+        finally { if (EngineProfile.Enabled) EngineProfile.Add(EngineProfile.Draw2D, profileStart); }
+    }
+
+    private static void TextImpl(int x, int y, string text, int centerX, int centerY)
+    {
         CheckThreadIfStarted();
         EnsureNoBufferLocked();
         ArgumentNullException.ThrowIfNull(text);

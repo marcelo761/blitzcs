@@ -102,6 +102,7 @@ public sealed unsafe partial class D3D11Renderer
             return;
 
         ClearPipelineState();
+        if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.Resolves);
         using var backBuffer = _swapChain!.GetBuffer<ID3D11Texture2D>(0);
         _context!.ResolveSubresource(backBuffer, 0, _antialiasColorTexture!, 0, Format.R8G8B8A8_UNorm);
     }

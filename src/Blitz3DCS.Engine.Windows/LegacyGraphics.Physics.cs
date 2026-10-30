@@ -16,9 +16,20 @@ public static partial class LegacyGraphics
     {
         CheckThreadIfStarted();
         var scene = RequireScene();
+        var t0 = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         UpdateAnimations(scene, elapsed);
+        var t1 = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         PrepareCollisionGeometry(scene);
+        var t2 = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         scene.UpdateWorld(elapsed);
+        if (EngineProfile.Enabled)
+        {
+            var t3 = EngineProfile.Now();
+            EngineProfile.AddTicks(EngineProfile.UpdateAnimation, t1 - t0);
+            EngineProfile.AddTicks(EngineProfile.UpdateCollision, t2 - t1);
+            EngineProfile.AddTicks(EngineProfile.UpdateScene, t3 - t2);
+            EngineProfile.AddTicks(EngineProfile.UpdateWorld, t3 - t0);
+        }
     }
 
     private static void PrepareCollisionGeometry(SceneGraph scene)

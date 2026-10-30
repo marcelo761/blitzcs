@@ -371,6 +371,13 @@ public static partial class LegacyGraphics
 
     private static void DrawImageCore(int image, int x, int y, int frame, bool useAlpha, bool useHandle)
     {
+        var profileStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+        try { DrawImageCoreImpl(image, x, y, frame, useAlpha, useHandle); }
+        finally { if (EngineProfile.Enabled) EngineProfile.Add(EngineProfile.Draw2D, profileStart); }
+    }
+
+    private static void DrawImageCoreImpl(int image, int x, int y, int frame, bool useAlpha, bool useHandle)
+    {
         UpdateMovieImage(image);
         CheckThreadIfStarted();
         EnsureNoBufferLocked();

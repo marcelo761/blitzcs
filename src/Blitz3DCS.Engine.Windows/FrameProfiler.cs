@@ -1,0 +1,186 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+using Blitz3DCS.Graphics.D3D11;
+
+namespace Blitz3DCS.Engine.Windows;
+
+/// <summary>
+/// Pure aggregation core of the frame profiler: per-phase tick accumulators, a ring of the last
+/// <c>window</c> frames for mean/p95/max, and a one-line report. Allocation-free except when reporting.
+/// </summary>
+internal sealed class FrameProfiler
+{
+    private readonly string[] _phaseNames;
+    private readonly string[] _counterNames;
+    private readonly int _window;
+    private readonly double _msPerTick;
+    private readonly Action<string> _sink;
+    private readonly long[] _current;
+    private readonly long[] _currentCounters;
+    private readonly long[][] _samples;      // [phase][frame]
+    private readonly long[] _counterTotals;
+    private readonly long[] _allocSamples;
+    private readonly long[] _scratch;
+    private int _frames;
+    private long _gcGen0, _gcGen1, _gcGen2;
+    private long _totalFrames;
+
+    internal FrameProfiler(string[] phaseNames, string[] counterNames, int window, long ticksPerSecond, Action<string> sink)
+    {
+        _phaseNames = phaseNames;
+        _counterNames = counterNames;
+        _window = window;
+        _msPerTick = 1000.0 / ticksPerSecond;
+        _sink = sink;
+        _current = new long[phaseNames.Length];
+        _currentCounters = new long[counterNames.Length];
+        _samples = new long[phaseNames.Length][];
+        for (var i = 0; i < _samples.Length; i++) _samples[i] = new long[window];
+        _counterTotals = new long[counterNames.Length];
+        _allocSamples = new long[window];
+        _scratch = new long[window];
+    }
+
+    internal int FramesInWindow => _frames;
+    internal long TotalFrames => _totalFrames;
+
+    internal void AddTicks(int phase, long ticks) => _current[phase] += ticks;
+    internal void AddCount(int counter, long amount = 1) => _currentCounters[counter] += amount;
+
+    /// <summary>Closes the current frame; emits a report line when the window is full.</summary>
+    internal void EndFrame(long allocatedBytes, int gen0, int gen1, int gen2)
+    {
+        for (var i = 0; i < _current.Length; i++) { _samples[i][_frames] = _current[i]; _current[i] = 0; }
+        for (var i = 0; i < _currentCounters.Length; i++) { _counterTotals[i] += _currentCounters[i]; _currentCounters[i] = 0; }
+        _allocSamples[_frames] = allocatedBytes;
+        _gcGen0 += gen0; _gcGen1 += gen1; _gcGen2 += gen2;
+        _frames++;
+        _totalFrames++;
+        if (_frames == _window) Report();
+    }
+
+    /// <summary>Emits a line for the frames collected so far (used at exit) and starts a new window.</summary>
+    internal void Flush()
+    {
+        if (_frames > 0) Report();
+    }
+
+    private void Report()
+    {
+        var n = _frames;
+        var text = new StringBuilder(512);
+        text.Append(CultureInfo.InvariantCulture, $"[profile] frames={_totalFrames} window={n}");
+        for (var p = 0; p < _phaseNames.Length; p++)
+        {
+            long sum = 0, max = 0;
+            for (var i = 0; i < n; i++) { var v = _samples[p][i]; sum += v; _scratch[i] = v; if (v > max) max = v; }
+            Array.Sort(_scratch, 0, n);
+            var p95 = _scratch[Math.Min(n - 1, (int)Math.Ceiling(n * 0.95) - 1)];
+            text.Append(CultureInfo.InvariantCulture,
+                $" {_phaseNames[p]}={sum * _msPerTick / n:F3}/{p95 * _msPerTick:F3}/{max * _msPerTick:F3}ms");
+        }
+        for (var c = 0; c < _counterNames.Length; c++)
+            text.Append(CultureInfo.InvariantCulture, $" {_counterNames[c]}={(double)_counterTotals[c] / n:F1}");
+        long alloc = 0, allocMax = 0;
+        for (var i = 0; i < n; i++) { alloc += _allocSamples[i]; allocMax = Math.Max(allocMax, _allocSamples[i]); }
+        text.Append(CultureInfo.InvariantCulture, $" allocB={alloc / n}/{allocMax} gc0/1/2={_gcGen0}/{_gcGen1}/{_gcGen2}");
+        _sink(text.ToString());
+        _frames = 0;
+        Array.Clear(_counterTotals);
+        _gcGen0 = _gcGen1 = _gcGen2 = 0;
+    }
+}
+
+/// <summary>
+/// Env-gated profiler front end. BLITZCS_ENGINE_PROFILE=1 enables; BLITZCS_ENGINE_PROFILE_LOG=path writes there
+/// (no file otherwise: stderr). When disabled the static readonly flag lets the JIT drop every call site.
+/// </summary>
+internal static class EngineProfile
+{
+    internal static readonly bool Enabled = Environment.GetEnvironmentVariable("BLITZCS_ENGINE_PROFILE") == "1";
+
+    internal const int UpdateWorld = 0, UpdateAnimation = 1, UpdateCollision = 2, UpdateScene = 3, RenderWorld = 4,
+        Skinning = 5, Traversal = 6, Submit = 7, Draw2D = 8, Copy = 9, Present = 10, Frame = 11,
+        MipGen = 12, DynUpload = 13, TexUpload = 14, Readback = 15;
+    internal static readonly string[] PhaseNames =
+    [
+        "UpdateWorld", "anim", "collision", "sceneUpdate", "RenderWorld", "skinning", "traversal+sort", "submit(incl.gpu-upload)",
+        "2D", "CopyRect", "present", "frame", "mipgen", "dynVB", "texUpload", "readback"
+    ];
+    internal const int DrawCalls = 0, Tris = 1, BlitDraws = 2, ClearStates = 3, CbMaps = 4, Resolves = 5, ReadbackCount = 6, MipCount = 7, DynCount = 8, TexCount = 9;
+    internal static readonly string[] CounterNames =
+        ["draws", "tris", "blitDraws", "pipelineResets", "cbMaps", "resolves", "READBACKS", "mips", "dynUploads", "texUploads"];
+
+    internal static void AddTicks(int phase, long ticks)
+    {
+        if (!Enabled) return;
+        Get().AddTicks(phase, ticks);
+    }
+
+    private static FrameProfiler? _profiler;
+    private static StreamWriter? _log;
+    private static long _lastAlloc;
+    private static int _g0, _g1, _g2;
+    private static long _frameStart;
+
+    internal static long Now() => Stopwatch.GetTimestamp();
+
+    internal static void Add(int phase, long start)
+    {
+        if (!Enabled) return;
+        Get().AddTicks(phase, Stopwatch.GetTimestamp() - start);
+    }
+
+    private static FrameProfiler Get()
+    {
+        if (_profiler is not null) return _profiler;
+        var path = Environment.GetEnvironmentVariable("BLITZCS_ENGINE_PROFILE_LOG");
+        if (!string.IsNullOrEmpty(path)) _log = new StreamWriter(path, append: true) { AutoFlush = true };
+        _profiler = new FrameProfiler(PhaseNames, CounterNames, 120, Stopwatch.Frequency,
+            line => { if (_log is not null) _log.WriteLine(line); else Console.Error.WriteLine(line); });
+        _lastAlloc = GC.GetAllocatedBytesForCurrentThread();
+        _g0 = GC.CollectionCount(0); _g1 = GC.CollectionCount(1); _g2 = GC.CollectionCount(2);
+        _frameStart = Stopwatch.GetTimestamp();
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => Flush();
+        return _profiler;
+    }
+
+    /// <summary>Call after Present: folds renderer counters in and closes the frame.</summary>
+    internal static void EndFrame()
+    {
+        if (!Enabled) return;
+        var p = Get();
+        var v = D3D11FrameCounters.Values;
+        p.AddTicks(MipGen, v[D3D11FrameCounters.MipTicks]);
+        p.AddTicks(DynUpload, v[D3D11FrameCounters.DynamicUploadTicks]);
+        p.AddTicks(TexUpload, v[D3D11FrameCounters.TextureUploadTicks]);
+        p.AddTicks(Readback, v[D3D11FrameCounters.ReadbackTicks]);
+        p.AddCount(DrawCalls, v[D3D11FrameCounters.MeshDraws]);
+        p.AddCount(Tris, v[D3D11FrameCounters.Triangles]);
+        p.AddCount(BlitDraws, v[D3D11FrameCounters.BlitDraws]);
+        p.AddCount(ClearStates, v[D3D11FrameCounters.ClearPipelineStates]);
+        p.AddCount(CbMaps, v[D3D11FrameCounters.ConstantBufferMaps]);
+        p.AddCount(Resolves, v[D3D11FrameCounters.Resolves]);
+        p.AddCount(ReadbackCount, v[D3D11FrameCounters.Readbacks]);
+        p.AddCount(MipCount, v[D3D11FrameCounters.MipGenerations]);
+        p.AddCount(DynCount, v[D3D11FrameCounters.DynamicVertexUploads]);
+        p.AddCount(TexCount, v[D3D11FrameCounters.TextureUploads]);
+        Array.Clear(v);
+        var now = Stopwatch.GetTimestamp();
+        p.AddTicks(Frame, now - _frameStart);
+        _frameStart = now;
+        var alloc = GC.GetAllocatedBytesForCurrentThread();
+        int c0 = GC.CollectionCount(0), c1 = GC.CollectionCount(1), c2 = GC.CollectionCount(2);
+        p.EndFrame(alloc - _lastAlloc, c0 - _g0, c1 - _g1, c2 - _g2);
+        _lastAlloc = GC.GetAllocatedBytesForCurrentThread();
+        _g0 = c0; _g1 = c1; _g2 = c2;
+    }
+
+    internal static void Flush()
+    {
+        if (!Enabled || _profiler is null) return;
+        _profiler.Flush();
+        _log?.Flush();
+    }
+}
