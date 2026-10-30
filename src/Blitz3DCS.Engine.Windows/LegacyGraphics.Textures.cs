@@ -51,6 +51,42 @@ public static partial class LegacyGraphics
         GetTexture(texture).CoordinateSet = coordinateSet;
     }
 
+    /// <summary>
+    /// Decodes a texture file to RGBA8 with the colour key (flag 4) applied. The returned buffer may be shared with
+    /// other loads of the same unchanged file and must be treated as read-only.
+    /// </summary>
+    internal static DecodedImage PrepareTexturePixels(string file, int flags)
+    {
+        var path = file.Replace('\\', Path.DirectorySeparatorChar);
+        var masked = (flags & 4) != 0;
+        string? fullPath = null;
+        long ticks = 0, length = 0;
+        if (!TextureLoadOptions.Disabled)
+        {
+            try
+            {
+                var info = new FileInfo(path);
+                if (info.Exists)
+                {
+                    fullPath = info.FullName;
+                    ticks = info.LastWriteTimeUtc.Ticks;
+                    length = info.Length;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
+            if (fullPath is not null && TextureDecodeCache.TryGet(fullPath, ticks, length, masked, out var w, out var h, out var cached))
+                return new DecodedImage(w, h, cached);
+        }
+
+        DecodedImage image;
+        using (var stream = File.OpenRead(path))
+            image = DecodeImage(stream);
+        if (masked) BuildTextureMask(image.Rgba8);
+        if (fullPath is not null)
+            TextureDecodeCache.Add(fullPath, ticks, length, masked, image.Width, image.Height, image.Rgba8);
+        return image;
+    }
+
     private static int LoadTextureCore(string file, int flags)
     {
         ArgumentException.ThrowIfNullOrEmpty(file);
@@ -60,15 +96,13 @@ public static partial class LegacyGraphics
         DecodedImage image;
         try
         {
-            using var stream = File.OpenRead(file.Replace('\\', Path.DirectorySeparatorChar));
-            image = DecodeImage(stream);
+            image = PrepareTexturePixels(file, flags);
         }
         catch (IOException) { return 0; }
         catch (UnauthorizedAccessException) { return 0; }
         catch (ArgumentException) { return 0; }
         catch (InvalidOperationException) { return 0; }
 
-        if ((flags & 4) != 0) BuildTextureMask(image.Rgba8);
         var texture = CreateTexture(image.Width, image.Height, flags);
         GetTexture(texture).SourceName = file;
         try

@@ -13,7 +13,10 @@ internal static class DdsDecoder
         signature.Length >= 4 && signature[0] == (byte)'D' && signature[1] == (byte)'D' &&
         signature[2] == (byte)'S' && signature[3] == (byte)' ';
 
-    internal static (int Width, int Height, byte[] Rgba8) Decode(Stream stream, ReadOnlySpan<byte> signature)
+    internal static (int Width, int Height, byte[] Rgba8) Decode(Stream stream, ReadOnlySpan<byte> signature) =>
+        Decode(stream, signature, TextureLoadOptions.Disabled);
+
+    internal static (int Width, int Height, byte[] Rgba8) Decode(Stream stream, ReadOnlySpan<byte> signature, bool legacy)
     {
         Span<byte> header = stackalloc byte[HeaderSize];
         signature.CopyTo(header);
@@ -42,19 +45,35 @@ internal static class DdsDecoder
         var blocksWide = (width + 3) / 4;
         var blocksHigh = (height + 3) / 4;
         var compressedBytes = checked(checked(blocksWide * blocksHigh) * blockBytes);
-        var compressed = new byte[compressedBytes];
-        ReadExactly(stream, compressed);
-
         var rgba = new byte[pixelBytes];
-        var offset = 0;
-        for (var by = 0; by < blocksHigh; by++)
-        for (var bx = 0; bx < blocksWide; bx++)
+        if (legacy)
         {
-            var block = compressed.AsSpan(offset, blockBytes);
-            offset += blockBytes;
-            DecodeBlock(block, fourCc, rgba, width, height, bx * 4, by * 4);
+            var compressed = new byte[compressedBytes];
+            ReadExactly(stream, compressed);
+            var offset = 0;
+            for (var by = 0; by < blocksHigh; by++)
+            for (var bx = 0; bx < blocksWide; bx++)
+            {
+                var block = compressed.AsSpan(offset, blockBytes);
+                offset += blockBytes;
+                DecodeBlock(block, fourCc, rgba, width, height, bx * 4, by * 4);
+            }
+            return (width, height, rgba);
         }
 
+        // Stream one block row at a time through a pooled buffer instead of materializing the whole payload.
+        var rowBytes = checked(blocksWide * blockBytes);
+        var rowBuffer = System.Buffers.ArrayPool<byte>.Shared.Rent(rowBytes);
+        try
+        {
+            for (var by = 0; by < blocksHigh; by++)
+            {
+                ReadExactly(stream, rowBuffer.AsSpan(0, rowBytes));
+                for (var bx = 0; bx < blocksWide; bx++)
+                    DecodeBlock(rowBuffer.AsSpan(bx * blockBytes, blockBytes), fourCc, rgba, width, height, bx * 4, by * 4);
+            }
+        }
+        finally { System.Buffers.ArrayPool<byte>.Shared.Return(rowBuffer); }
         return (width, height, rgba);
     }
 
