@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Blitz3DCS.Engine;
 using Blitz3DCS.Graphics.D3D11;
 
 namespace Blitz3DCS.Engine.Windows;
@@ -8,6 +9,11 @@ namespace Blitz3DCS.Engine.Windows;
 /// <summary>
 /// Pure aggregation core of the frame profiler: per-phase tick accumulators, a ring of the last
 /// <c>window</c> frames for mean/p95/max, and a one-line report. Allocation-free except when reporting.
+/// Definitions (when a frame phase index is supplied): 'frame' = Flip-to-Flip wall time (previous Flip's end to this
+/// Flip's end, including game/BASIC logic, waiting and vsync); 'engine' = sum of the top-level adapter phases
+/// (UpdateWorld, RenderWorld, 2D, CopyRect, present; nested phases such as anim/skinning/submit are not added twice);
+/// 'outside' = frame - engine (game logic outside the adapter plus waiting).
+/// A frame whose 'frame' time exceeds the hitch threshold additionally emits one immediate [hitch] line.
 /// </summary>
 internal sealed class FrameProfiler
 {
@@ -22,12 +28,25 @@ internal sealed class FrameProfiler
     private readonly long[] _counterTotals;
     private readonly long[] _allocSamples;
     private readonly long[] _scratch;
+    private readonly int _frameIndex;
+    private readonly int[] _engineIndexes;
+    private readonly long _hitchTicks;
+    private readonly Func<string>? _hitchExtra;
+    private readonly long[] _engineSamples;
+    private readonly long[] _outsideSamples;
     private int _frames;
     private long _gcGen0, _gcGen1, _gcGen2;
     private long _totalFrames;
 
-    internal FrameProfiler(string[] phaseNames, string[] counterNames, int window, long ticksPerSecond, Action<string> sink)
+    internal FrameProfiler(string[] phaseNames, string[] counterNames, int window, long ticksPerSecond, Action<string> sink,
+        int frameIndex = -1, int[]? engineIndexes = null, double hitchMs = 0, Func<string>? hitchExtra = null)
     {
+        _frameIndex = frameIndex;
+        _engineIndexes = engineIndexes ?? [];
+        _hitchTicks = hitchMs > 0 ? (long)(hitchMs * ticksPerSecond / 1000.0) : 0;
+        _hitchExtra = hitchExtra;
+        _engineSamples = new long[window];
+        _outsideSamples = new long[window];
         _phaseNames = phaseNames;
         _counterNames = counterNames;
         _window = window;
@@ -51,6 +70,15 @@ internal sealed class FrameProfiler
     /// <summary>Closes the current frame; emits a report line when the window is full.</summary>
     internal void EndFrame(long allocatedBytes, int gen0, int gen1, int gen2)
     {
+        long engine = 0, outside = 0;
+        if (_frameIndex >= 0)
+        {
+            foreach (var index in _engineIndexes) engine += _current[index];
+            outside = Math.Max(0, _current[_frameIndex] - engine);
+            _engineSamples[_frames] = engine;
+            _outsideSamples[_frames] = outside;
+            if (_hitchTicks > 0 && _current[_frameIndex] > _hitchTicks) _sink(FormatHitch(engine, outside, allocatedBytes, gen0, gen1, gen2));
+        }
         for (var i = 0; i < _current.Length; i++) { _samples[i][_frames] = _current[i]; _current[i] = 0; }
         for (var i = 0; i < _currentCounters.Length; i++) { _counterTotals[i] += _currentCounters[i]; _currentCounters[i] = 0; }
         _allocSamples[_frames] = allocatedBytes;
@@ -66,11 +94,38 @@ internal sealed class FrameProfiler
         if (_frames > 0) Report();
     }
 
+    /// <summary>Formats the immediate hitch line for the frame currently being closed (before its accumulators reset).</summary>
+    internal string FormatHitch(long engine, long outside, long allocatedBytes, int gen0, int gen1, int gen2)
+    {
+        var text = new StringBuilder(384);
+        text.Append(CultureInfo.InvariantCulture,
+            $"[hitch] frame#{_totalFrames + 1} frame={_current[_frameIndex] * _msPerTick:F1}ms engine={engine * _msPerTick:F1}ms outside={outside * _msPerTick:F1}ms");
+        for (var p = 0; p < _phaseNames.Length; p++)
+            if (p != _frameIndex && _current[p] != 0) text.Append(CultureInfo.InvariantCulture, $" {_phaseNames[p]}={_current[p] * _msPerTick:F1}");
+        text.Append(CultureInfo.InvariantCulture, $" allocB={allocatedBytes} gc0/1/2={gen0}/{gen1}/{gen2}");
+        if (_hitchExtra is not null) text.Append(' ').Append(_hitchExtra());
+        return text.ToString();
+    }
+
+    private static long Percentile95(long[] values, long[] scratch, int n)
+    {
+        Array.Copy(values, scratch, n);
+        Array.Sort(scratch, 0, n);
+        return scratch[Math.Min(n - 1, (int)Math.Ceiling(n * 0.95) - 1)];
+    }
+
     private void Report()
     {
         var n = _frames;
         var text = new StringBuilder(512);
         text.Append(CultureInfo.InvariantCulture, $"[profile] frames={_totalFrames} window={n}");
+        if (_frameIndex >= 0)
+        {
+            long es = 0, em = 0, os = 0, om = 0;
+            for (var i = 0; i < n; i++) { es += _engineSamples[i]; em = Math.Max(em, _engineSamples[i]); os += _outsideSamples[i]; om = Math.Max(om, _outsideSamples[i]); }
+            text.Append(CultureInfo.InvariantCulture,
+                $" [frame=Flip-to-Flip wall time; engine=sum of adapter phases UpdateWorld+RenderWorld+2D+CopyRect+present; outside=frame-engine (game logic+waiting)] engine={es * _msPerTick / n:F3}/{Percentile95(_engineSamples, _scratch, n) * _msPerTick:F3}/{em * _msPerTick:F3}ms outside={os * _msPerTick / n:F3}/{Percentile95(_outsideSamples, _scratch, n) * _msPerTick:F3}/{om * _msPerTick:F3}ms");
+        }
         for (var p = 0; p < _phaseNames.Length; p++)
         {
             long sum = 0, max = 0;
@@ -115,7 +170,9 @@ internal static class EngineProfile
     internal static void AddTicks(int phase, long ticks)
     {
         if (!Enabled) return;
-        Get().AddTicks(phase, ticks);
+        var p = Get();
+        if (_firstCall == 0) _firstCall = Stopwatch.GetTimestamp() - ticks;
+        p.AddTicks(phase, ticks);
     }
 
     private static FrameProfiler? _profiler;
@@ -124,13 +181,32 @@ internal static class EngineProfile
     private static int _g0, _g1, _g2;
     private static long _frameStart;
 
+    internal static readonly double HitchMs = ParseHitchMs(Environment.GetEnvironmentVariable("BLITZCS_ENGINE_HITCH_MS"));
+    internal static readonly int[] EnginePhases = [UpdateWorld, RenderWorld, Draw2D, Copy, Present];
+
+    /// <summary>Parses BLITZCS_ENGINE_HITCH_MS: positive number of milliseconds, otherwise the 50 ms default.</summary>
+    internal static double ParseHitchMs(string? text) =>
+        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && value > 0 ? value : 50;
+
+    private static long _lastFlipEnd, _firstCall;
+
     internal static long Now() => Stopwatch.GetTimestamp();
 
     internal static void Add(int phase, long start)
     {
         if (!Enabled) return;
-        Get().AddTicks(phase, Stopwatch.GetTimestamp() - start);
+        var p = Get();
+        if (_firstCall == 0) _firstCall = start;
+        p.AddTicks(phase, Stopwatch.GetTimestamp() - start);
     }
+
+    private static string HitchExtra(long now)
+    {
+        var gap = _firstCall == 0 || _lastFlipEnd == 0 ? 0 : _firstCall - _lastFlipEnd;
+        return string.Create(CultureInfo.InvariantCulture,
+            $"preFirstCall={gap * 1000.0 / Stopwatch.Frequency:F1}ms calls[{TraceCall.FormatCounts(_hitchCounts)}]");
+    }
+    private static long[] _hitchCounts = new long[TraceCall.Names.Length];
 
     private static FrameProfiler Get()
     {
@@ -138,10 +214,12 @@ internal static class EngineProfile
         var path = Environment.GetEnvironmentVariable("BLITZCS_ENGINE_PROFILE_LOG");
         if (!string.IsNullOrEmpty(path)) _log = new StreamWriter(path, append: true) { AutoFlush = true };
         _profiler = new FrameProfiler(PhaseNames, CounterNames, 120, Stopwatch.Frequency,
-            line => { if (_log is not null) _log.WriteLine(line); else Console.Error.WriteLine(line); });
+            line => { if (_log is not null) _log.WriteLine(line); else Console.Error.WriteLine(line); },
+            Frame, EnginePhases, HitchMs, () => HitchExtra(0));
         _lastAlloc = GC.GetAllocatedBytesForCurrentThread();
         _g0 = GC.CollectionCount(0); _g1 = GC.CollectionCount(1); _g2 = GC.CollectionCount(2);
         _frameStart = Stopwatch.GetTimestamp();
+        _lastFlipEnd = _frameStart;
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Flush();
         return _profiler;
     }
@@ -172,7 +250,10 @@ internal static class EngineProfile
         _frameStart = now;
         var alloc = GC.GetAllocatedBytesForCurrentThread();
         int c0 = GC.CollectionCount(0), c1 = GC.CollectionCount(1), c2 = GC.CollectionCount(2);
+        _hitchCounts = EngineTrace.TakeCounts();
         p.EndFrame(alloc - _lastAlloc, c0 - _g0, c1 - _g1, c2 - _g2);
+        _lastFlipEnd = now;
+        _firstCall = 0;
         _lastAlloc = GC.GetAllocatedBytesForCurrentThread();
         _g0 = c0; _g1 = c1; _g2 = c2;
     }

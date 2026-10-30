@@ -8,7 +8,7 @@ public static partial class LegacyGraphics
     private static MeshGeometry? _spriteQuadGeometry;
 
     /// <summary>Creates a world-space sprite with the legacy default free view mode.</summary>
-    public static int CreateSprite(int parent = 0)
+    private static int CreateSpriteCore(int parent)
     {
         CheckThreadIfStarted();
         var scene = RequireScene();

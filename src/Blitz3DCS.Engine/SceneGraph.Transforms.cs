@@ -20,6 +20,12 @@ public sealed partial class SceneGraph
         ResetCollisionState(entity);
     }
 
+    /// <summary>Diagnostics: the entity's own (non-hierarchical) visible flag.</summary>
+    public bool IsSelfVisible(int entity) => GetNode(entity).Visible;
+
+    /// <summary>Diagnostics: the entity's own (non-hierarchical) enabled flag.</summary>
+    public bool IsSelfEnabled(int entity) => GetNode(entity).Enabled;
+
     /// <summary>Returns whether the entity and every ancestor are enabled and visible.</summary>
     public bool IsVisibleInHierarchy(int entity)
     {

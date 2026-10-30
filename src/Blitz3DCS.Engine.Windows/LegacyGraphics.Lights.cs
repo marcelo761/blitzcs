@@ -69,7 +69,7 @@ public static partial class LegacyGraphics
     }
 
     /// <summary>Stores entity render flags for subsequent D3D11 lighting support.</summary>
-    public static void EntityFX(int entity, int effects)
+    private static void EntityFXCore(int entity, int effects)
     {
         CheckThreadIfStarted();
         GetMesh(entity).Material.Effects = effects;

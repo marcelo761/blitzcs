@@ -27,7 +27,7 @@ public static partial class LegacyGraphics
         material.Color = new Vector4(red / 255f, green / 255f, blue / 255f, material.Color.W);
     }
 
-    public static void EntityAlpha(int entity, float alpha)
+    private static void EntityAlphaCore(int entity, float alpha)
     {
         CheckThreadIfStarted();
         ValidateFiniteColor(alpha, nameof(alpha));

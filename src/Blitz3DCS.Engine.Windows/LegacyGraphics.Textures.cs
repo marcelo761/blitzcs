@@ -51,7 +51,7 @@ public static partial class LegacyGraphics
         GetTexture(texture).CoordinateSet = coordinateSet;
     }
 
-    public static int LoadTexture(string file, int flags = 1)
+    private static int LoadTextureCore(string file, int flags)
     {
         ArgumentException.ThrowIfNullOrEmpty(file);
         ValidateTextureFlags(flags);
@@ -166,7 +166,7 @@ public static partial class LegacyGraphics
     }
 
     /// <summary>Creates a procedural texture with one or more frames.</summary>
-    public static int CreateTexture(int width, int height, int flags = 0, int frames = 1)
+    private static int CreateTextureCore(int width, int height, int flags, int frames)
     {
         CheckThreadIfStarted();
         ValidateTextureFlags(flags);

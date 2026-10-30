@@ -1,7 +1,7 @@
 namespace Blitz3DCS.Engine;
 
 /// <summary>Static command-shaped facade for BASIC bindings that operate on the active scene.</summary>
-public static class LegacyScene
+public static partial class LegacyScene
 {
     private static SceneGraph _current = new();
     private static SceneVector3 _tformed;
@@ -12,16 +12,16 @@ public static class LegacyScene
         set => Volatile.Write(ref _current, value ?? throw new ArgumentNullException(nameof(value)));
     }
 
-    public static int CreatePivot(int parent = 0) => Current.CreatePivot(parent);
-    public static int CopyEntity(int entity, int parent = 0) => Current.CopyEntity(entity, parent);
-    public static void FreeEntity(int entity) => Current.FreeEntity(entity);
-    public static void HideEntity(int entity) => Current.HideEntity(entity);
-    public static void ShowEntity(int entity) => Current.ShowEntity(entity);
-    public static void EntityType(int entity, int type, int recursive = 0) => Current.EntityType(entity, type, recursive != 0);
+    public static int CreatePivot(int parent = 0) => EngineTrace.Hooked ? CreatePivotTraced(parent) : Current.CreatePivot(parent);
+    public static int CopyEntity(int entity, int parent = 0) => EngineTrace.Hooked ? CopyEntityTraced(entity, parent) : Current.CopyEntity(entity, parent);
+    public static void FreeEntity(int entity) { if (EngineTrace.Hooked) FreeEntityTraced(entity); else Current.FreeEntity(entity); }
+    public static void HideEntity(int entity) { if (EngineTrace.Hooked) VisibilityTraced(entity, false); else Current.HideEntity(entity); }
+    public static void ShowEntity(int entity) { if (EngineTrace.Hooked) VisibilityTraced(entity, true); else Current.ShowEntity(entity); }
+    public static void EntityType(int entity, int type, int recursive = 0) { if (EngineTrace.Hooked) EntityTypeTraced(entity, type, recursive); else Current.EntityType(entity, type, recursive != 0); }
     public static int GetEntityType(int entity) => Current.GetEntityType(entity);
     public static void ResetEntity(int entity) => Current.ResetEntity(entity);
-    public static void EntityRadius(int entity, float xRadius, float yRadius = 0) => Current.EntityRadius(entity, xRadius, yRadius);
-    public static void EntityBox(int entity, float x, float y, float z, float width, float height, float depth) => Current.EntityBox(entity, x, y, z, width, height, depth);
+    public static void EntityRadius(int entity, float xRadius, float yRadius = 0) { if (EngineTrace.Hooked) EntityRadiusTraced(entity, xRadius, yRadius); else Current.EntityRadius(entity, xRadius, yRadius); }
+    public static void EntityBox(int entity, float x, float y, float z, float width, float height, float depth) { if (EngineTrace.Hooked) EntityBoxTraced(entity, x, y, z, width, height, depth); else Current.EntityBox(entity, x, y, z, width, height, depth); }
     public static void Collisions(int sourceType, int destinationType, int method, int response) => Current.Collisions(sourceType, destinationType, method, response);
     public static void ClearCollisions() => Current.ClearCollisions();
     public static void UpdateWorld(float elapsed = 1) => Current.UpdateWorld(elapsed);
@@ -49,9 +49,9 @@ public static class LegacyScene
     public static float PickedNX() => Current.PickedNX;
     public static float PickedNY() => Current.PickedNY;
     public static float PickedNZ() => Current.PickedNZ;
-    public static void PositionEntity(int entity, float x, float y, float z, int global = 0) => Current.PositionEntity(entity, x, y, z, global != 0);
+    public static void PositionEntity(int entity, float x, float y, float z, int global = 0) { if (EngineTrace.Hooked) PositionEntityTraced(entity, x, y, z, global); else Current.PositionEntity(entity, x, y, z, global != 0); }
     public static void TranslateEntity(int entity, float x, float y, float z, int global = 0) => Current.TranslateEntity(entity, x, y, z, global != 0);
-    public static void ScaleEntity(int entity, float x, float y, float z, int global = 0) => Current.ScaleEntity(entity, x, y, z, global != 0);
+    public static void ScaleEntity(int entity, float x, float y, float z, int global = 0) { if (EngineTrace.Hooked) ScaleEntityTraced(entity, x, y, z, global); else Current.ScaleEntity(entity, x, y, z, global != 0); }
     public static void RotateEntity(int entity, float pitch, float yaw, float roll, int global = 0) => Current.RotateEntity(entity, pitch, yaw, roll, global != 0);
     public static void MoveEntity(int entity, float x, float y, float z) => Current.MoveEntity(entity, x, y, z);
     public static void TurnEntity(int entity, float pitch, float yaw, float roll, int global = 0) => Current.TurnEntity(entity, pitch, yaw, roll, global != 0);

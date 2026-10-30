@@ -7,7 +7,7 @@ namespace Blitz3DCS.Engine.Windows;
 public static partial class LegacyGraphics
 {
     /// <summary>Loads and collapses a B3D hierarchy into a static mesh, baking its node transforms.</summary>
-    public static int LoadMesh(string file, int parent = 0)
+    private static int LoadMeshCore(string file, int parent)
     {
         ArgumentException.ThrowIfNullOrEmpty(file);
         CheckThreadIfStarted();

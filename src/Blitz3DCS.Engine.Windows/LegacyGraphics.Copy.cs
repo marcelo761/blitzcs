@@ -6,7 +6,7 @@ public static partial class LegacyGraphics
     /// Copies a pivot/mesh hierarchy with independent transforms and shared mesh geometry.
     /// The new root keeps the source's local transform under the requested parent.
     /// </summary>
-    public static int CopyEntity(int entity, int parent = 0)
+    private static int CopyEntityCore(int entity, int parent)
     {
         CheckThreadIfStarted();
         var scene = RequireScene();

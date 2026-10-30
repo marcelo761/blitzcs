@@ -9,7 +9,7 @@ public static partial class LegacyGraphics
     internal static readonly Dictionary<int, AnimatedModel> AnimatedModels = [];
 
     /// <summary>Loads a B3D model while preserving its node hierarchy and animation data.</summary>
-    public static int LoadAnimMesh(string file, int parent = 0)
+    private static int LoadAnimMeshCore(string file, int parent)
     {
         ArgumentException.ThrowIfNullOrEmpty(file);
         CheckThreadIfStarted();

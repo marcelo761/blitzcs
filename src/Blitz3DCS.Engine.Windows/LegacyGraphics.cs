@@ -91,6 +91,7 @@ public static partial class LegacyGraphics
         var profileStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         RequireRenderer().Present(sync != 0);
         if (EngineProfile.Enabled) { EngineProfile.Add(EngineProfile.Present, profileStart); EngineProfile.EndFrame(); }
+        if (EngineTrace.Entities || EngineTrace.Collision) TraceFrame();
     }
 
     public static int GraphicsWidth() => _renderer is null ? 0 : _width;
@@ -106,7 +107,7 @@ public static partial class LegacyGraphics
     }
 
     /// <summary>Creates a mesh entity in the shared <see cref="LegacyScene.Current"/> graph.</summary>
-    public static int CreateMesh(int parent = 0)
+    private static int CreateMeshCore(int parent)
     {
         var scene = RequireScene();
         var id = scene.CreatePivot(parent);
@@ -133,7 +134,7 @@ public static partial class LegacyGraphics
     }
 
     /// <summary>Releases graphics-owned surfaces and then frees the entity subtree in the shared scene.</summary>
-    public static void FreeEntity(int entity)
+    private static void FreeEntityCore(int entity)
     {
         CheckThreadIfStarted();
         if (entity == 0) return;
