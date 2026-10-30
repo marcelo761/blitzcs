@@ -29,7 +29,9 @@ public sealed class SceneCollisionTests
         Assert.Equal(.3f, scene.CollisionTime(source, 1), 4);
         Assert.Equal(4, scene.CollisionX(source, 1), 4);
         Assert.Equal(-1, scene.CollisionNX(source, 1), 4);
-        Assert.Equal(3.001f, scene.EntityX(source, global: true), 3);
+        // Upstream World::collide: coll_plane.d -= COLLISION_EPSILON moves the contact plane
+        // away from the obstacle, so the sphere rests 0.001 outside the contact (3 - 0.001).
+        Assert.Equal(2.999f, scene.EntityX(source, global: true), 3);
 
         scene.UpdateWorld();
         Assert.Equal(0, scene.CountCollisions(source));
@@ -60,7 +62,8 @@ public sealed class SceneCollisionTests
 
         Assert.Equal(1, scene.CountCollisions(source));
         Assert.Equal(-1, scene.CollisionNX(source, 1), 4);
-        Assert.Equal(4.501f, scene.EntityX(source, global: true), 3);
+        // Same upstream rule (plane.d -= COLLISION_EPSILON): rests 0.001 outside the box contact (4.5 - 0.001).
+        Assert.Equal(4.499f, scene.EntityX(source, global: true), 3);
         Assert.Equal(10, scene.EntityZ(source, global: true), 3);
     }
 
@@ -274,4 +277,71 @@ public sealed class SceneCollisionTests
 
         Assert.Equal(0, allocated);
     }
+
+    [Theory]
+    [InlineData(.15f)]
+    [InlineData(.30f)]
+    public void Sphere_dropped_onto_floor_rests_on_surface_and_does_not_fall_through(float radius)
+    {
+        var scene = new SceneGraph();
+        var floor = scene.CreatePivot();
+        var sphere = scene.CreatePivot();
+        scene.SetCollisionTriangles(floor, Quad(
+            new(-10, 0, -10), new(-10, 0, 10), new(10, 0, 10), new(10, 0, -10)));
+        scene.EntityType(floor, 1);
+        scene.EntityType(sphere, 2);
+        scene.EntityRadius(sphere, radius);
+        scene.Collisions(2, 1, method: 2, response: 2);
+        scene.PositionEntity(sphere, 0, 1, 0);
+        scene.ResetEntity(sphere);
+
+        var landed = false;
+        for (var frame = 0; frame < 60; frame++)
+        {
+            scene.TranslateEntity(sphere, 0, -.05f, 0);
+            scene.UpdateWorld();
+            var y = scene.EntityY(sphere, global: true);
+            if (scene.CountCollisions(sphere) > 0) landed = true;
+            if (!landed) continue;
+
+            Assert.True(scene.CountCollisions(sphere) > 0, $"frame {frame}: no contact after landing, y={y}");
+            Assert.True(y >= radius - .005f, $"frame {frame}: sphere fell below floor, y={y}");
+        }
+
+        Assert.True(landed);
+        var finalY = scene.EntityY(sphere, global: true);
+        Assert.InRange(finalY, radius - .005f, radius + .01f);
+    }
+
+    [Theory]
+    [InlineData(.15f)]
+    [InlineData(.30f)]
+    public void Sphere_sliding_into_vertical_wall_stops_at_surface(float radius)
+    {
+        var scene = new SceneGraph();
+        var wall = scene.CreatePivot();
+        var sphere = scene.CreatePivot();
+        scene.SetCollisionTriangles(wall, Quad(
+            new(10, -10, -10), new(10, -10, 10), new(10, 10, 10), new(10, 10, -10)));
+        scene.EntityType(wall, 1);
+        scene.EntityType(sphere, 2);
+        scene.EntityRadius(sphere, radius);
+        scene.Collisions(2, 1, method: 2, response: 2);
+        scene.PositionEntity(sphere, 0, 1, 0);
+        scene.ResetEntity(sphere);
+
+        for (var frame = 0; frame < 60; frame++)
+        {
+            scene.TranslateEntity(sphere, .3f, 0, 0);
+            scene.UpdateWorld();
+        }
+
+        var x = scene.EntityX(sphere, global: true);
+        Assert.True(x <= 10 - radius + .005f, $"sphere went through wall, x={x}");
+        Assert.True(x > 10 - radius - .02f, $"sphere stopped too early, x={x}");
+    }
+
+    // Two triangles forming a quad; winding gives the normal (cross(b-a, c-a)) of the first corner order.
+    private static SceneCollisionTriangle[] Quad(SceneVector3 a, SceneVector3 b, SceneVector3 c, SceneVector3 d) =>
+        [new(a, b, c), new(a, c, d)];
 }

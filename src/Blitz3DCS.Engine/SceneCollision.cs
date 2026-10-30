@@ -282,7 +282,7 @@ public sealed partial class SceneGraph
             GetCollisionState(hit.Target.Id).Collisions.Add(result with { Entity = source.Id });
 
             var collisionPlane = new CollisionPlane(hit.Normal, contact);
-            collisionPlane = collisionPlane with { Point = Subtract(collisionPlane.Point, Multiply(hit.Normal, CollisionEpsilon)) };
+            collisionPlane = collisionPlane with { Point = Add(collisionPlane.Point, Multiply(hit.Normal, CollisionEpsilon)) };
             var planeTime = hit.Time;
             var denominator = Dot(hit.Normal, lineDirection);
             if (MathF.Abs(denominator) > Epsilon)
