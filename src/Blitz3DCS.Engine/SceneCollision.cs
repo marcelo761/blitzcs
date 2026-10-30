@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace Blitz3DCS.Engine;
 
@@ -35,6 +36,20 @@ public sealed partial class SceneGraph
     private readonly List<Node>?[] _collisionEntitiesByType = new List<Node>?[MaxCollisionType];
     private readonly CollisionPlane[] _collisionPlanes = new CollisionPlane[2];
     internal bool ForceLinearPolygonSearchForTesting { get; set; }
+
+    // Persistent collision lists, rebuilt only when _structureVersion changes (create/free/reparent/show/hide/type/rules).
+    private int _collisionCacheVersion = -1;
+    private int _enabledCount;
+    private Node[] _typedNodes = [];
+    private CollisionEntityState[] _typedStates = [];
+    private int _typedCount;
+    private int[] _sourceIndices = [];
+    private int _sourceCount;
+    private readonly CollisionRule[]?[] _rulesBySource = new CollisionRule[]?[MaxCollisionType];
+    private bool _legacyCollisionPath;
+
+    /// <summary>Testing hook: runs this graph on the original per-frame collection path (same as BLITZCS_ENGINE_NOOPT=1).</summary>
+    internal bool UseLegacyCollisionPathForTesting { get => _legacyCollisionPath; set => _legacyCollisionPath = value; }
     private long _polygonGeometrySelectionVersion;
 
     /// <summary>Changes when entity membership in polygon collision geometry can change.</summary>
@@ -52,6 +67,7 @@ public sealed partial class SceneGraph
             state.Type = type;
             ResetCollisionState(state, target);
         }
+        _structureVersion++;
         _polygonGeometrySelectionVersion++;
     }
 
@@ -106,6 +122,7 @@ public sealed partial class SceneGraph
         if (response is < CollisionResponseNone or > CollisionResponseSlideXZ) throw new ArgumentOutOfRangeException(nameof(response));
         if (_collisionRules.Any(rule => rule.SourceType == sourceType && rule.DestinationType == destinationType)) return;
         _collisionRules.Add(new(sourceType, destinationType, method, response));
+        _structureVersion++;
         _polygonGeometrySelectionVersion++;
     }
 
@@ -113,6 +130,7 @@ public sealed partial class SceneGraph
     public void ClearCollisions()
     {
         _collisionRules.Clear();
+        _structureVersion++;
         _polygonGeometrySelectionVersion++;
     }
 
@@ -121,6 +139,98 @@ public sealed partial class SceneGraph
     {
         _ = elapsed;
         var statStart = EngineStats.Now();
+        if (EngineOptimizations.Disabled || _legacyCollisionPath) { UpdateWorldOriginal(statStart); return; }
+
+        if (_collisionCacheVersion != _structureVersion) RebuildCollisionCache();
+        if (EngineStats.Enabled)
+        {
+            EngineStats.Add(EngineStats.SceneNodes, _nodes.Count);
+            EngineStats.Add(EngineStats.SceneVisited, _enabledCount);
+        }
+
+        var nodes = _typedNodes;
+        var states = _typedStates;
+        var typedCount = _typedCount;
+        // Untyped entities never hold collision results (EntityType resets them), so only typed ones need clearing.
+        for (var i = 0; i < typedCount; i++)
+        {
+            var collisions = states[i].Collisions;
+            if (collisions.Count != 0) collisions.Clear();
+        }
+
+        EngineStats.AddTicks(EngineStats.ColBroad, statStart);
+        var sources = _sourceIndices;
+        for (var i = 0; i < _sourceCount; i++)
+        {
+            var index = sources[i];
+            ProcessCollisionsTimed(nodes[index], states[index]);
+        }
+
+        // Previous transforms of untyped entities are unobservable: EntityType/Show/Hide/Copy reset them on use.
+        for (var i = 0; i < typedCount; i++)
+        {
+            var state = states[i];
+            var current = GetWorldTransform(nodes[i]);
+            if (EngineStats.Enabled)
+            {
+                EngineStats.Add(EngineStats.ColEnabled);
+                if (state.HasPreviousTransform && state.PreviousTransform == current) EngineStats.Add(EngineStats.ColStill);
+            }
+            state.PreviousTransform = current;
+            state.HasPreviousTransform = true;
+        }
+    }
+
+    private void RebuildCollisionCache()
+    {
+        _collisionCacheVersion = _structureVersion;
+        foreach (var typed in _collisionEntitiesByType) typed?.Clear();
+        Array.Clear(_rulesBySource);
+        foreach (var rule in _collisionRules)
+        {
+            var existing = _rulesBySource[rule.SourceType];
+            if (existing is null) { _rulesBySource[rule.SourceType] = [rule]; continue; }
+            Array.Resize(ref existing, existing.Length + 1);
+            existing[^1] = rule;
+            _rulesBySource[rule.SourceType] = existing;
+        }
+
+        _enabledCount = 0;
+        _typedCount = 0;
+        var roots = CollectionsMarshal.AsSpan(_roots);
+        for (var i = 0; i < roots.Length; i++) GatherEnabled(roots[i]);
+
+        if (_sourceIndices.Length < _typedCount) _sourceIndices = new int[_typedNodes.Length];
+        _sourceCount = 0;
+        for (var i = 0; i < _typedCount; i++)
+            if (_rulesBySource[_typedStates[i].Type] is not null) _sourceIndices[_sourceCount++] = i;
+    }
+
+    private void GatherEnabled(Node node)
+    {
+        if (!node.Enabled) return;
+        _enabledCount++;
+        var state = GetCollisionState(node);
+        if (state.Type != 0)
+        {
+            if (_typedCount == _typedNodes.Length)
+            {
+                var capacity = Math.Max(16, _typedCount * 2);
+                Array.Resize(ref _typedNodes, capacity);
+                Array.Resize(ref _typedStates, capacity);
+            }
+            _typedNodes[_typedCount] = node;
+            _typedStates[_typedCount] = state;
+            _typedCount++;
+            (_collisionEntitiesByType[state.Type] ??= []).Add(node);
+        }
+        var children = CollectionsMarshal.AsSpan(node.Children);
+        for (var i = 0; i < children.Length; i++) GatherEnabled(children[i]);
+    }
+
+    /// <summary>The original per-frame path: rescans every node for roots and re-collects all enabled entities.</summary>
+    private void UpdateWorldOriginal(long statStart)
+    {
         _enabledCollisionNodes.Clear();
         foreach (var typed in _collisionEntitiesByType) typed?.Clear();
         foreach (var node in _nodes.Values)
@@ -131,38 +241,10 @@ public sealed partial class SceneGraph
             EngineStats.Add(EngineStats.SceneNodes, _nodes.Count);
             EngineStats.Add(EngineStats.SceneVisited, _enabledCollisionNodes.Count);
         }
-        if (EngineOptimizations.Disabled) { UpdateWorldLegacy(); EngineStats.AddTicks(EngineStats.ColBroad, statStart); return; }
-        _enabledCollisionStates.Clear();
-        for (var i = 0; i < _enabledCollisionNodes.Count; i++)
-        {
-            var node = _enabledCollisionNodes[i];
-            var state = GetCollisionState(node);
-            _enabledCollisionStates.Add(state);
-            state.Collisions.Clear();
-            if (state.Type == 0) continue;
-            (_collisionEntitiesByType[state.Type] ??= []).Add(node);
-        }
-
+        // Cached lists are not maintained on this path; force a rebuild if a graph ever switches back.
+        _collisionCacheVersion = -1;
+        UpdateWorldLegacy();
         EngineStats.AddTicks(EngineStats.ColBroad, statStart);
-        for (var i = 0; i < _enabledCollisionNodes.Count; i++)
-        {
-            var state = _enabledCollisionStates[i];
-            if (state.Type != 0 && HasSourceCollisionRule(state.Type))
-                ProcessCollisionsTimed(_enabledCollisionNodes[i], state);
-        }
-
-        for (var i = 0; i < _enabledCollisionNodes.Count; i++)
-        {
-            var state = _enabledCollisionStates[i];
-            var current = GetWorldTransform(_enabledCollisionNodes[i]);
-            if (EngineStats.Enabled && state.Type != 0)
-            {
-                EngineStats.Add(EngineStats.ColEnabled);
-                if (state.HasPreviousTransform && state.PreviousTransform == current) EngineStats.Add(EngineStats.ColStill);
-            }
-            state.PreviousTransform = current;
-            state.HasPreviousTransform = true;
-        }
     }
 
     private long _statFind, _statTry, _statQuery;
@@ -249,6 +331,7 @@ public sealed partial class SceneGraph
 
     internal void ForgetCollisionState(int entity)
     {
+        _structureVersion++;
         _polygonGeometrySelectionVersion++;
         _collisionEntities.Remove(entity);
         if (_nodes.TryGetValue(entity, out var forgotten)) forgotten.CollisionState = null;
@@ -259,6 +342,7 @@ public sealed partial class SceneGraph
 
     internal void CopyCollisionState(int source, int destination)
     {
+        _structureVersion++;
         _polygonGeometrySelectionVersion++;
         if (!_collisionEntities.TryGetValue(source, out var sourceState)) return;
         var target = GetNode(destination);
@@ -365,7 +449,7 @@ public sealed partial class SceneGraph
             EngineStats.Add(EngineStats.ColHits);
             var result = new SceneCollisionInfo(hit.Target.Id, resultPosition, hit.Normal, hit.Time, hit.Triangle, hit.Surface);
             sourceState.Collisions.Add(result);
-            GetCollisionState(hit.Target.Id).Collisions.Add(result with { Entity = source.Id });
+            (hit.Target.CollisionState ?? GetCollisionState(hit.Target.Id)).Collisions.Add(result with { Entity = source.Id });
 
             var collisionPlane = new CollisionPlane(hit.Normal, contact);
             collisionPlane = collisionPlane with { Point = Add(collisionPlane.Point, Multiply(hit.Normal, CollisionEpsilon)) };
@@ -455,15 +539,21 @@ public sealed partial class SceneGraph
         var found = false;
         var nearestTime = 1f;
         var statFindStart = EngineStats.Now();
-        foreach (var rule in _collisionRules)
+        ReadOnlySpan<CollisionRule> rules = _legacyCollisionPath || EngineOptimizations.Disabled
+            ? CollectionsMarshal.AsSpan(_collisionRules)
+            : _rulesBySource[sourceType];
+        for (var ruleIndex = 0; ruleIndex < rules.Length; ruleIndex++)
         {
+            var rule = rules[ruleIndex];
             if (rule.SourceType != sourceType) continue;
             var destinations = _collisionEntitiesByType[rule.DestinationType];
             if (destinations is null) { EngineStats.Add(EngineStats.ColPairsRejType); continue; }
-            foreach (var target in destinations)
+            var targets = CollectionsMarshal.AsSpan(destinations);
+            for (var targetIndex = 0; targetIndex < targets.Length; targetIndex++)
             {
+                var target = targets[targetIndex];
                 if (target.Id == sourceId) { EngineStats.Add(EngineStats.ColPairsRejType); continue; }
-                var targetState = GetCollisionState(target.Id);
+                var targetState = target.CollisionState ?? GetCollisionState(target.Id);
                 var statTryStart = EngineStats.Now();
                 EngineStats.Add(EngineStats.ColPairs);
                 var hitFound = TryHit(rule, target, targetState, lineStart, lineDirection, sourceRadius, yScale, nearestTime, out var candidate);
@@ -666,12 +756,12 @@ public sealed partial class SceneGraph
     private static bool TryBoxLocal(SceneVector3 start, SceneVector3 direction, float radius,
         CollisionBox box, float maxTime, out float time, out SceneVector3 normal)
     {
-        var corners = new SceneVector3[8];
+        Span<SceneVector3> corners = stackalloc SceneVector3[8];
         for (var index = 0; index < corners.Length; index++)
             corners[index] = new((index & 1) == 0 ? box.Minimum.X : box.Maximum.X,
                 (index & 2) == 0 ? box.Minimum.Y : box.Maximum.Y,
                 (index & 4) == 0 ? box.Minimum.Z : box.Maximum.Z);
-        int[] quads = [2, 3, 1, 0, 3, 7, 5, 1, 7, 6, 4, 5, 6, 2, 0, 4, 6, 7, 3, 2, 0, 1, 5, 4];
+        ReadOnlySpan<int> quads = [2, 3, 1, 0, 3, 7, 5, 1, 7, 6, 4, 5, 6, 2, 0, 4, 6, 7, 3, 2, 0, 1, 5, 4];
         var found = false;
         var bestTime = maxTime;
         var bestNormal = default(SceneVector3);

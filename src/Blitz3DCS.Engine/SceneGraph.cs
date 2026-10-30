@@ -6,6 +6,59 @@ public sealed partial class SceneGraph
     private readonly Dictionary<int, Node> _nodes = [];
     private int _nextId = 1;
 
+    // Root entities ordered by dictionary slot, i.e. the order `_nodes.Values` enumerates them. Slots are assigned with
+    // the same LIFO free-list policy as Dictionary<TKey,TValue>, so iterating _roots matches the original root scan.
+    private readonly List<Node> _roots = [];
+    private readonly List<int> _freeSlots = [];
+    private int _nextSlot;
+    /// <summary>Bumped by every change that can alter enabled-node order, collision types or rules.</summary>
+    private int _structureVersion;
+
+    private void RegisterNode(Node node)
+    {
+        if (_freeSlots.Count > 0)
+        {
+            node.Slot = _freeSlots[^1];
+            _freeSlots.RemoveAt(_freeSlots.Count - 1);
+        }
+        else node.Slot = _nextSlot++;
+        if (node.Parent is null) AddRoot(node);
+        _structureVersion++;
+    }
+
+    private void UnregisterNode(Node node)
+    {
+        if (node.InRoots) RemoveRoot(node);
+        _freeSlots.Add(node.Slot);
+        _structureVersion++;
+    }
+
+    private void AddRoot(Node node)
+    {
+        var low = 0;
+        var high = _roots.Count;
+        while (low < high)
+        {
+            var mid = (low + high) >> 1;
+            if (_roots[mid].Slot < node.Slot) low = mid + 1; else high = mid;
+        }
+        _roots.Insert(low, node);
+        node.InRoots = true;
+    }
+
+    private void RemoveRoot(Node node)
+    {
+        var low = 0;
+        var high = _roots.Count;
+        while (low < high)
+        {
+            var mid = (low + high) >> 1;
+            if (_roots[mid].Slot < node.Slot) low = mid + 1; else high = mid;
+        }
+        _roots.RemoveAt(low);
+        node.InRoots = false;
+    }
+
     /// <summary>Creates an identity pivot. A nonzero parent ID attaches it as that parent's last child.</summary>
     public int CreatePivot(int parent = 0)
     {
@@ -17,6 +70,7 @@ public sealed partial class SceneGraph
         node.Parent = parentNode;
         parentNode?.Children.Add(node);
         _nodes.Add(node.Id, node);
+        RegisterNode(node);
         return node.Id;
     }
 
@@ -41,6 +95,7 @@ public sealed partial class SceneGraph
         {
             ForgetCollisionState(current.Id);
             _nodes.Remove(current.Id);
+            UnregisterNode(current);
             current.Parent = null;
             current.Children.Clear();
         }
@@ -92,7 +147,10 @@ public sealed partial class SceneGraph
         var rootCopy = copies[source];
         parentNode?.Children.Add(rootCopy);
         foreach (var copy in copies.Values)
+        {
             _nodes.Add(copy.Id, copy);
+            RegisterNode(copy);
+        }
         foreach (var original in sourceNodes)
             CopyCollisionState(original.Id, copies[original].Id);
         _nextId = nextId;
@@ -102,7 +160,13 @@ public sealed partial class SceneGraph
     /// <summary>Returns an entity subtree in depth-first insertion order, with its root first.</summary>
     public int[] GetSubtreeEntityIds(int entity) => GetSubtreeNodes(GetNode(entity)).Select(node => node.Id).ToArray();
 
-    internal int[] GetRootEntityIds() => _nodes.Values.Where(node => node.Parent is null).Select(node => node.Id).ToArray();
+    internal int[] GetRootEntityIds()
+    {
+        if (EngineOptimizations.Disabled) return _nodes.Values.Where(node => node.Parent is null).Select(node => node.Id).ToArray();
+        var ids = new int[_roots.Count];
+        for (var i = 0; i < ids.Length; i++) ids[i] = _roots[i].Id;
+        return ids;
+    }
 
     public void PositionEntity(int entity, float x, float y, float z, bool global = false)
     {
@@ -183,8 +247,11 @@ public sealed partial class SceneGraph
 
         var worldTransform = global ? GetWorldTransform(node) : default;
         node.Parent?.Children.Remove(node);
+        if (node.InRoots) RemoveRoot(node);
         node.Parent = parentNode;
+        if (parentNode is null) AddRoot(node);
         parentNode?.Children.Add(node);
+        _structureVersion++;
         InvalidateWorld(node);
         if (global) SetWorldTransform(node, worldTransform);
     }
@@ -367,6 +434,8 @@ public sealed partial class SceneGraph
         public SceneTransform LocalTransform { get; set; }
         public SceneTransform WorldTransform { get; set; }
         internal CollisionEntityState? CollisionState;
+        public int Slot;
+        public bool InRoots;
     }
 
     private readonly record struct Matrix3(SceneVector3 I, SceneVector3 J, SceneVector3 K)

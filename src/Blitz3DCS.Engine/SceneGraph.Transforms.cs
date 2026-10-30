@@ -7,6 +7,7 @@ public sealed partial class SceneGraph
     {
         var node = GetNode(entity);
         node.Enabled = false;
+        _structureVersion++;
         node.Visible = false;
         ResetCollisionState(entity);
     }
@@ -17,6 +18,7 @@ public sealed partial class SceneGraph
         var node = GetNode(entity);
         node.Visible = true;
         node.Enabled = true;
+        _structureVersion++;
         ResetCollisionState(entity);
     }
 
