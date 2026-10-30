@@ -47,6 +47,7 @@ public static partial class LegacyGraphics
                 if (mesh.Plane is not null || !scene.RequiresPolygonCollision(mesh.Entity)) continue;
                 PolygonCollisionMeshes.Add(mesh);
             }
+            EngineStats.Add(EngineStats.ColPrepSel);
             _collisionGeometrySelectionScene = scene;
             _collisionGeometrySelectionVersion = selectionVersion;
             _collisionGeometryMeshCount = meshCount;
@@ -57,6 +58,7 @@ public static partial class LegacyGraphics
 
         foreach (var mesh in PolygonCollisionMeshes)
         {
+            EngineStats.Add(EngineStats.ColPrepMeshes);
             var geometry = mesh.Geometry;
             var version = GeometryVersion(geometry);
             if (geometry.CollisionVersion != version)
@@ -76,6 +78,7 @@ public static partial class LegacyGraphics
                             ToSceneVector(surface.Vertices[(int)surface.Indices[i + 2]].Position), i / 3, handle);
                     }
                 }
+                EngineStats.Add(EngineStats.ColPrepRebuilt);
                 geometry.CollisionTriangles = triangles;
                 geometry.CollisionVersion = version;
             }
@@ -84,6 +87,18 @@ public static partial class LegacyGraphics
             mesh.CollisionVersion = version;
         }
         _collisionPreparedEpoch = SurfaceState.MutationEpoch;
+    }
+
+    /// <summary>One-line [scene] census (profiling only): entity totals by kind and collision-typed entities per type id.</summary>
+    private static string BuildSceneCensus(SceneGraph scene)
+    {
+        var types = new SortedDictionary<int, int>();
+        var entities = scene.CountEntitiesAndCollisionTypes(types);
+        var text = new System.Text.StringBuilder(160);
+        text.Append(System.Globalization.CultureInfo.InvariantCulture,
+            $"[scene] entities={entities} meshes={MeshEntities.Count} animated={AnimatedModels.Count} lights={LightEntities.Count} cameras={Cameras.Count} sprites={Sprites.Count} colTyped={types.Values.Sum()}");
+        foreach (var pair in types) text.Append(System.Globalization.CultureInfo.InvariantCulture, $" colType{pair.Key}={pair.Value}");
+        return text.ToString();
     }
 
     private static void ClearCollisionGeometrySelectionCache()

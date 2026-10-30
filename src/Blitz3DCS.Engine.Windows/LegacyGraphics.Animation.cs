@@ -71,12 +71,17 @@ public static partial class LegacyGraphics
     {
         foreach (var model in AnimatedModels.Values)
         {
+            EngineStats.Add(EngineStats.AnimModels);
             if (!scene.IsVisibleInHierarchy(model.Root) || !model.Playback.IsAnimating) continue;
+            var poseStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+            EngineStats.Add(EngineStats.AnimActive);
+            EngineProfile.Count(EngineProfile.SkinBones, model.Entities.Length);
             model.Playback.Update(elapsed);
             if (!model.Playback.IsTransitioning)
             {
                 model.Playback.EvaluateInto(model.Pose);
                 ApplyAnimatedPose(model, scene);
+                if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.SkinPose, poseStart);
                 continue;
             }
             var fraction = model.Playback.TransitionProgress;
@@ -94,6 +99,7 @@ public static partial class LegacyGraphics
                 });
             }
             model.SkinDirty = true;
+            if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.SkinPose, poseStart);
         }
     }
 
@@ -105,7 +111,9 @@ public static partial class LegacyGraphics
         var scene = RequireScene();
         foreach (var model in AnimatedModels.Values)
         {
-            if (!scene.IsVisibleInHierarchy(model.Root)) continue;
+            if (!scene.IsVisibleInHierarchy(model.Root)) { EngineProfile.Count(EngineProfile.SkinSkipped); continue; }
+            EngineProfile.Count(EngineProfile.SkinModels);
+            var worldStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
             var changed = model.SkinDirty;
             for (var index = 0; index < model.Entities.Length; index++)
             {
@@ -114,11 +122,16 @@ public static partial class LegacyGraphics
                 changed |= world != model.PreviousWorld[index];
                 model.PreviousWorld[index] = world;
             }
+            if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.SkinWorld, worldStart);
             foreach (var mesh in model.Meshes)
             {
                 if (mesh.Skin is null) continue;
                 mesh.Dirty |= changed;
-                if (!mesh.Dirty || !scene.IsVisibleInHierarchy(mesh.Entity)) continue;
+                if (!mesh.Dirty) { EngineProfile.Count(EngineProfile.SkinClean); continue; }
+                if (!scene.IsVisibleInHierarchy(mesh.Entity)) { EngineProfile.Count(EngineProfile.SkinSkipped); continue; }
+                var deformStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+                EngineProfile.Count(EngineProfile.SkinMeshes);
+                EngineProfile.Count(EngineProfile.SkinVerts, mesh.Positions.Length);
                 mesh.Skin.DeformInto(model.Pose, model.CurrentWorld, mesh.Positions);
                 foreach (var surface in mesh.Surfaces)
                 {
@@ -134,6 +147,7 @@ public static partial class LegacyGraphics
                     surface.UploadDirty = true;
                 }
                 mesh.Dirty = false;
+                if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.SkinDeform, deformStart);
             }
             model.SkinDirty = false;
         }
@@ -144,7 +158,12 @@ public static partial class LegacyGraphics
         if (surface.GpuMesh is null)
             surface.GpuMesh = renderer.CreateDynamicMesh(surface.Vertices, surface.Indices);
         else if (surface.UploadDirty)
+        {
+            var uploadStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
             renderer.UpdateMeshVertices(surface.GpuMesh, surface.Vertices);
+            EngineProfile.Count(EngineProfile.SkinUploads);
+            if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.SkinUpload, uploadStart);
+        }
         surface.UploadDirty = false;
         return surface.GpuMesh;
     }

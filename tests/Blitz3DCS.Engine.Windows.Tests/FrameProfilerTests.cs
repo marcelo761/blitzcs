@@ -74,4 +74,86 @@ public sealed class FrameProfilerTests
         EngineProfile.Flush();
         Assert.Equal(before, GC.GetAllocatedBytesForCurrentThread());
     }
+
+    [Fact]
+    public void FineCounterTablesAreAlignedWithTheirSlots()
+    {
+        Assert.Equal(EngineProfile.RenderBase + EngineProfile.RenderCounterNames.Length, EngineProfile.CounterNames.Length);
+        Assert.Equal(EngineProfile.RenderBase, EngineProfile.StatsBase + EngineStats.CounterNames.Length);
+        Assert.Equal("colSources", EngineProfile.CounterNames[EngineProfile.StatsBase + EngineStats.ColSources]);
+        Assert.Equal("animModels", EngineProfile.CounterNames[EngineProfile.StatsBase + EngineStats.AnimModels]);
+        Assert.Equal("skinModels", EngineProfile.CounterNames[EngineProfile.SkinModels]);
+        Assert.Equal("rtLights", EngineProfile.CounterNames[EngineProfile.RtLightCount]);
+        Assert.Equal(EngineProfile.RtState + 1, EngineProfile.PhaseNames.Length);
+        Assert.Equal("colBroad", EngineProfile.PhaseNames[EngineProfile.ColBroad + EngineStats.ColBroad]);
+        Assert.Equal("colResp", EngineProfile.PhaseNames[EngineProfile.ColBroad + EngineStats.ColResp]);
+        Assert.Equal("rtState", EngineProfile.PhaseNames[EngineProfile.RtState]);
+        Assert.Equal(EngineProfile.CounterNames.Length, EngineProfile.CounterNames.Distinct().Count());
+    }
+
+    [Fact]
+    public void FoldsEngineStatsIntoTheFrameAndClearsThem()
+    {
+        var lines = new List<string>();
+        var profiler = new FrameProfiler(EngineProfile.PhaseNames, EngineProfile.CounterNames, 2, 1000, lines.Add);
+        long[] counts = new long[EngineStats.CounterNames.Length];
+        long[] ticks = new long[EngineStats.TickNames.Length];
+        for (var frame = 0; frame < 2; frame++)
+        {
+            counts[EngineStats.ColPairs] = frame == 0 ? 10 : 20;
+            counts[EngineStats.XformDirty] = 4;
+            ticks[EngineStats.ColNarrow] = 6;
+            EngineProfile.FoldEngineStats(profiler, counts, ticks);
+            Assert.All(counts, c => Assert.Equal(0, c));
+            Assert.All(ticks, t => Assert.Equal(0, t));
+            profiler.AddCount(EngineProfile.SkinVerts, 100);
+            profiler.EndFrame(0, 0, 0, 0);
+        }
+        var line = Assert.Single(lines);
+        Assert.Contains(" colPairs=15.0", line);
+        Assert.Contains(" xformDirty=4.0", line);
+        Assert.Contains(" skinVerts=100.0", line);
+        Assert.Contains(" colNarrow=6.000/6.000/6.000ms", line);
+    }
+
+    [Fact]
+    public void HitchLineCarriesNonzeroFineCounters()
+    {
+        var lines = new List<string>();
+        var profiler = new FrameProfiler(EngineProfile.PhaseNames, EngineProfile.CounterNames, 4, 1000, lines.Add,
+            EngineProfile.Frame, EngineProfile.EnginePhases, hitchMs: 10);
+        profiler.AddTicks(EngineProfile.Frame, 50);
+        profiler.AddCount(EngineProfile.StatsBase + EngineStats.ColHits, 3);
+        profiler.EndFrame(0, 0, 0, 0);
+        var line = Assert.Single(lines);
+        Assert.StartsWith("[hitch]", line);
+        Assert.Contains(" colHits=3", line);
+    }
+
+    [Fact]
+    public void DisabledEngineStatsAreInertAndAllocationFree()
+    {
+        Assert.False(EngineStats.Enabled);
+        Assert.Empty(EngineStats.Counts);
+        Assert.Empty(EngineStats.Ticks);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 1000; i++)
+        {
+            EngineStats.Add(EngineStats.ColPairs, 5);
+            EngineStats.AddTicks(EngineStats.ColBroad, EngineStats.Now());
+            EngineStats.AddRawTicks(EngineStats.ColResp, 3);
+            EngineProfile.Count(EngineProfile.SkinVerts, 7);
+            EngineProfile.AddSince(EngineProfile.RtSort, 0);
+            EngineProfile.Emit("ignored");
+        }
+        Assert.Equal(before, GC.GetAllocatedBytesForCurrentThread());
+    }
+
+    [Fact]
+    public void CensusIsDueOnFirstWorldFrameAndEvery600th()
+    {
+        Assert.True(EngineProfile.CensusDue());
+        for (var i = 1; i < 600; i++) Assert.False(EngineProfile.CensusDue());
+        Assert.True(EngineProfile.CensusDue());
+    }
 }

@@ -350,6 +350,8 @@ public static partial class LegacyGraphics
         var skinStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         PrepareAnimatedGeometry();
         if (EngineProfile.Enabled) EngineProfile.Add(EngineProfile.Skinning, skinStart);
+        if (EngineProfile.Enabled && EngineProfile.CensusDue()) EngineProfile.Emit(BuildSceneCensus(scene));
+        var lightStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         Span<LegacyLightSnapshot> sourceLights = stackalloc LegacyLightSnapshot[8];
         Span<D3D11Light> lights = stackalloc D3D11Light[8];
         var lightCount = CopyVisibleLightsForRendering(sourceLights);
@@ -360,6 +362,11 @@ public static partial class LegacyGraphics
                 light.Range, light.LinearAttenuation, light.InnerConeRadians, light.OuterConeRadians);
         }
         renderer.SetSceneLighting(AmbientLightForRendering, new Vector3(cameraWorld.M41, cameraWorld.M42, cameraWorld.M43), lights[..lightCount]);
+        if (EngineProfile.Enabled)
+        {
+            EngineProfile.AddSince(EngineProfile.RtLights, lightStart);
+            EngineProfile.Count(EngineProfile.RtLightCount, lightCount);
+        }
 
         DrawSceneMeshes(renderer, scene, camera, cameraWorld, view, projection);
     }

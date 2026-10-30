@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Blitz3DCS.Engine;
 
 /// <summary>A collision triangle in entity-local coordinates.</summary>
@@ -118,12 +120,18 @@ public sealed partial class SceneGraph
     public void UpdateWorld(float elapsed = 1)
     {
         _ = elapsed;
+        var statStart = EngineStats.Now();
         _enabledCollisionNodes.Clear();
         foreach (var typed in _collisionEntitiesByType) typed?.Clear();
         foreach (var node in _nodes.Values)
             if (node.Parent is null) CollectEnabled(node, _enabledCollisionNodes);
 
-        if (EngineOptimizations.Disabled) { UpdateWorldLegacy(); return; }
+        if (EngineStats.Enabled)
+        {
+            EngineStats.Add(EngineStats.SceneNodes, _nodes.Count);
+            EngineStats.Add(EngineStats.SceneVisited, _enabledCollisionNodes.Count);
+        }
+        if (EngineOptimizations.Disabled) { UpdateWorldLegacy(); EngineStats.AddTicks(EngineStats.ColBroad, statStart); return; }
         _enabledCollisionStates.Clear();
         for (var i = 0; i < _enabledCollisionNodes.Count; i++)
         {
@@ -135,19 +143,42 @@ public sealed partial class SceneGraph
             (_collisionEntitiesByType[state.Type] ??= []).Add(node);
         }
 
+        EngineStats.AddTicks(EngineStats.ColBroad, statStart);
         for (var i = 0; i < _enabledCollisionNodes.Count; i++)
         {
             var state = _enabledCollisionStates[i];
             if (state.Type != 0 && HasSourceCollisionRule(state.Type))
-                ProcessCollisions(_enabledCollisionNodes[i], state);
+                ProcessCollisionsTimed(_enabledCollisionNodes[i], state);
         }
 
         for (var i = 0; i < _enabledCollisionNodes.Count; i++)
         {
             var state = _enabledCollisionStates[i];
-            state.PreviousTransform = GetWorldTransform(_enabledCollisionNodes[i]);
+            var current = GetWorldTransform(_enabledCollisionNodes[i]);
+            if (EngineStats.Enabled && state.Type != 0)
+            {
+                EngineStats.Add(EngineStats.ColEnabled);
+                if (state.HasPreviousTransform && state.PreviousTransform == current) EngineStats.Add(EngineStats.ColStill);
+            }
+            state.PreviousTransform = current;
             state.HasPreviousTransform = true;
         }
+    }
+
+    private long _statFind, _statTry, _statQuery;
+
+    /// <summary>Stats wrapper: splits one source's cost into selection (broad), narrow-phase and response ticks.</summary>
+    private void ProcessCollisionsTimed(Node source, CollisionEntityState sourceState)
+    {
+        if (!EngineStats.Enabled) { ProcessCollisions(source, sourceState); return; }
+        _statFind = _statTry = _statQuery = 0;
+        EngineStats.Add(EngineStats.ColSources);
+        var start = Stopwatch.GetTimestamp();
+        ProcessCollisions(source, sourceState);
+        var total = Stopwatch.GetTimestamp() - start;
+        EngineStats.AddRawTicks(EngineStats.ColBroad, _statFind - _statTry + _statQuery);
+        EngineStats.AddRawTicks(EngineStats.ColNarrow, _statTry - _statQuery);
+        EngineStats.AddRawTicks(EngineStats.ColResp, total - _statFind);
     }
 
     private void UpdateWorldLegacy()
@@ -164,7 +195,7 @@ public sealed partial class SceneGraph
         {
             var state = GetCollisionState(source.Id);
             if (state.Type != 0 && HasSourceCollisionRule(state.Type))
-                ProcessCollisions(source, state);
+                ProcessCollisionsTimed(source, state);
         }
 
         foreach (var node in _enabledCollisionNodes)
@@ -173,6 +204,14 @@ public sealed partial class SceneGraph
             state.PreviousTransform = GetWorldTransform(node);
             state.HasPreviousTransform = true;
         }
+    }
+
+    /// <summary>Diagnostics: total entity count and the number of entities per nonzero collision type id.</summary>
+    internal int CountEntitiesAndCollisionTypes(SortedDictionary<int, int> typeCounts)
+    {
+        foreach (var state in _collisionEntities.Values)
+            if (state.Type != 0) typeCounts[state.Type] = typeCounts.GetValueOrDefault(state.Type) + 1;
+        return _nodes.Count;
     }
 
     public int CountCollisions(int entity) => GetCollisionState(entity).Collisions.Count;
@@ -318,10 +357,12 @@ public sealed partial class SceneGraph
 
         for (var iteration = 0; iteration < MaxCollisionHits; iteration++)
         {
+            EngineStats.Add(EngineStats.ColRespIters);
             if (!FindNearestHit(source.Id, sourceState.Type, lineStart, lineDirection, sourceRadius, yScale, out var hit)) break;
             if (++hitCount == MaxCollisionHits) break;
             var contact = Add(lineStart, Multiply(lineDirection, hit.Time));
             var resultPosition = ScaleY(Subtract(contact, Multiply(hit.Normal, sourceRadius)), inverseYScale);
+            EngineStats.Add(EngineStats.ColHits);
             var result = new SceneCollisionInfo(hit.Target.Id, resultPosition, hit.Normal, hit.Time, hit.Triangle, hit.Surface);
             sourceState.Collisions.Add(result);
             GetCollisionState(hit.Target.Id).Collisions.Add(result with { Entity = source.Id });
@@ -413,21 +454,27 @@ public sealed partial class SceneGraph
         nearest = default;
         var found = false;
         var nearestTime = 1f;
+        var statFindStart = EngineStats.Now();
         foreach (var rule in _collisionRules)
         {
             if (rule.SourceType != sourceType) continue;
             var destinations = _collisionEntitiesByType[rule.DestinationType];
-            if (destinations is null) continue;
+            if (destinations is null) { EngineStats.Add(EngineStats.ColPairsRejType); continue; }
             foreach (var target in destinations)
             {
-                if (target.Id == sourceId) continue;
+                if (target.Id == sourceId) { EngineStats.Add(EngineStats.ColPairsRejType); continue; }
                 var targetState = GetCollisionState(target.Id);
-                if (!TryHit(rule, target, targetState, lineStart, lineDirection, sourceRadius, yScale, nearestTime, out var candidate)) continue;
+                var statTryStart = EngineStats.Now();
+                EngineStats.Add(EngineStats.ColPairs);
+                var hitFound = TryHit(rule, target, targetState, lineStart, lineDirection, sourceRadius, yScale, nearestTime, out var candidate);
+                if (EngineStats.Enabled) _statTry += Stopwatch.GetTimestamp() - statTryStart;
+                if (!hitFound) continue;
                 nearest = candidate;
                 nearestTime = candidate.Time;
                 found = true;
             }
         }
+        if (EngineStats.Enabled) _statFind += Stopwatch.GetTimestamp() - statFindStart;
         return found;
     }
 
@@ -438,6 +485,7 @@ public sealed partial class SceneGraph
         var targetTransform = GetWorldTransform(target);
         if (rule.Method == CollisionMethodSphere)
         {
+            EngineStats.Add(EngineStats.ColSphereTests);
             var centre = ScaleY(targetTransform.Position, yScale);
             if (!TrySphere(lineStart, lineDirection, radius + targetState.Radii.X, centre, maxTime, out var time, out var normal)) return false;
             hit = new(target, rule, time, normal, ushort.MaxValue);
@@ -446,6 +494,7 @@ public sealed partial class SceneGraph
 
         if (rule.Method == CollisionMethodBox)
         {
+            EngineStats.Add(EngineStats.ColBoxTests);
             if (!TryBox(lineStart, lineDirection, radius, yScale, targetTransform, targetState, maxTime, out var time, out var localNormal)) return false;
             var scaled = ScaleTransformY(targetTransform, yScale);
             var basis = new Matrix3(Normalize(scaled.BasisX), Normalize(scaled.BasisY), Normalize(scaled.BasisZ));
@@ -459,6 +508,7 @@ public sealed partial class SceneGraph
             var scaled = ScaleTransformY(targetTransform, yScale);
             if (targetState.InfinitePlane)
             {
+                EngineStats.Add(EngineStats.ColPlaneTests);
                 var matrix = new Matrix3(scaled.BasisX, scaled.BasisY, scaled.BasisZ);
                 var determinant = Dot(matrix.I, Cross(matrix.J, matrix.K));
                 if (MathF.Abs(determinant) <= Epsilon) return false;
@@ -487,8 +537,16 @@ public sealed partial class SceneGraph
             var candidateCount = targetState.Triangles.Length;
             if (!ForceLinearPolygonSearchForTesting)
             {
+                var statQueryStart = EngineStats.Now();
                 triangleCollider.Query(scaled, lineStart, lineDirection, radius, candidates);
+                if (EngineStats.Enabled) _statQuery += Stopwatch.GetTimestamp() - statQueryStart;
                 candidateCount = candidates.Count;
+            }
+            if (EngineStats.Enabled)
+            {
+                EngineStats.Add(EngineStats.ColBvhCands, candidateCount);
+                EngineStats.Add(EngineStats.ColTriTests, candidateCount);
+                if (candidateCount == 0) EngineStats.Add(EngineStats.ColPairsRejBound);
             }
 
             for (var candidateIndex = 0; candidateIndex < candidateCount; candidateIndex++)

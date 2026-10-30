@@ -61,6 +61,7 @@ internal sealed class FrameProfiler
         _scratch = new long[window];
     }
 
+    internal void Write(string line) => _sink(line);
     internal int FramesInWindow => _frames;
     internal long TotalFrames => _totalFrames;
 
@@ -102,6 +103,8 @@ internal sealed class FrameProfiler
             $"[hitch] frame#{_totalFrames + 1} frame={_current[_frameIndex] * _msPerTick:F1}ms engine={engine * _msPerTick:F1}ms outside={outside * _msPerTick:F1}ms");
         for (var p = 0; p < _phaseNames.Length; p++)
             if (p != _frameIndex && _current[p] != 0) text.Append(CultureInfo.InvariantCulture, $" {_phaseNames[p]}={_current[p] * _msPerTick:F1}");
+        for (var c = 13; c < _counterNames.Length; c++)
+            if (_currentCounters[c] != 0) text.Append(CultureInfo.InvariantCulture, $" {_counterNames[c]}={_currentCounters[c]}");
         text.Append(CultureInfo.InvariantCulture, $" allocB={allocatedBytes} gc0/1/2={gen0}/{gen1}/{gen2}");
         if (_hitchExtra is not null) text.Append(' ').Append(_hitchExtra());
         return text.ToString();
@@ -157,17 +160,72 @@ internal static class EngineProfile
 
     internal const int UpdateWorld = 0, UpdateAnimation = 1, UpdateCollision = 2, UpdateScene = 3, RenderWorld = 4,
         Skinning = 5, Traversal = 6, Submit = 7, Draw2D = 8, Copy = 9, Present = 10, Frame = 11,
-        MipGen = 12, DynUpload = 13, TexUpload = 14, Readback = 15;
+        MipGen = 12, DynUpload = 13, TexUpload = 14, Readback = 15,
+        // Fine phases (engine stats): printed as extra mean/p95/max ms fields; nested inside the phases above.
+        ColBroad = 16, ColNarrow = 17, ColResp = 18, SkinPose = 19, SkinWorld = 20, SkinDeform = 21, SkinUpload = 22,
+        RtTraverse = 23, RtSort = 24, RtLights = 25, RtState = 26;
     internal static readonly string[] PhaseNames =
     [
         "UpdateWorld", "anim", "collision", "sceneUpdate", "RenderWorld", "skinning", "traversal+sort", "submit(incl.gpu-upload)",
-        "2D", "CopyRect", "present", "frame", "mipgen", "dynVB", "texUpload", "readback"
+        "2D", "CopyRect", "present", "frame", "mipgen", "dynVB", "texUpload", "readback",
+        "colBroad", "colNarrow", "colResp", "skinPose", "skinWorld", "skinDeform", "skinUpload",
+        "rtTraverse", "rtSort", "rtLights", "rtState"
     ];
     internal const int DrawCalls = 0, Tris = 1, BlitDraws = 2, ClearStates = 3, CbMaps = 4, Resolves = 5, ReadbackCount = 6, MipCount = 7, DynCount = 8, TexCount = 9,
         SkippedBinds = 10, BatchedBlits = 11, SkippedCbMaps = 12;
-    internal static readonly string[] CounterNames =
+    private static readonly string[] BaseCounterNames =
         ["draws", "tris", "blitDraws", "pipelineResets", "cbMaps", "resolves", "READBACKS", "mips", "dynUploads", "texUploads",
             "skippedBinds", "blitBatched", "cbMapsSkipped"];
+    /// <summary>First slot of the Engine-assembly counters (EngineStats.CounterNames, in order).</summary>
+    internal const int StatsBase = 13;
+    /// <summary>First slot of the render-side counters (RenderCounterNames, in order).</summary>
+    internal const int RenderBase = StatsBase + 23;
+    internal const int SkinModels = RenderBase, SkinMeshes = RenderBase + 1, SkinVerts = RenderBase + 2, SkinSkipped = RenderBase + 3,
+        SkinClean = RenderBase + 4, SkinBones = RenderBase + 5, SkinUploads = RenderBase + 6,
+        RtVisited = RenderBase + 7, RtMeshes = RenderBase + 8, RtCullFrustum = RenderBase + 9, RtCullDist = RenderBase + 10,
+        RtSurfaces = RenderBase + 11, RtSortKeys = RenderBase + 12, RtUniqueMat = RenderBase + 13, RtOpaque = RenderBase + 14,
+        RtAlpha = RenderBase + 15, RtAdditive = RenderBase + 16, RtOtherBlend = RenderBase + 17, RtSprite = RenderBase + 18,
+        RtMasked = RenderBase + 19, RtAnim = RenderBase + 20, RtBatchable = RenderBase + 21, RtLightCount = RenderBase + 22;
+    internal static readonly string[] RenderCounterNames =
+    [
+        "skinModels", "skinMeshes", "skinVerts", "skinSkipped", "skinClean", "skinBones", "skinUploads",
+        "rtVisited", "rtMeshes", "rtCullFrustum", "rtCullDist", "rtSurfaces", "rtSortKeys", "rtUniqueMat", "rtOpaque",
+        "rtAlpha", "rtAdditive", "rtOtherBlend", "rtSprite", "rtMasked", "rtAnim", "rtBatchable", "rtLights"
+    ];
+    internal static readonly string[] CounterNames = [.. BaseCounterNames, .. EngineStats.CounterNames, .. RenderCounterNames];
+
+    /// <summary>Adds to a fine counter; a no-op (no allocation) when profiling is disabled.</summary>
+    internal static void Count(int counter, long amount = 1)
+    {
+        if (!Enabled) return;
+        Get().AddCount(counter, amount);
+    }
+
+    /// <summary>Adds the ticks elapsed since <paramref name="start"/> to a fine phase; no-op when disabled.</summary>
+    internal static void AddSince(int phase, long start)
+    {
+        if (!Enabled) return;
+        Get().AddTicks(phase, Stopwatch.GetTimestamp() - start);
+    }
+
+    /// <summary>Moves the Engine-assembly per-frame stats into the profiler's current frame and clears them.</summary>
+    internal static void FoldEngineStats(FrameProfiler profiler, long[] counts, long[] ticks)
+    {
+        for (var i = 0; i < counts.Length; i++) { if (counts[i] != 0) profiler.AddCount(StatsBase + i, counts[i]); counts[i] = 0; }
+        for (var i = 0; i < ticks.Length; i++) { if (ticks[i] != 0) profiler.AddTicks(ColBroad + i, ticks[i]); ticks[i] = 0; }
+    }
+
+    private static int _worldFrames;
+
+    /// <summary>True on the first world frame and every 600th after it (one-line [scene] census cadence).</summary>
+    internal static bool CensusDue() => _worldFrames++ % 600 == 0;
+
+    /// <summary>Writes a pre-formatted line through the profiler sink.</summary>
+    internal static void Emit(string line)
+    {
+        if (!Enabled) return;
+        Get().Write(line);
+    }
 
     internal static void AddTicks(int phase, long ticks)
     {
@@ -250,6 +308,7 @@ internal static class EngineProfile
         p.AddCount(BatchedBlits, v[D3D11FrameCounters.BatchedBlitOps]);
         p.AddCount(SkippedCbMaps, v[D3D11FrameCounters.SkippedConstantBufferMaps]);
         Array.Clear(v);
+        FoldEngineStats(p, EngineStats.Counts, EngineStats.Ticks);
         var now = Stopwatch.GetTimestamp();
         p.AddTicks(Frame, now - _frameStart);
         _frameStart = now;

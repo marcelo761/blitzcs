@@ -108,6 +108,7 @@ internal sealed class SceneTriangleCollider
 
     private void QueryNode(Node node, TriangleBounds queryBounds, List<int> candidates)
     {
+        EngineStats.Add(EngineStats.ColBvhNodes);
         if (!node.Bounds.Overlaps(queryBounds)) return;
         if (node.Left is null)
         {

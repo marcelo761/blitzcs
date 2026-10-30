@@ -321,7 +321,9 @@ public sealed partial class SceneGraph
 
     private static SceneTransform GetWorldTransform(Node node)
     {
+        EngineStats.Add(EngineStats.XformTotal);
         if (!node.WorldDirty) return node.WorldTransform;
+        EngineStats.Add(EngineStats.XformDirty);
         var local = GetLocalTransform(node);
         if (node.Parent is null) node.WorldTransform = local;
         else node.WorldTransform = Compose(GetWorldTransform(node.Parent), local);
