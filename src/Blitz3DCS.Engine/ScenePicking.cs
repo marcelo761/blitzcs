@@ -50,7 +50,7 @@ public sealed partial class SceneGraph
             var state = GetCollisionState(target.Id);
             if (state.PickMode == 0) continue;
             var rule = new CollisionRule(0, 0, state.PickMode, CollisionResponseNone);
-            if (!TryHit(rule, target, state, start, direction, radius, 1, bestTime, out var hit)) continue;
+            if (!TryHit(rule, target, state, start, direction, radius, 1, bestTime, false, out var hit)) continue;
             bestTime = hit.Time;
             bestEntity = target.Id;
             bestNormal = hit.Normal;
@@ -91,7 +91,7 @@ public sealed partial class SceneGraph
             var state = GetCollisionState(target.Id);
             if (state.PickMode == 0 || !state.PickObscurer) continue;
             var rule = new CollisionRule(0, 0, state.PickMode, CollisionResponseNone);
-            if (TryHit(rule, target, state, start, direction, 0, 1, 1, out _)) return false;
+            if (TryHit(rule, target, state, start, direction, 0, 1, 1, false, out _)) return false;
         }
         return true;
     }

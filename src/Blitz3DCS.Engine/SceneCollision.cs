@@ -578,15 +578,16 @@ public sealed partial class SceneGraph
         var statFindStart = EngineStats.Now();
         // Conservative swept-volume bounds (scaled space) of the whole start->end segment, padded by the source radius
         // and a safety margin; a target whose bound is disjoint from it cannot produce a hit.
-        _broadOn = !_legacyCollisionPath && EngineOptimizations.Broadphase;
-        if (_broadOn)
+        var broad = !_legacyCollisionPath && EngineOptimizations.Broadphase;
+        if (broad)
         {
             var end = Add(lineStart, lineDirection);
             var pad = sourceRadius + BroadMargin(lineStart, end);
             _sweepMin = new(MathF.Min(lineStart.X, end.X) - pad, MathF.Min(lineStart.Y, end.Y) - pad, MathF.Min(lineStart.Z, end.Z) - pad);
             _sweepMax = new(MathF.Max(lineStart.X, end.X) + pad, MathF.Max(lineStart.Y, end.Y) + pad, MathF.Max(lineStart.Z, end.Z) + pad);
-            _broadOn = float.IsFinite(pad) && float.IsFinite(_sweepMin.X + _sweepMin.Y + _sweepMin.Z + _sweepMax.X + _sweepMax.Y + _sweepMax.Z);
+            broad = float.IsFinite(pad) && float.IsFinite(_sweepMin.X + _sweepMin.Y + _sweepMin.Z + _sweepMax.X + _sweepMax.Y + _sweepMax.Z);
         }
+        _broadOn = broad;
         ReadOnlySpan<CollisionRule> rules = _legacyCollisionPath || !EngineOptimizations.CollState
             ? CollectionsMarshal.AsSpan(_collisionRules)
             : _rulesBySource[sourceType];
@@ -604,7 +605,7 @@ public sealed partial class SceneGraph
                 var targetState = target.CollisionState ?? GetCollisionState(target.Id);
                 var statTryStart = EngineStats.Now();
                 EngineStats.Add(EngineStats.ColPairs);
-                var hitFound = TryHit(rule, target, targetState, lineStart, lineDirection, sourceRadius, yScale, nearestTime, out var candidate);
+                var hitFound = TryHit(rule, target, targetState, lineStart, lineDirection, sourceRadius, yScale, nearestTime, broad, out var candidate);
                 if (EngineStats.Enabled) _statTry += Stopwatch.GetTimestamp() - statTryStart;
                 if (!hitFound) continue;
                 nearest = candidate;
@@ -612,16 +613,18 @@ public sealed partial class SceneGraph
                 found = true;
             }
         }
+        _broadOn = false;
         if (EngineStats.Enabled) _statFind += Stopwatch.GetTimestamp() - statFindStart;
         return found;
     }
 
+    /// <param name="broad">Apply the swept-volume broadphase; only the collision sweep sets this, picking passes false.</param>
     private bool TryHit(CollisionRule rule, Node target, CollisionEntityState targetState, SceneVector3 lineStart,
-        SceneVector3 lineDirection, float radius, float yScale, float maxTime, out SweepHit hit)
+        SceneVector3 lineDirection, float radius, float yScale, float maxTime, bool broad, out SweepHit hit)
     {
         hit = default;
         var targetTransform = GetWorldTransform(target);
-        if (_broadOn && BroadReject(rule.Method, targetTransform, targetState, yScale))
+        if (broad && BroadReject(rule.Method, targetTransform, targetState, yScale))
         {
             EngineStats.Add(EngineStats.ColPairsRejBound);
             return false;

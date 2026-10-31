@@ -154,4 +154,52 @@ public sealed class ScenePickingTests
         scene.FreeEntity(copy);
         Assert.Equal(0, scene.PickedEntity);
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Picking_and_visibility_far_from_a_moved_collider_are_not_limited_by_its_swept_volume(bool settleCollisions)
+    {
+        var scene = new SceneGraph();
+        var mover = scene.CreatePivot();
+        var other = scene.CreatePivot();
+        scene.EntityType(mover, 1);
+        scene.EntityRadius(mover, .5f);
+        scene.EntityType(other, 2);
+        scene.EntityRadius(other, .5f);
+        scene.PositionEntity(other, 0, 0, -5);
+        scene.Collisions(1, 2, method: 1, response: 1);
+
+        var sphere = scene.CreatePivot();
+        scene.PositionEntity(sphere, 60, 0, 0);
+        scene.EntityPickMode(sphere, 1);
+
+        var box = scene.CreatePivot();
+        scene.PositionEntity(box, -60, 0, 0);
+        scene.EntityBox(box, -1, -1, -1, 2, 2, 2);
+        scene.EntityPickMode(box, 3);
+
+        var occluder = scene.CreatePivot();
+        scene.SetCollisionTriangles(occluder, [new(
+            new(48, -2, 5), new(50, 2, 5), new(52, -2, 5))]);
+        scene.EntityPickMode(occluder, 2);
+
+        var viewer = scene.CreatePivot();
+        var destination = scene.CreatePivot();
+        scene.PositionEntity(viewer, 50, 0, 0);
+        scene.PositionEntity(destination, 50, 0, 10);
+
+        if (settleCollisions)
+        {
+            scene.UpdateWorld();
+            scene.PositionEntity(mover, 0, 0, 1); // a real move, so the last sweep bounds the segment near the origin
+            scene.UpdateWorld();
+        }
+
+        Assert.Equal(sphere, scene.LinePick(60, 0, -10, 0, 0, 20));
+        Assert.Equal(sphere, scene.PickedEntity);
+        Assert.Equal(box, scene.LinePick(-60, 0, -10, 0, 0, 20));
+        Assert.Equal(occluder, scene.LinePick(50, 0, -5, 0, 0, 20));
+        Assert.False(scene.EntityVisible(viewer, destination));
+    }
 }
