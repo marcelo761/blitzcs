@@ -112,6 +112,7 @@ public static partial class LegacyGraphics
         var scene = RequireScene();
         var id = scene.CreatePivot(parent);
         MeshEntities.Add(id, new MeshEntity(id));
+        NoteMeshAdded(id);
         return id;
     }
 
@@ -150,7 +151,7 @@ public static partial class LegacyGraphics
                 pending.Push(scene.GetChild(current, index));
         }
 
-        if (subtree.Any(MeshEntities.ContainsKey)) ClearCollisionGeometrySelectionCache();
+        if (EngineOptimizations.Disabled && subtree.Any(MeshEntities.ContainsKey)) ClearCollisionGeometrySelectionCache();
         ReleaseAnimatedModels(subtree);
         foreach (var current in subtree)
         {
@@ -158,6 +159,7 @@ public static partial class LegacyGraphics
             ForgetLightState(current);
             Cameras.Remove(current);
             if (!MeshEntities.Remove(current, out var mesh)) continue;
+            NoteMeshRemoved(mesh);
             mesh.Plane?.GpuMesh?.Dispose();
             mesh.Material.Dispose();
             if (--mesh.Geometry.References != 0) continue;
@@ -591,6 +593,8 @@ public static partial class LegacyGraphics
         public PlaneState? Plane { get; set; }
         public List<int> SurfaceHandles => Geometry.SurfaceHandles;
         public long CollisionVersion { get; set; } = -1;
+        /// <summary>Index in PolygonCollisionMeshes while selected, else -1.</summary>
+        public int SelectionIndex { get; set; } = -1;
         public int Order { get; set; }
         public (float Near, float Far)? AutoFade { get; set; }
     }
@@ -603,6 +607,8 @@ public static partial class LegacyGraphics
         public long CollisionVersion { get; set; } = -1;
         /// <summary>Member of the maintained collision-relevant set (owned by PrepareCollisionGeometry).</summary>
         public bool InCollisionSet { get; set; }
+        /// <summary>Selected meshes sharing this geometry (copies share geometry).</summary>
+        public List<MeshEntity> SelectedMeshes { get; } = [];
         /// <summary>Queued for re-preparation because one of its surfaces changed since the last prepare.</summary>
         public bool CollisionPending { get; set; }
         public long CachedVersion { get; set; }

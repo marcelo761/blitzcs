@@ -15,13 +15,15 @@ internal static class EngineStats
     internal const int ColSources = 0, ColPairs = 1, ColPairsRejType = 2, ColPairsRejBound = 3, ColBvhCands = 4, ColBvhNodes = 5,
         ColTriTests = 6, ColSphereTests = 7, ColBoxTests = 8, ColPlaneTests = 9, ColHits = 10, ColRespIters = 11, ColStill = 12,
         ColEnabled = 13, ColPrepSel = 14, ColPrepMeshes = 15, ColPrepRebuilt = 16,
-        SceneNodes = 17, SceneVisited = 18, XformTotal = 19, XformDirty = 20, AnimActive = 21, AnimModels = 22;
+        SceneNodes = 17, SceneVisited = 18, XformTotal = 19, XformDirty = 20, AnimActive = 21, AnimModels = 22,
+        SelBumpType = 23, SelBumpPick = 24, SelBumpRules = 25, SelBumpCopyState = 26, SelBumpForget = 27, SelBumpPlane = 28, SelBumpCount = 29;
     internal static readonly string[] CounterNames =
     [
         "colSources", "colPairs", "colPairsRejType", "colPairsRejBound", "colBvhCands", "colBvhNodes",
         "colTriTests", "colSphereTests", "colBoxTests", "colPlaneTests", "colHits", "colRespIters", "colStill",
         "colEnabled", "colPrepSel", "colPrepMeshes", "colPrepRebuilt",
-        "sceneNodes", "sceneVisited", "xformTotal", "xformDirty", "animActive", "animModels"
+        "sceneNodes", "sceneVisited", "xformTotal", "xformDirty", "animActive", "animModels",
+        "selBumpType", "selBumpPick", "selBumpRules", "selBumpCopyState", "selBumpForget", "selBumpPlane", "selBumpCount"
     ];
 
     // Tick slots (printed as ms).

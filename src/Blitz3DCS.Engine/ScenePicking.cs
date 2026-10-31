@@ -12,15 +12,18 @@ public sealed partial class SceneGraph
     public void EntityPickMode(int entity, int mode, bool obscurer = true)
     {
         var state = GetCollisionState(entity);
+        EngineStats.Add(EngineStats.SelBumpPick);
+        if (state.PickMode != mode || EngineOptimizations.Disabled) NoteSelectionChanged(entity);
         state.PickMode = mode;
         state.PickObscurer = obscurer;
-        _polygonGeometrySelectionVersion++;
     }
 
     /// <summary>Whether this entity needs polygon geometry for collision or picking queries.</summary>
     public bool RequiresPolygonCollisionOrPicking(int entity)
     {
-        var state = GetCollisionState(entity);
+        CollisionEntityState state;
+        if (EngineOptimizations.Disabled) state = GetCollisionState(entity);
+        else if (!_collisionEntities.TryGetValue(entity, out state!)) return false; // stateless: type 0, no pick mode
         if (state.PickMode == CollisionMethodPolygon) return true;
         if (state.Type == 0) return false;
         foreach (var rule in _collisionRules)

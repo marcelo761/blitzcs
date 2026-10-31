@@ -34,6 +34,7 @@ public static partial class LegacyGraphics
             copiedMesh.AutoFade = mesh.AutoFade;
             if (mesh.Plane is { } plane) copiedMesh.Plane = new PlaneState(plane.Segments);
             MeshEntities.Add(copiedMesh.Entity, copiedMesh);
+            NoteMeshAdded(copiedMesh.Entity);
             copiedMesh.Geometry.References++;
             CopySpriteState(sourceIds[index], copyIds[index]);
         }

@@ -179,7 +179,7 @@ internal static class EngineProfile
     /// <summary>First slot of the Engine-assembly counters (EngineStats.CounterNames, in order).</summary>
     internal const int StatsBase = 13;
     /// <summary>First slot of the render-side counters (RenderCounterNames, in order).</summary>
-    internal const int RenderBase = StatsBase + 23;
+    internal const int RenderBase = StatsBase + 30;
     internal const int SkinModels = RenderBase, SkinMeshes = RenderBase + 1, SkinVerts = RenderBase + 2, SkinSkipped = RenderBase + 3,
         SkinClean = RenderBase + 4, SkinBones = RenderBase + 5, SkinUploads = RenderBase + 6,
         RtVisited = RenderBase + 7, RtMeshes = RenderBase + 8, RtCullFrustum = RenderBase + 9, RtCullDist = RenderBase + 10,

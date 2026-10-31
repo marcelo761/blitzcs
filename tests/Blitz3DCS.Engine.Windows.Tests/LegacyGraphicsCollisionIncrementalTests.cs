@@ -117,7 +117,7 @@ public sealed class LegacyGraphicsCollisionIncrementalTests
             var pivots = new List<int>();
             for (var step = 0; step < 1500; step++)
             {
-                switch (rng.Next(11))
+                switch (rng.Next(17))
                 {
                     case 0: meshes.Add(Triangle(rng.Next(5))); break;
                     case 1 when meshes.Count > 0:
@@ -153,13 +153,96 @@ public sealed class LegacyGraphicsCollisionIncrementalTests
                         break;
                     case 9 when pivots.Count > 0: scene.EntityType(pivots[rng.Next(pivots.Count)], rng.Next(0, 4), true); break;
                     case 10: scene.Collisions(rng.Next(1, 4), 2, 2, 1); break;
+                    case 11 when meshes.Count > 0:
+                        { var m = meshes[rng.Next(meshes.Count)]; scene.EntityType(m, scene.GetEntityType(m)); break; }
+                    case 12 when meshes.Count > 0:
+                        { var m = meshes[rng.Next(meshes.Count)]; scene.EntityType(m, scene.GetEntityType(m)); scene.EntityPickMode(m, 0); break; }
+                    case 13:
+                        { var sprite = LegacyGraphics.CreateSprite(); if (rng.Next(2) == 0) LegacyGraphics.FreeEntity(sprite); else meshes.Add(sprite); break; }
+                    case 14 when pivots.Count > 0 && meshes.Count > 0:
+                        scene.EntityParent(meshes[rng.Next(meshes.Count)], pivots[rng.Next(pivots.Count)]); break;
+                    case 15 when pivots.Count > 0:
+                        {
+                            var i = rng.Next(pivots.Count);
+                            LegacyGraphics.FreeEntity(pivots[i]);
+                            pivots.RemoveAt(i);
+                            meshes.RemoveAll(m => !MeshAlive(scene, m));
+                            break;
+                        }
+                    case 16 when meshes.Count > 0: scene.EntityPickMode(meshes[rng.Next(meshes.Count)], 2, false); break;
                 }
                 if (rng.Next(3) == 0)
                 {
                     LegacyGraphics.UpdateWorld();
                     Assert.Equal(0, LegacyGraphics.CollisionStaleMeshCountForTesting());
+                    Assert.Equal(0, LegacyGraphics.CollisionSelectionMismatchForTesting());
                 }
             }
+        });
+    }
+
+    private static bool MeshAlive(SceneGraph scene, int entity)
+    {
+        try { _ = scene.GetEntityType(entity); return true; }
+        catch (Exception) { return false; }
+    }
+
+    [Fact]
+    public void Idempotent_setters_and_particle_churn_do_not_rebuild_the_selection()
+    {
+        Run(scene =>
+        {
+            var parent = scene.CreatePivot();
+            var statics = Enumerable.Range(0, 10).Select(_ => Triangle()).ToArray();
+            foreach (var mesh in statics) { scene.EntityParent(mesh, parent); }
+            scene.EntityType(parent, 2, true);
+            scene.EntityPickMode(statics[0], 2);
+            LegacyGraphics.UpdateWorld();
+            var rebuilds = LegacyGraphics.CollisionSelectionRebuildTotalForTesting;
+            var prepared = LegacyGraphics.CollisionPrepMeshTotalForTesting;
+            for (var frame = 0; frame < 20; frame++)
+            {
+                scene.EntityType(parent, 2, true);
+                scene.EntityType(statics[1], 2);
+                scene.EntityPickMode(statics[0], 2);
+                scene.Collisions(1, 2, 2, 1);
+                for (var i = 0; i < 5; i++) LegacyGraphics.FreeEntity(LegacyGraphics.CreateSprite());
+                var kept = LegacyGraphics.CreateSprite();
+                LegacyGraphics.UpdateWorld();
+                Assert.Equal(0, LegacyGraphics.CollisionSelectionMismatchForTesting());
+                Assert.Equal(10, LegacyGraphics.PolygonCollisionMeshCountForTesting);
+                LegacyGraphics.FreeEntity(kept);
+            }
+            if (!EngineOptimizations.Disabled)
+            {
+                Assert.Equal(rebuilds, LegacyGraphics.CollisionSelectionRebuildTotalForTesting);
+                Assert.Equal(prepared, LegacyGraphics.CollisionPrepMeshTotalForTesting);
+            }
+        });
+    }
+
+    [Fact]
+    public void Selection_follows_recursive_type_changes_and_copies_incrementally()
+    {
+        Run(scene =>
+        {
+            var parent = scene.CreatePivot();
+            var children = Enumerable.Range(0, 4).Select(_ => Triangle()).ToArray();
+            foreach (var child in children) scene.EntityParent(child, parent);
+            LegacyGraphics.UpdateWorld();
+            Assert.Equal(0, LegacyGraphics.PolygonCollisionMeshCountForTesting);
+            scene.EntityType(parent, 2, true);
+            LegacyGraphics.UpdateWorld();
+            Assert.Equal(4, LegacyGraphics.PolygonCollisionMeshCountForTesting);
+            var copy = LegacyGraphics.CopyEntity(children[0]);
+            LegacyGraphics.UpdateWorld();
+            Assert.Equal(5, LegacyGraphics.PolygonCollisionMeshCountForTesting);
+            scene.EntityType(parent, 0, true);
+            LegacyGraphics.UpdateWorld();
+            Assert.Equal(1, LegacyGraphics.PolygonCollisionMeshCountForTesting);
+            Assert.Equal(0, LegacyGraphics.CollisionSelectionMismatchForTesting());
+            Assert.Equal(0, LegacyGraphics.CollisionStaleMeshCountForTesting());
+            _ = copy;
         });
     }
 }

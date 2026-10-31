@@ -97,9 +97,8 @@ public sealed class LegacyGraphicsCollisionSelectionTests
             var copy = LegacyGraphics.CopyEntity(original);
             Assert.Equal(copy, LegacyGraphics.LinePick(0, 0, -1, 0, 0, 2));
             Assert.Equal(2, LegacyGraphics.PolygonCollisionMeshCountForTesting);
-
             LegacyGraphics.FreeEntity(original);
-            Assert.Equal(0, LegacyGraphics.PolygonCollisionMeshCountForTesting);
+            Assert.Equal(EngineOptimizations.Disabled ? 0 : 1, LegacyGraphics.PolygonCollisionMeshCountForTesting);
             var replacement = CreateTriangle();
             scene.PositionEntity(replacement, 100, 0, 0);
             scene.EntityPickMode(replacement, 2);

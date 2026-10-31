@@ -20,6 +20,7 @@ public static partial class LegacyGraphics
             {
                 mesh = new MeshEntity(id);
                 MeshEntities.Add(id, mesh);
+                NoteMeshAdded(id);
                 var surface = CreateSurface(id);
                 AddSpriteQuad(surface);
                 _spriteQuadGeometry = mesh.Geometry;
@@ -29,6 +30,7 @@ public static partial class LegacyGraphics
                 _spriteQuadGeometry.References++;
                 mesh = new MeshEntity(id, _spriteQuadGeometry);
                 MeshEntities.Add(id, mesh);
+                NoteMeshAdded(id);
             }
 
             mesh.Material.Effects = 1; // gxScene::FX_FULLBRIGHT

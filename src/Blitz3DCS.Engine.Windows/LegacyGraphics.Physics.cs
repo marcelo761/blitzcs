@@ -36,6 +36,8 @@ public static partial class LegacyGraphics
     private static bool _collisionFullPassNeeded = true;
     private static long _collisionPrepMeshTotal, _collisionPrepRebuiltTotal;
 
+    private static long _collisionSelectionRebuildTotal;
+    internal static long CollisionSelectionRebuildTotalForTesting => _collisionSelectionRebuildTotal;
     internal static long CollisionPrepMeshTotalForTesting => _collisionPrepMeshTotal;
     internal static long CollisionPrepRebuiltTotalForTesting => _collisionPrepRebuiltTotal;
 
@@ -53,36 +55,113 @@ public static partial class LegacyGraphics
         PendingCollisionGeometries.Clear();
     }
 
+    private static readonly HashSet<int> PendingSelectionMeshes = [];
+    private static readonly List<int> SelectionChangeBuffer = [];
+
+    private static void NoteMeshAdded(int entity)
+    {
+        EngineStats.Add(EngineStats.SelBumpCount);
+        if (!EngineOptimizations.Disabled) PendingSelectionMeshes.Add(entity);
+    }
+
+    private static void NoteMeshRemoved(MeshEntity mesh)
+    {
+        EngineStats.Add(EngineStats.SelBumpCount);
+        if (EngineOptimizations.Disabled) return;
+        PendingSelectionMeshes.Remove(mesh.Entity);
+        DeselectMesh(mesh);
+    }
+
+    private static void SelectMesh(MeshEntity mesh)
+    {
+        mesh.SelectionIndex = PolygonCollisionMeshes.Count;
+        PolygonCollisionMeshes.Add(mesh);
+        mesh.Geometry.SelectedMeshes.Add(mesh);
+        mesh.Geometry.InCollisionSet = true;
+    }
+
+    private static void DeselectMesh(MeshEntity mesh)
+    {
+        var index = mesh.SelectionIndex;
+        if (index < 0) return;
+        var last = PolygonCollisionMeshes.Count - 1;
+        var moved = PolygonCollisionMeshes[last];
+        PolygonCollisionMeshes[index] = moved;
+        moved.SelectionIndex = index;
+        PolygonCollisionMeshes.RemoveAt(last);
+        mesh.SelectionIndex = -1;
+        var shared = mesh.Geometry.SelectedMeshes;
+        shared.Remove(mesh);
+        if (shared.Count == 0) mesh.Geometry.InCollisionSet = false;
+    }
+
+    /// <summary>Re-evaluates one mesh against the full-rebuild predicate and adjusts the selected set.</summary>
+    private static void ReevaluateSelection(SceneGraph scene, MeshEntity mesh)
+    {
+        var wanted = mesh.Plane is null && scene.RequiresPolygonCollision(mesh.Entity);
+        var selected = mesh.SelectionIndex >= 0;
+        if (wanted == selected) return;
+        if (wanted)
+        {
+            SelectMesh(mesh);
+            PrepareCollisionMesh(scene, mesh);
+        }
+        else DeselectMesh(mesh);
+    }
+
     private static void PrepareCollisionGeometry(SceneGraph scene)
     {
         var selectionVersion = scene.PolygonGeometrySelectionVersion;
+        var optimized = !EngineOptimizations.Disabled;
         var meshCount = MeshEntities.Count;
         if (!ReferenceEquals(_collisionGeometrySelectionScene, scene) ||
             _collisionGeometrySelectionVersion != selectionVersion ||
-            _collisionGeometryMeshCount != meshCount)
+            (!optimized && _collisionGeometryMeshCount != meshCount))
         {
             ResetCollisionSet();
+            SelectionChangeBuffer.Clear();
+            scene.TakeSelectionChanges(SelectionChangeBuffer);
+            SelectionChangeBuffer.Clear();
+            PendingSelectionMeshes.Clear();
             foreach (var mesh in MeshEntities.Values)
             {
                 if (mesh.Plane is not null || !scene.RequiresPolygonCollision(mesh.Entity)) continue;
-                PolygonCollisionMeshes.Add(mesh);
-                mesh.Geometry.InCollisionSet = true;
+                SelectMesh(mesh);
             }
             EngineStats.Add(EngineStats.ColPrepSel);
+            _collisionSelectionRebuildTotal++;
             _collisionGeometrySelectionScene = scene;
             _collisionGeometrySelectionVersion = selectionVersion;
             _collisionGeometryMeshCount = meshCount;
             _collisionFullPassNeeded = true;
         }
-        var optimized = !EngineOptimizations.Disabled;
+        else if (optimized)
+        {
+            // Incremental: only entities whose own state changed and newly created meshes need a look.
+            SelectionChangeBuffer.Clear();
+            scene.TakeSelectionChanges(SelectionChangeBuffer);
+            foreach (var id in SelectionChangeBuffer)
+                if (MeshEntities.TryGetValue(id, out var changed)) ReevaluateSelection(scene, changed);
+            SelectionChangeBuffer.Clear();
+            if (PendingSelectionMeshes.Count != 0)
+            {
+                foreach (var id in PendingSelectionMeshes)
+                    if (MeshEntities.TryGetValue(id, out var added)) ReevaluateSelection(scene, added);
+                PendingSelectionMeshes.Clear();
+            }
+        }
         // Incremental: only geometries whose own surfaces changed since the last prepare need a look.
         if (optimized && !_collisionFullPassNeeded && PendingCollisionGeometries.Count == 0) return;
         var full = _collisionFullPassNeeded || !optimized;
 
-        foreach (var mesh in PolygonCollisionMeshes)
+        if (full)
         {
-            if (!full && !mesh.Geometry.CollisionPending) continue;
-            PrepareCollisionMesh(scene, mesh);
+            foreach (var mesh in PolygonCollisionMeshes) PrepareCollisionMesh(scene, mesh);
+        }
+        else
+        {
+            foreach (var geometry in PendingCollisionGeometries)
+                foreach (var mesh in geometry.SelectedMeshes) PrepareCollisionMesh(scene, mesh);
         }
         ClearPendingCollision();
         _collisionFullPassNeeded = false;
@@ -123,7 +202,12 @@ public static partial class LegacyGraphics
 
     private static void ResetCollisionSet()
     {
-        foreach (var mesh in PolygonCollisionMeshes) mesh.Geometry.InCollisionSet = false;
+        foreach (var mesh in PolygonCollisionMeshes)
+        {
+            mesh.Geometry.InCollisionSet = false;
+            mesh.Geometry.SelectedMeshes.Clear();
+            mesh.SelectionIndex = -1;
+        }
         PolygonCollisionMeshes.Clear();
         ClearPendingCollision();
     }
@@ -154,9 +238,23 @@ public static partial class LegacyGraphics
         return text.ToString();
     }
 
+    /// <summary>Test oracle: selected set differs from a full scan with the current rules (0 = identical).</summary>
+    internal static int CollisionSelectionMismatchForTesting()
+    {
+        var scene = RequireScene();
+        var mismatch = 0;
+        foreach (var mesh in MeshEntities.Values)
+        {
+            var wanted = mesh.Plane is null && scene.RequiresPolygonCollision(mesh.Entity);
+            if (wanted != (mesh.SelectionIndex >= 0) || (wanted && !ReferenceEquals(PolygonCollisionMeshes[mesh.SelectionIndex], mesh))) mismatch++;
+        }
+        return mismatch + Math.Abs(PolygonCollisionMeshes.Count - MeshEntities.Values.Count(m => m.SelectionIndex >= 0));
+    }
+
     private static void ClearCollisionGeometrySelectionCache()
     {
         ResetCollisionSet();
+        PendingSelectionMeshes.Clear();
         _collisionGeometrySelectionScene = null;
         _collisionGeometrySelectionVersion = long.MinValue;
         _collisionGeometryMeshCount = -1;
