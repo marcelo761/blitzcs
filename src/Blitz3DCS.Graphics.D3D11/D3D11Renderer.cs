@@ -1444,6 +1444,8 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         finally { _context.Unmap(buffer, 0); }
     }
 
+    private readonly NormalMatrixCache _normalCache = new();
+
     private void UploadTransform(in Matrix4x4 worldViewProjection, in Matrix4x4 worldView) =>
         UploadTransform(worldViewProjection, worldView, Matrix4x4.Identity);
 
@@ -1451,6 +1453,11 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     {
         Matrix4x4 normal;
         if (Optimize && _hasLastNormal && world == _lastWorld) normal = _lastNormal;
+        else if (Optimize)
+        {
+            normal = _normalCache.Get(world);
+            _lastWorld = world; _lastNormal = normal; _hasLastNormal = true;
+        }
         else
         {
             normal = Matrix4x4.Identity;
