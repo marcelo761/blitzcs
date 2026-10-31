@@ -16,6 +16,7 @@ public sealed partial class SceneGraph
         if (state.PickMode != mode || !EngineOptimizations.IncrSelection) NoteSelectionChanged(entity);
         state.PickMode = mode;
         state.PickObscurer = obscurer;
+        PickTrack(GetNode(entity), state);
     }
 
     /// <summary>Whether this entity needs polygon geometry for collision or picking queries.</summary>
@@ -36,6 +37,8 @@ public sealed partial class SceneGraph
     {
         var start = new SceneVector3(x, y, z);
         var direction = new SceneVector3(dx, dy, dz);
+        if (PickAccelActive && IsFinite(start) && IsFinite(direction) && float.IsFinite(radius))
+            return LinePickAccelerated(start, direction, radius);
         var bestTime = 1f;
         var bestEntity = 0;
         var bestNormal = _pickedNormal;
@@ -80,6 +83,8 @@ public sealed partial class SceneGraph
         var start = GetWorldTransform(GetNode(source)).Position;
         var end = GetWorldTransform(GetNode(destination)).Position;
         var direction = Subtract(end, start);
+        if (PickAccelActive && IsFinite(start) && IsFinite(direction))
+            return EntityVisibleAccelerated(source, destination, start, direction);
 
         _enabledPickingNodes.Clear();
         foreach (var node in _nodes.Values)

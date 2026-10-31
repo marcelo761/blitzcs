@@ -401,6 +401,7 @@ public sealed partial class SceneGraph
     {
         if (node.WorldDirty) return;
         node.WorldDirty = true;
+        node.CollisionState?.PickEntry?.MarkDirty();
         if (!self) EngineStats.Add(EngineStats.XformInvAncestor);
         foreach (var child in node.Children) InvalidateWorld(child);
     }

@@ -3,13 +3,13 @@ namespace Blitz3DCS.Engine;
 /// <summary>
 /// Runtime switches for CPU optimizations, read once at process start. BLITZCS_ENGINE_NOOPT=1 restores every original
 /// code path; BLITZCS_ENGINE_NO=name[,name...] (case-insensitive) restores only the named ones. Names: broadphase,
-/// setterguard, incrselection, collgeom, collstate, skinfuse, skincull, traversal, drawsort.
+/// setterguard, incrselection, collgeom, collstate, skinfuse, skincull, traversal, drawsort, pickaccel.
 /// </summary>
 public static class EngineOptimizations
 {
     /// <summary>All switchable optimization names.</summary>
     public static readonly string[] Names =
-        ["broadphase", "setterguard", "incrselection", "collgeom", "collstate", "skinfuse", "skincull", "traversal", "drawsort"];
+        ["broadphase", "setterguard", "incrselection", "collgeom", "collstate", "skinfuse", "skincull", "traversal", "drawsort", "pickaccel"];
 
     /// <summary>True when BLITZCS_ENGINE_NOOPT=1 was set at process start (read once).</summary>
     public static readonly bool Disabled = Environment.GetEnvironmentVariable("BLITZCS_ENGINE_NOOPT") == "1";
@@ -35,6 +35,8 @@ public static class EngineOptimizations
     public static readonly bool Traversal = Active("traversal");
     /// <summary>Index-sorted draw queue.</summary>
     public static readonly bool DrawSort = Active("drawsort");
+    /// <summary>Pick-target bounds index (static BVH + dynamic list) for LinePick/EntityPick/EntityVisible.</summary>
+    public static readonly bool PickAccel = Active("pickaccel");
 
     static EngineOptimizations()
     {

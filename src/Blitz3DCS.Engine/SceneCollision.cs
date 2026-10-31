@@ -71,8 +71,15 @@ public sealed partial class SceneGraph
     /// <summary>Moves the entities whose polygon-collision requirement may have changed into <paramref name="entities"/> and forgets them.</summary>
     public void TakeSelectionChanges(List<int> entities)
     {
+        var count = _selectionDirty.Count;
+        if (count == 0) return;
+        var first = entities.Count;
         entities.AddRange(_selectionDirty);
-        _selectionDirty.Clear();
+        // HashSet.Clear zeroes the whole bucket/entry arrays (sized by the historical peak, up to the dirty limit);
+        // removing a few entries one by one is O(count) and leaves the same (empty) set.
+        if (count <= 64)
+            for (var i = first; i < entities.Count; i++) _selectionDirty.Remove(entities[i]);
+        else _selectionDirty.Clear();
     }
 
     /// <summary>Sets an entity's collision type. A nonzero recursive flag applies it to descendants.</summary>
@@ -107,6 +114,7 @@ public sealed partial class SceneGraph
     {
         var state = GetCollisionState(entity);
         state.Radii = new(xRadius, yRadius == 0 ? xRadius : yRadius, xRadius);
+        PickShapeChanged(state);
     }
 
     /// <summary>Sets the local axis-aligned box used when this entity is a box collision target.</summary>
@@ -115,6 +123,7 @@ public sealed partial class SceneGraph
         var state = GetCollisionState(entity);
         state.BoxMinimum = new(MathF.Min(x, x + width), MathF.Min(y, y + height), MathF.Min(z, z + depth));
         state.BoxMaximum = new(MathF.Max(x, x + width), MathF.Max(y, y + height), MathF.Max(z, z + depth));
+        PickShapeChanged(state);
     }
 
     /// <summary>Replaces local collision triangles for polygon collision mode.</summary>
@@ -126,6 +135,7 @@ public sealed partial class SceneGraph
         state.TriangleCollider = null;
         state.BoundValid = false;
         state.TriangleCandidates.Clear();
+        PickShapeChanged(state);
     }
 
     /// <summary>Uses an entity's local y=0 plane as infinite polygon collision geometry.</summary>
@@ -135,6 +145,7 @@ public sealed partial class SceneGraph
         EngineStats.Add(EngineStats.SelBumpPlane);
         if (state.InfinitePlane != enabled || !EngineOptimizations.IncrSelection) NoteSelectionChanged(entity);
         state.InfinitePlane = enabled;
+        PickShapeChanged(state);
     }
 
     internal bool HasTriangleColliderForTesting(int entity) => GetCollisionState(entity).TriangleCollider is not null;
@@ -361,7 +372,8 @@ public sealed partial class SceneGraph
     internal void ForgetCollisionState(int entity)
     {
         EngineStats.Add(EngineStats.SelBumpForget);
-        var existed = _collisionEntities.Remove(entity);
+        var existed = _collisionEntities.Remove(entity, out var removedState);
+        PickUntrack(removedState);
         if (_nodes.TryGetValue(entity, out var forgotten)) forgotten.CollisionState = null;
         if (_pickedEntity == entity) _pickedEntity = 0;
         if (!existed && EngineOptimizations.IncrSelection) return; // never had collision state: nothing references it
@@ -396,8 +408,10 @@ public sealed partial class SceneGraph
             PreviousTransform = GetWorldTransform(target),
             HasPreviousTransform = true
         };
+        if (_collisionEntities.TryGetValue(destination, out var replaced)) PickUntrack(replaced);
         _collisionEntities[destination] = state;
         target.CollisionState = state;
+        PickTrack(target, state);
     }
 
     internal void ResetCollisionState(int entity)
@@ -958,6 +972,8 @@ public sealed partial class SceneGraph
         public SceneTransform PreviousTransform { get; set; }
         public bool HasPreviousTransform { get; set; }
         public List<SceneCollisionInfo> Collisions { get; } = [];
+        /// <summary>Pick-index entry while this state has a nonzero pick mode (EngineOptimizations.PickAccel).</summary>
+        public PickEntry? PickEntry;
     }
 
     private readonly record struct CollisionRule(int SourceType, int DestinationType, int Method, int Response);
