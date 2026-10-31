@@ -185,12 +185,19 @@ internal static class EngineProfile
         RtVisited = RenderBase + 7, RtMeshes = RenderBase + 8, RtCullFrustum = RenderBase + 9, RtCullDist = RenderBase + 10,
         RtSurfaces = RenderBase + 11, RtSortKeys = RenderBase + 12, RtUniqueMat = RenderBase + 13, RtOpaque = RenderBase + 14,
         RtAlpha = RenderBase + 15, RtAdditive = RenderBase + 16, RtOtherBlend = RenderBase + 17, RtSprite = RenderBase + 18,
-        RtMasked = RenderBase + 19, RtAnim = RenderBase + 20, RtBatchable = RenderBase + 21, RtLightCount = RenderBase + 22;
+        RtMasked = RenderBase + 19, RtAnim = RenderBase + 20, RtBatchable = RenderBase + 21, RtLightCount = RenderBase + 22,
+        // D3D11 object-constant submission (folded from D3D11FrameCounters in EndFrame). apiDraws: device draw calls
+        // issued for meshes ("draws" counts requested mesh draws); instDraws/instObjects: instanced draws and the mesh
+        // draws folded into them; objBufBytes: bytes written to the object constant buffer; cbBinds:
+        // *SetConstantBuffers1 offset binds; drawFlushes: queue flushes (one object-buffer Map each).
+        D3dApiDraws = RenderBase + 23, D3dInstancedDraws = RenderBase + 24, D3dInstancedObjects = RenderBase + 25,
+        D3dObjectBufferBytes = RenderBase + 26, D3dConstantBufferBinds = RenderBase + 27, D3dDrawFlushes = RenderBase + 28;
     internal static readonly string[] RenderCounterNames =
     [
         "skinModels", "skinMeshes", "skinVerts", "skinSkipped", "skinClean", "skinBones", "skinUploads",
         "rtVisited", "rtMeshes", "rtCullFrustum", "rtCullDist", "rtSurfaces", "rtSortKeys", "rtUniqueMat", "rtOpaque",
-        "rtAlpha", "rtAdditive", "rtOtherBlend", "rtSprite", "rtMasked", "rtAnim", "rtBatchable", "rtLights"
+        "rtAlpha", "rtAdditive", "rtOtherBlend", "rtSprite", "rtMasked", "rtAnim", "rtBatchable", "rtLights",
+        "apiDraws", "instDraws", "instObjects", "objBufBytes", "cbBinds", "drawFlushes"
     ];
     internal static readonly string[] CounterNames = [.. BaseCounterNames, .. EngineStats.CounterNames, .. RenderCounterNames];
 
@@ -307,6 +314,12 @@ internal static class EngineProfile
         p.AddCount(SkippedBinds, v[D3D11FrameCounters.SkippedBinds]);
         p.AddCount(BatchedBlits, v[D3D11FrameCounters.BatchedBlitOps]);
         p.AddCount(SkippedCbMaps, v[D3D11FrameCounters.SkippedConstantBufferMaps]);
+        p.AddCount(D3dApiDraws, v[D3D11FrameCounters.ApiDraws]);
+        p.AddCount(D3dInstancedDraws, v[D3D11FrameCounters.InstancedDraws]);
+        p.AddCount(D3dInstancedObjects, v[D3D11FrameCounters.InstancedObjects]);
+        p.AddCount(D3dObjectBufferBytes, v[D3D11FrameCounters.ObjectBufferBytes]);
+        p.AddCount(D3dConstantBufferBinds, v[D3D11FrameCounters.ConstantBufferBinds]);
+        p.AddCount(D3dDrawFlushes, v[D3D11FrameCounters.DrawQueueFlushes]);
         Array.Clear(v);
         FoldEngineStats(p, EngineStats.Counts, EngineStats.Ticks);
         var now = Stopwatch.GetTimestamp();

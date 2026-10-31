@@ -191,6 +191,9 @@ public static partial class LegacyGraphics
                 draw.World * view, state, draw.World, draw.Entity.Plane is { } activePlane ? (uint)activePlane.Grid.IndexCount : null);
             _trianglesRendered += draw.Entity.Plane is { } renderedPlane ? renderedPlane.Grid.IndexCount / 3 : draw.Surface.Indices.Count / 3;
         }
+        // The renderer queues mesh draws (one constant-buffer Map per flush, instancing of consecutive compatible
+        // draws); issue them here so the submit phase includes their device cost.
+        if (drawCount > 0) renderer.SubmitQueuedDraws();
         if (EngineProfile.Enabled)
         {
             EngineProfile.Count(EngineProfile.RtUniqueMat, StatMaterialKeys.Count);
