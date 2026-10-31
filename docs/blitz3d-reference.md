@@ -74,4 +74,4 @@ native compiles of the same source wrote zeros, like BcRun and like the earlier 
 
 Timing (wall, per source): native `-o` total 17.2 s, average 0.30 s; BcRun `-o` total 23.2 s, average 0.40 s (BcRun cache shared across the run, so the first translation is included).
 
-The 58 native exes are 1126912 to 1157120 bytes. Because nothing differed, no offset analysis or bisection was needed. The TSV is at `/tmp/claude-1000/j-corpus.tsv`.
+The 58 native exes are 1126912 to 1157120 bytes. Because nothing differed, no offset analysis or bisection was needed. The script prints the TSV to standard output.

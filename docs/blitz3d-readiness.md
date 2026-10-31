@@ -341,7 +341,7 @@ this for JoyUDir (code before a throw helper call dropped by the data-after-call
 Static evidence only, measured at HEAD `bd30724`. The counts in sections 3 to 5 predate the current Win32 component (it now registers 156 of the 693 distinct imports, not 106) and are superseded here where they differ.
 
 Method and limits:
-* The SDK was extracted into a new empty directory under `/tmp/claude-1000`. Nothing from it was executed or copied into the repository.
+* The SDK was extracted into a new empty temporary directory. Nothing from it was executed or copied into the repository.
 * No produced exe exists on this machine (no `/tmp/blitzcc-corpus.*`). Producing one runs `blitzcc.exe` through BcRun, and its `-o` path loads `runtime.dll` (`GetProcAddress(runtime!_bbWinMain@0)`, `FreeLibrary`), which executes that DLL's `DllMain`. That is excluded, so `bin/runtime.dll` is the proxy. The produced exe is runtime-sized (1,126,912 bytes against 1,126,400), but its import table was not read and the proxy is unverified.
 * Import tables: `tools/survey/pe_imports.py` (`python3 -I`, read-only).
 * Implemented or absent: `BcSurvey sdk` (`Win32ImportResolver.Analyze`, the registry verdict per `dll!name`).
