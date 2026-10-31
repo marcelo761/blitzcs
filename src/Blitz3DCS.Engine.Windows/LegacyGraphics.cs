@@ -351,7 +351,7 @@ public static partial class LegacyGraphics
             throw new InvalidOperationException("The camera transform is not invertible.");
         var projection = CreateCameraProjection(camera, viewport.Width, viewport.Height);
         var skinStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
-        PrepareAnimatedGeometry();
+        PrepareAnimatedGeometry(view * projection);
         if (EngineProfile.Enabled) EngineProfile.Add(EngineProfile.Skinning, skinStart);
         if (EngineProfile.Enabled && EngineProfile.CensusDue()) EngineProfile.Emit(BuildSceneCensus(scene));
         var lightStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;

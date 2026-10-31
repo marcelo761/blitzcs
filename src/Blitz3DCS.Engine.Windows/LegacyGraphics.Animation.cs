@@ -108,8 +108,9 @@ public static partial class LegacyGraphics
     private static B3dVector3 Interpolate(SceneVector3 from, B3dVector3 to, float fraction) =>
         new(from.X + (to.X - from.X) * fraction, from.Y + (to.Y - from.Y) * fraction, from.Z + (to.Z - from.Z) * fraction);
 
-    internal static void PrepareAnimatedGeometry()
+    internal static void PrepareAnimatedGeometry(Matrix4x4? viewProjection = null)
     {
+        var cullSkin = viewProjection is not null && !EngineOptimizations.Disabled;
         var scene = RequireScene();
         foreach (var model in AnimatedModels.Values)
         {
@@ -131,6 +132,14 @@ public static partial class LegacyGraphics
                 mesh.Dirty |= changed;
                 if (!mesh.Dirty) { EngineProfile.Count(EngineProfile.SkinClean); continue; }
                 if (!scene.IsVisibleInHierarchy(mesh.Entity)) { EngineProfile.Count(EngineProfile.SkinSkipped); continue; }
+                mesh.SkinCulled = false;
+                if (cullSkin && IsSkinOutsideView(model, mesh, viewProjection!.Value))
+                {
+                    // Stays Dirty: deformed on the first frame it is back in view. The draw pass skips it meanwhile.
+                    mesh.SkinCulled = true;
+                    EngineProfile.Count(EngineProfile.SkinSkipped);
+                    continue;
+                }
                 var deformStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
                 EngineProfile.Count(EngineProfile.SkinMeshes);
                 EngineProfile.Count(EngineProfile.SkinVerts, mesh.Positions.Length);
@@ -141,6 +150,15 @@ public static partial class LegacyGraphics
             }
             model.SkinDirty = false;
         }
+    }
+
+    // Conservative: only true when the posed bone-influence bounds lie fully outside the frustum.
+    private static bool IsSkinOutsideView(AnimatedModel model, AnimatedMesh mesh, in Matrix4x4 viewProjection)
+    {
+        var skin = mesh.Skin!;
+        skin.PrepareFrame(model.CurrentWorld);
+        if (!skin.TryGetSkinnedBounds(out var minimum, out var maximum)) return false;
+        return !BoxIntersectsClipVolume(minimum, maximum, model.CurrentWorld[mesh.NodeIndex] * viewProjection);
     }
 
     private static void DeformMeshLegacy(AnimatedModel model, AnimatedMesh mesh)

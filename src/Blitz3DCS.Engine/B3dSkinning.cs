@@ -92,6 +92,73 @@ public sealed class B3dSkinningBuffer
             }
         }
         _influenceStart[count] = cursor;
+        BuildBoneBounds(count);
+    }
+
+    // Per-bone AABB (source space) of every vertex the bone can move, used for conservative skinned bounds.
+    private Vector3[]? _boneMin, _boneMax;
+    private bool _boundsConvex;
+
+    private void BuildBoneBounds(int vertexCount)
+    {
+        var min = new Vector3[_bones.Length];
+        var max = new Vector3[_bones.Length];
+        Array.Fill(min, new Vector3(float.PositiveInfinity));
+        Array.Fill(max, new Vector3(float.NegativeInfinity));
+        var convex = true;
+        for (var v = 0; v < vertexCount; v++)
+        {
+            var first = _influenceStart[v];
+            var end = _influenceStart[v + 1];
+            var p = _srcPosition[v];
+            if (!float.IsFinite(p.X) || !float.IsFinite(p.Y) || !float.IsFinite(p.Z)) convex = false;
+            if (first == end) { min[0] = Vector3.Min(min[0], p); max[0] = Vector3.Max(max[0], p); continue; }
+            var sum = 0f;
+            for (var i = first; i < end; i++)
+            {
+                var bone = _influenceBone[i];
+                min[bone] = Vector3.Min(min[bone], p);
+                max[bone] = Vector3.Max(max[bone], p);
+                sum += _influenceWeight[i];
+            }
+            // Only a convex combination of per-bone transforms stays inside the union of the transformed boxes.
+            if (!(MathF.Abs(sum - 1f) <= 1e-3f)) convex = false;
+        }
+        _boneMin = min;
+        _boneMax = max;
+        _boundsConvex = convex;
+    }
+
+    /// <summary>
+    /// Conservative mesh-local bounds of the skinned vertices for the matrices given to the last
+    /// <see cref="PrepareFrame"/>: the union of each bone's source box transformed by that bone's skin matrix,
+    /// padded by a small margin. Returns false when no safe bound exists (non-normalized weights, non-finite data).
+    /// </summary>
+    public bool TryGetSkinnedBounds(out Vector3 minimum, out Vector3 maximum)
+    {
+        minimum = maximum = default;
+        if (!_skinMatricesPrepared || !_boundsConvex || _boneMin is null || _boneMax is null) return false;
+        var lo = new Vector3(float.PositiveInfinity);
+        var hi = new Vector3(float.NegativeInfinity);
+        for (var b = 0; b < _bones.Length; b++)
+        {
+            var bmin = _boneMin[b];
+            var bmax = _boneMax[b];
+            if (bmin.X > bmax.X) continue; // bone moves no vertex
+            for (var corner = 0; corner < 8; corner++)
+            {
+                var c = new Vector3((corner & 1) == 0 ? bmin.X : bmax.X, (corner & 2) == 0 ? bmin.Y : bmax.Y, (corner & 4) == 0 ? bmin.Z : bmax.Z);
+                var t = Vector3.Transform(c, _skinMatrices[b]);
+                lo = Vector3.Min(lo, t);
+                hi = Vector3.Max(hi, t);
+            }
+        }
+        if (lo.X > hi.X || !float.IsFinite(lo.X + lo.Y + lo.Z + hi.X + hi.Y + hi.Z)) return false;
+        var margin = Math.Max(Math.Max(hi.X - lo.X, hi.Y - lo.Y), Math.Max(hi.Z - lo.Z, 1f)) * 0.02f
+            + Math.Max(Math.Max(MathF.Abs(lo.X), MathF.Abs(hi.X)), Math.Max(MathF.Abs(lo.Y), Math.Max(MathF.Abs(hi.Y), Math.Max(MathF.Abs(lo.Z), MathF.Abs(hi.Z))))) * 1e-3f;
+        minimum = lo - new Vector3(margin);
+        maximum = hi + new Vector3(margin);
+        return true;
     }
 
     /// <summary>Skins positions and optional normals without allocating per frame.</summary>

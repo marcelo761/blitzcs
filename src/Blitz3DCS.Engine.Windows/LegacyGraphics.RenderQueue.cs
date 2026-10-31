@@ -58,6 +58,7 @@ public static partial class LegacyGraphics
                 if (distance >= range.Near) fade = 1 - (distance - range.Near) / (range.Far - range.Near);
                 if (fade <= 0) { EngineProfile.Count(EngineProfile.RtCullDist); continue; }
             }
+            if (entity.Animated is { SkinCulled: true }) { EngineProfile.Count(EngineProfile.RtCullFrustum); continue; }
             var isSprite = Sprites.TryGetValue(id, out var sprite);
             var world = isSprite ? BuildSpriteWorldMatrix(sprite!, entityWorld, cameraWorld) : entityWorld;
             var wvp = world * view * projection;

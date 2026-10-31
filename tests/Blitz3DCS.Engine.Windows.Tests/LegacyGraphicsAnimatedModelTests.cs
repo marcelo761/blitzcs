@@ -108,6 +108,65 @@ public sealed class LegacyGraphicsAnimatedModelTests
     }
 
     [Fact]
+    public void Off_screen_skinned_mesh_skips_deformation_then_skins_correctly_when_visible_and_bounds_are_conservative()
+    {
+        var previous = LegacyScene.Current;
+        var file = Path.Combine(Path.GetTempPath(), $"blitz-skin-cull-{Guid.NewGuid():N}.b3d");
+        LegacyGraphics.ResetForTests();
+        LegacyScene.Current = new SceneGraph();
+        try
+        {
+            File.WriteAllBytes(file, AnimatedModelBytes(keyedRoot: false));
+            var root = LegacyGraphics.LoadAnimMesh(file);
+            var mesh = Assert.Single(LegacyGraphics.AnimatedModels[root].Meshes);
+            var surface = Assert.Single(mesh.Surfaces);
+            var viewProjection = LegacyGraphics.CreateLeftHandedPerspective(1.2f, 1.33f, .1f, 1000f);
+
+            LegacyScene.PositionEntity(root, 0, 0, -500); // behind the camera
+            LegacyGraphics.SetAnimTime(root, 2);
+            LegacyGraphics.PrepareAnimatedGeometry(viewProjection);
+            Assert.True(mesh.SkinCulled);
+            Assert.True(mesh.Dirty);
+            Assert.Equal(surface.BaseSurfaceVertices[0].Position, surface.Vertices[0].Position);
+
+            LegacyScene.PositionEntity(root, 0, 0, 10);
+            LegacyGraphics.PrepareAnimatedGeometry(viewProjection);
+            Assert.False(mesh.SkinCulled);
+            Assert.False(mesh.Dirty);
+            var culledThenShown = surface.Vertices.ToArray();
+
+            // Reference: the same pose skinned without any culling.
+            LegacyGraphics.SetAnimTime(root, 0);
+            LegacyGraphics.PrepareAnimatedGeometry();
+            LegacyGraphics.SetAnimTime(root, 2);
+            LegacyGraphics.PrepareAnimatedGeometry();
+            Assert.Equal(surface.Vertices, culledThenShown);
+
+            // The bound contains every skinned vertex for a sweep of animation times.
+            var model = LegacyGraphics.AnimatedModels[root];
+            for (var t = 0f; t <= 2f; t += .125f)
+            {
+                LegacyGraphics.SetAnimTime(root, t);
+                LegacyGraphics.PrepareAnimatedGeometry();
+                mesh.Skin!.PrepareFrame(model.CurrentWorld);
+                Assert.True(mesh.Skin.TryGetSkinnedBounds(out var min, out var max));
+                foreach (var vertex in surface.Vertices)
+                {
+                    Assert.True(vertex.Position.X >= min.X && vertex.Position.X <= max.X);
+                    Assert.True(vertex.Position.Y >= min.Y && vertex.Position.Y <= max.Y);
+                    Assert.True(vertex.Position.Z >= min.Z && vertex.Position.Z <= max.Z);
+                }
+            }
+        }
+        finally
+        {
+            LegacyGraphics.ResetForTests();
+            LegacyScene.Current = previous;
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
     public void Set_anim_time_preserves_an_unkeyed_game_root_position()
     {
         var previous = LegacyScene.Current;

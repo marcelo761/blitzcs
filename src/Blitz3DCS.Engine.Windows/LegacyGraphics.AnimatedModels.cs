@@ -241,6 +241,8 @@ public static partial class LegacyGraphics
         public B3dVector3[] Normals { get; } = normals;
         public List<AnimatedSurface> Surfaces { get; } = [];
         public bool Dirty { get; set; } = true;
+        /// <summary>Set by PrepareAnimatedGeometry when this frame's skin was skipped because the mesh is off-screen.</summary>
+        public bool SkinCulled { get; set; }
     }
 
     internal sealed class AnimatedSurface
