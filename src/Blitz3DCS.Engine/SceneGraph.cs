@@ -67,6 +67,7 @@ public sealed partial class SceneGraph
             throw new InvalidOperationException("The scene has exhausted its positive entity ID range.");
 
         var node = new Node(_nextId++);
+        EngineStats.Add(EngineStats.XformCreated);
         node.Parent = parentNode;
         parentNode?.Children.Add(node);
         _nodes.Add(node.Id, node);
@@ -252,7 +253,8 @@ public sealed partial class SceneGraph
         if (parentNode is null) AddRoot(node);
         parentNode?.Children.Add(node);
         _structureVersion++;
-        InvalidateWorld(node);
+        EngineStats.Add(EngineStats.XformInvParent);
+        InvalidateWorld(node, true);
         if (global) SetWorldTransform(node, worldTransform);
     }
 
@@ -311,21 +313,38 @@ public sealed partial class SceneGraph
         return result;
     }
 
+    private static bool SameBits(float a, float b) => BitConverter.SingleToInt32Bits(a) == BitConverter.SingleToInt32Bits(b);
+    private static bool SameBits(SceneVector3 a, SceneVector3 b) => SameBits(a.X, b.X) && SameBits(a.Y, b.Y) && SameBits(a.Z, b.Z);
+    private static bool SameBits(Rotation a, Rotation b) => SameBits(a.W, b.W) && SameBits(a.X, b.X) && SameBits(a.Y, b.Y) && SameBits(a.Z, b.Z);
+
+    // A setter that stores the exact bit pattern already present changes nothing observable, so it must not dirty
+    // the node or its descendants (original behaviour under BLITZCS_ENGINE_NOOPT=1).
+    private static bool NoOp(bool same)
+    {
+        if (!same || EngineOptimizations.Disabled) return false;
+        EngineStats.Add(EngineStats.XformNoop);
+        return true;
+    }
+
     private static void SetLocalPosition(Node node, SceneVector3 position)
     {
+        if (NoOp(SameBits(node.LocalPosition, position))) return;
         node.LocalPosition = position;
         InvalidateLocal(node);
     }
 
     private static void SetLocalScale(Node node, SceneVector3 scale)
     {
+        if (NoOp(SameBits(node.LocalScale, scale))) return;
         node.LocalScale = scale;
         InvalidateLocal(node);
     }
 
     private static void SetLocalRotation(Node node, Rotation rotation)
     {
-        node.LocalRotation = rotation.Normalized();
+        var normalized = rotation.Normalized();
+        if (NoOp(SameBits(node.LocalRotation, normalized))) return;
+        node.LocalRotation = normalized;
         InvalidateLocal(node);
     }
 
@@ -363,13 +382,15 @@ public sealed partial class SceneGraph
     private static void InvalidateLocal(Node node)
     {
         node.LocalDirty = true;
-        InvalidateWorld(node);
+        EngineStats.Add(EngineStats.XformInvSelf);
+        InvalidateWorld(node, true);
     }
 
-    private static void InvalidateWorld(Node node)
+    private static void InvalidateWorld(Node node, bool self = false)
     {
         if (node.WorldDirty) return;
         node.WorldDirty = true;
+        if (!self) EngineStats.Add(EngineStats.XformInvAncestor);
         foreach (var child in node.Children) InvalidateWorld(child);
     }
 
