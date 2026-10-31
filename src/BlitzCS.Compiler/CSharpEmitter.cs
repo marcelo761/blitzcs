@@ -200,7 +200,7 @@ internal static class CSharpEmitter
         IrVectorAccess access => access.Type == ValueType.String ? $"({EmitVectorAccess(access)} ?? \"\")" : EmitVectorAccess(access),
         IrField field => field.Type == ValueType.String ? $"({EmitField(field)} ?? \"\")" : EmitField(field),
         IrInteger integer => integer.Value.ToString(CultureInfo.InvariantCulture),
-        IrFloat floating => EmitFloat(floating.Value),
+        IrFloat floating => FloatLiteral.Emit(floating.Value),
         IrString text => Quote(text.Value),
         IrConvert conversion => EmitConversion(conversion),
         IrArrayAccess access => access.Type == ValueType.String ? $"({EmitArrayAccess(access)} ?? \"\")" : EmitArrayAccess(access),
@@ -253,7 +253,7 @@ internal static class CSharpEmitter
         return access.Indices.Count switch
         {
             1 or 2 => $"{access.Storage}.Element({indices}, {Quote(access.Location)})",
-            _ => $"{access.Storage}.Element(new int[] {{ {indices} }}, {Quote(access.Location)})"
+            _ => $"{access.Storage}.Element([{indices}], {Quote(access.Location)})"
         };
     }
 
@@ -294,15 +294,4 @@ internal static class CSharpEmitter
         TokenKind.Equal => "==", TokenKind.NotEqual => "!=", TokenKind.Less => "<", TokenKind.Greater => ">", TokenKind.LessEqual => "<=", TokenKind.GreaterEqual => ">=",
         _ => throw new InvalidOperationException("Unknown IR operator.")
     };
-
-    private static string EmitFloat(float value)
-    {
-        if (float.IsNaN(value)) return "global::System.Single.NaN";
-        if (float.IsPositiveInfinity(value)) return "global::System.Single.PositiveInfinity";
-        if (float.IsNegativeInfinity(value)) return "global::System.Single.NegativeInfinity";
-        var text = value.ToString("R", CultureInfo.InvariantCulture);
-        if (text == "-0") return "-0.0f";
-        if (text == "0") return "0.0f";
-        return text + "f";
-    }
 }

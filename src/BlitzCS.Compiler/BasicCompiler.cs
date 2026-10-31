@@ -46,7 +46,7 @@ public static class BasicCompiler
         var program = analysis.Analyze(syntax);
         if (analysis.UnboundExternalCalls.FirstOrDefault() is { } unbound)
             throw new BasicDiagnosticException(unbound.SourcePath, unbound.Line, unbound.Column,
-                $"External function '{unbound.Name}' has a declared signature but no implementation.");
+                unbound.MissingImplementationMessage);
         sourcePaths = Array.AsReadOnly(new[] { Path.GetFullPath(sourcePath) }.Concat(includes.SourcePaths).ToArray());
         return CSharpEmitter.Emit(program, sourcePath);
     }

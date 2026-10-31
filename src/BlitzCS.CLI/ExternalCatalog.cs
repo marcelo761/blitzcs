@@ -15,14 +15,25 @@ internal static class ExternalCatalog
          "abs sgn mod pi true false int float str include new delete first last insert before after null object handle " +
          "and or xor not shl shr sar print end cs").Split(' '), StringComparer.OrdinalIgnoreCase);
 
-    internal static ExternalCatalogResult Load(string catalogPath, string? target = null, bool isPackageBuild = false)
+    internal static ExternalCatalogResult Load(string catalogPath, string? target = null, bool isPackageBuild = false) =>
+        LoadMany([catalogPath], target, isPackageBuild);
+
+    internal static ExternalCatalogResult LoadMany(IEnumerable<string> paths, string? target = null, bool isPackageBuild = false)
     {
-        var selection = RuntimeCatalogSelector.Resolve(catalogPath, target);
-        catalogPath = selection.CatalogPath;
-        using var document = JsonDocument.Parse(File.ReadAllText(catalogPath));
-        var root = document.RootElement;
+        // A runtimeTargets manifest selects one concrete catalog per requested target before profiles are composed;
+        // historical .decls inputs are not manifests and are read directly by the document composer.
+        var selections = paths.Select(path => Path.GetExtension(path).Equals(".decls", StringComparison.OrdinalIgnoreCase)
+            ? new RuntimeCatalogSelection(Path.GetFullPath(path), [Path.GetFullPath(path)])
+            : RuntimeCatalogSelector.Resolve(path, target)).ToArray();
+        var catalogPaths = selections.Select(selection => selection.CatalogPath).ToArray();
+        var catalogPath = catalogPaths[0];
+        var document = ExternalCatalogDocument.ReadMany(catalogPaths);
+        var root = document.Root;
+        var inputPaths = selections.SelectMany(selection => selection.CatalogInputs).Concat(document.InputPaths)
+            .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray();
         var functions = new List<ExternalFunction>();
         var signatures = new List<ExternalFunctionSignature>();
+        var resolutions = new List<ExternalResolution>();
         var items = root.GetProperty("functions").EnumerateArray().ToArray();
         var nativeLibraries = root.TryGetProperty("nativeLibraries", out var libraries)
             && libraries.ValueKind != JsonValueKind.Null
@@ -180,6 +191,8 @@ internal static class ExternalCatalog
                 "PointerIn" => ExternalValueType.PointerIn, "PointerOut" => ExternalValueType.PointerOut, "PointerInOut" => ExternalValueType.PointerInOut,
                 _ => throw new ArgumentException("External parameter types must be Integer, Float, String, PointerIn, PointerOut or PointerInOut.")
             }).ToArray();
+            var objectAdapterParameters = ReadObjectAdapterParameters(item, parameters);
+            var methodParameterTypes = parameters.Select((parameter, index) => objectAdapterParameters.Contains(index) ? typeof(object) : ToSystemType(parameter)).ToArray();
             ExternalFunction? function = null;
             if (byItem.TryGetValue(item, out var assemblyPath))
             {
@@ -188,9 +201,11 @@ internal static class ExternalCatalog
                 var typeName = binaryIndex >= 0 ? BinaryBindingGenerator.TypeName(IndexOf(libraryIndexes, explicitBinaryBindings[binaryIndex].LibraryPath)) : Read(item, "type");
                 var type = assembly.GetType(typeName, throwOnError: true)!;
                 var methodName = binaryIndex >= 0 ? BinaryBindingGenerator.MethodName(explicitBinaryBindings[binaryIndex].BasicName) : Read(item, "method");
-                var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static, parameters.Select(ToSystemType).ToArray())
+                var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static, methodParameterTypes)
                     ?? throw new ArgumentException($"External method '{type.FullName}.{methodName}' with the declared signature does not exist.");
-                function = new ExternalFunction(Read(item, "name"), method);
+                var discard = method.ReturnType == typeof(int) && item.TryGetProperty("returnType",out var requestedResult) && requestedResult.GetString() == "Void"
+                    && (item.TryGetProperty("legacyDeclaration",out _) || item.TryGetProperty("selectionRole",out var role) && role.GetString() == "fallback");
+                function = new ExternalFunction(Read(item, "name"), method, discard, objectAdapterParameters);
             }
             var returnType = item.TryGetProperty("returnType", out var returnTypeElement)
                 ? returnTypeElement.GetString() switch
@@ -211,9 +226,48 @@ internal static class ExternalCatalog
                 defaults = values.Select((value, index) => ReadDefault(value,
                     parameters[parameters.Length - values.Length + index])).ToArray();
             }
-            var signature = new ExternalFunctionSignature(Read(item, "name"), returnType, parameters, defaults);
-            if (function is not null && (function.Signature.ReturnType != signature.ReturnType || !function.Signature.ParameterTypes.SequenceEqual(signature.ParameterTypes)))
-                throw new ArgumentException($"External method '{function.Name}' does not match its declared signature.");
+            var failureMessage = item.TryGetProperty("bindingFailure", out var failure) ? failure.GetString() : null;
+            var hasLegacy = item.TryGetProperty("legacyDeclaration", out var legacy);
+            var mismatch = function is not null && (function.Signature.ReturnType != returnType || !function.Signature.ParameterTypes.SequenceEqual(parameters));
+            if (mismatch && !hasLegacy && item.TryGetProperty("selectionRole",out var selectedRole) && selectedRole.GetString() == "fallback"
+                && item.TryGetProperty("fallbackCandidates",out var alternatives))
+            {
+                foreach (var candidate in alternatives.EnumerateArray())
+                {
+                    if (!candidate.TryGetProperty("method",out _) || !candidate.GetProperty("parameters").EnumerateArray().Select(p=>p.GetString())
+                        .SequenceEqual(parameters.Select(p=>p.ToString()))) continue;
+                    if (candidate.TryGetProperty("returnType",out var alternativeReturn) && alternativeReturn.GetString() != returnType.ToString()
+                        && !(returnType == ExternalValueType.Void && alternativeReturn.GetString() == "Integer")) continue;
+                    using var alternativeContext = new ExternalAssemblyLoadContext();
+                    try
+                    {
+                        var alternativePath = Read(candidate,"assembly"); alternativeContext.Discover([alternativePath]);
+                        var owner = alternativeContext.LoadAssembly(alternativePath).GetType(Read(candidate,"type"),throwOnError:true)!;
+                        var method = owner.GetMethod(Read(candidate,"method"),BindingFlags.Public | BindingFlags.Static,parameters.Select(ToSystemType).ToArray());
+                        if (method is null) continue;
+                        var alternative = new ExternalFunction(Read(item,"name"),method,returnType == ExternalValueType.Void && method.ReturnType == typeof(int));
+                        if (alternative.Signature.ReturnType != returnType || !alternative.Signature.ParameterTypes.SequenceEqual(parameters)) continue;
+                        function = alternative; mismatch = false; failureMessage = null; break;
+                    }
+                    catch (Exception exception) when (exception is IOException or ArgumentException or TypeLoadException or BadImageFormatException) { /* Keep this rejected candidate in the trace; try the next configured fallback. */ }
+                }
+            }
+            if (mismatch)
+            {
+                if (!hasLegacy && !(item.TryGetProperty("selectionRole",out var role) && role.GetString() == "fallback")) throw new ArgumentException($"External method '{function!.Name}' does not match its declared signature.");
+                failureMessage = hasLegacy
+                    ? $"Historical declaration '{Read(item,"name")}' at {legacy.GetProperty("source").GetString()}({legacy.GetProperty("line")}) does not match the configured CLR method signature; an explicit ABI adapter with the historical signature is required."
+                    : $"Fallback CLR method does not match the resolved signature of '{Read(item,"name")}'; an explicit matching adapter is required.";
+                failureMessage += $" Expected {returnType}({string.Join(",",parameters)}), actual CLR {function!.Signature.ReturnType}({string.Join(",",function.Signature.ParameterTypes)}) at {function.Method.DeclaringType!.FullName}.{function.Method.Name}.";
+                function = null;
+            }
+            var signature = new ExternalFunctionSignature(Read(item, "name"), returnType, parameters, defaults)
+            {
+                Contract = ReadContract(item), BindingFailure = failureMessage,
+                AllowsApplicationImplementation = hasLegacy && string.IsNullOrWhiteSpace(legacy.GetProperty("library").GetString()),
+                DataPointerParameters = hasLegacy ? Array.AsReadOnly(legacy.GetProperty("parameters").EnumerateArray().Select((p,i) => (p,i)).Where(x => x.p.GetProperty("isPointer").GetBoolean()).Select(x => x.i).ToArray()) : Array.Empty<int>()
+            };
+            resolutions.Add(ExternalResolution.Create(item, signature, function, mismatch ? "abi_incompatible" : null));
             signatures.Add(signature);
             if (function is not null) functions.Add(function);
         }
@@ -255,12 +309,49 @@ internal static class ExternalCatalog
                 functions.Add(new ExternalFunction(decl.BasicName, method));
             }
         }
-        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs, binaryTarget, selection.CatalogInputs);
+        return new(ExternalFunctionRegistry.FromDeclarations(signatures, functions), nativeLibraries.Concat(binaryLibraries).ToArray(), binaryLibraries, binaryProfile, binaryBindings, staging, specs, binaryTarget, inputPaths, resolutions.AsReadOnly());
         }
         catch { staging?.Dispose(); throw; }
         finally { context.Dispose(); }
     }
 
+
+    private static int[] ReadObjectAdapterParameters(JsonElement item, IReadOnlyList<ExternalValueType> parameters)
+    {
+        if (!item.TryGetProperty("objectAdapterParameters", out var metadata)) return [];
+        if (metadata.ValueKind != JsonValueKind.Array)
+            throw new ArgumentException("External objectAdapterParameters must be an array of unique parameter indices.");
+        var indices = new List<int>();
+        foreach (var value in metadata.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var index) || index < 0 || index >= parameters.Count || indices.Contains(index))
+                throw new ArgumentException("External objectAdapterParameters must contain unique, in-range integer indices.");
+            indices.Add(index);
+        }
+        if (indices.Count == 0) return [];
+        if (!item.TryGetProperty("legacyAdapter", out var adapter) || adapter.ValueKind != JsonValueKind.True
+            || !item.TryGetProperty("method", out var method) || method.ValueKind != JsonValueKind.String
+            || !item.TryGetProperty("legacyDeclaration", out var declaration)
+            || !declaration.TryGetProperty("parameters", out var declaredParameters)
+            || item.TryGetProperty("binary", out var binary) && binary.ValueKind != JsonValueKind.Null)
+            throw new ArgumentException("External objectAdapterParameters requires a managed legacyAdapter and historical pointer declaration.");
+        var legacyParameters = declaredParameters.EnumerateArray().ToArray();
+        foreach (var index in indices)
+            if (parameters[index] != ExternalValueType.Integer || index >= legacyParameters.Length
+                || !legacyParameters[index].TryGetProperty("isPointer", out var pointer) || pointer.ValueKind != JsonValueKind.True)
+                throw new ArgumentException($"External objectAdapterParameters index {index} must identify a historical Integer data pointer.");
+        return indices.ToArray();
+    }
+
+    private static ExternalApiContract? ReadContract(JsonElement item)
+    {
+        if (!item.TryGetProperty("contract", out var contract) || contract.ValueKind == JsonValueKind.Null) return null;
+        if (contract.ValueKind != JsonValueKind.Object) throw new ArgumentException("External function contract must be an object.");
+        string? Field(string key) => contract.TryGetProperty(key, out var value) && value.ValueKind != JsonValueKind.Null
+            ? value.ValueKind == JsonValueKind.String ? value.GetString() : throw new ArgumentException($"External contract '{key}' must be a string or null.") : null;
+        return new ExternalApiContract(Field("provider")!, Field("resolution")!, Field("symbol")!,
+            Field("profile"), Field("callingConvention"), Field("source"));
+    }
 
     private static bool PathEquals(string a, string b) =>
         string.Equals(a, b, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
@@ -279,10 +370,14 @@ internal static class ExternalCatalog
         var seen = new HashSet<string>(explicitNames, StringComparer.OrdinalIgnoreCase);
         foreach (var entry in userlibsElement.EnumerateArray())
         {
-            if (entry.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(entry.GetString()))
+            // ExternalCatalogDocument records each entry with the directory of the catalog that declared it.
+            var declaringDirectory = entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("catalogDirectory", out var declaredIn)
+                ? declaredIn.GetString()! : catalogDirectory;
+            var pathElement = entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("path", out var composedPath) ? composedPath : entry;
+            if (pathElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(pathElement.GetString()))
                 throw new ArgumentException("External catalog 'userlibs' entries must be non-empty .decls file path strings.");
-            var declsPath = Path.GetFullPath(entry.GetString()!, catalogDirectory);
-            foreach (var decl in UserLibResolver.ParseDeclsFile(declsPath, catalogDirectory))
+            var declsPath = Path.GetFullPath(pathElement.GetString()!, declaringDirectory);
+            foreach (var decl in UserLibResolver.ParseDeclsFile(declsPath, declaringDirectory))
             {
                 if (explicitNames.Contains(decl.BasicName))
                     continue;
@@ -550,8 +645,12 @@ internal sealed record ExternalCatalogResult(
     IDisposable? Staging = null,
     IReadOnlyList<BinaryLibrarySpec>? LibrarySpecs = null,
     string? BinaryTarget = null,
-    IReadOnlyList<string>? CatalogInputs = null) : IDisposable
+    IReadOnlyList<string>? InputPaths = null,
+    IReadOnlyList<ExternalResolution>? Resolutions = null) : IDisposable
 {
+    /// <summary>Runtime-target manifest chain plus every composed catalog input, in discovery order.</summary>
+    public IReadOnlyList<string>? CatalogInputs => InputPaths;
+
     public void Dispose() => Staging?.Dispose();
 }
 

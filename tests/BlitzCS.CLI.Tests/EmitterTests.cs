@@ -33,6 +33,43 @@ public sealed class EmitterTests : IDisposable
     }
 
     [Fact]
+    public async Task EmittedGameEnablesJitOptimizationsAndKeepsPortableSymbols()
+    {
+        var output = Path.Combine(directory, "optimized.dll");
+        DotNetEmitter.Emit("""
+            using System.Diagnostics;
+            using System.Reflection;
+            System.Console.WriteLine(Assembly.GetExecutingAssembly().GetCustomAttribute<DebuggableAttribute>()?.IsJITOptimizerDisabled ?? false);
+            """, output);
+        Assert.True(File.Exists(Path.ChangeExtension(output, ".pdb")));
+        var start = new ProcessStartInfo(DotNetHost()) { RedirectStandardOutput = true, RedirectStandardError = true };
+        start.ArgumentList.Add(output);
+        using var process = Process.Start(start)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.Equal(0, process.ExitCode);
+        Assert.Equal("False" + Environment.NewLine, await stdout);
+        Assert.Equal("", await stderr);
+    }
+
+    [Fact]
+    public async Task OptimizedFailureRetainsOriginalBasicSourceLine()
+    {
+        var output = Path.Combine(directory, "mapped.dll");
+        DotNetEmitter.Emit("#line 23 \"original.bb\"\nthrow new System.InvalidOperationException(\"mapped failure\");", output);
+        var start = new ProcessStartInfo(DotNetHost()) { RedirectStandardOutput = true, RedirectStandardError = true };
+        start.ArgumentList.Add(output);
+        using var process = Process.Start(start)!;
+        var stderr = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.NotEqual(0, process.ExitCode);
+        var error = await stderr;
+        Assert.Contains("mapped failure", error);
+        Assert.Contains("original.bb:line 23", error);
+    }
+
+    [Fact]
     public void RoslynDiagnosticsMapToOriginalBasicFile()
     {
         var output = Path.Combine(directory, "invalid.dll");

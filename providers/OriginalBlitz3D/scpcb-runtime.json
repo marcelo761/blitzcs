@@ -1,0 +1,61 @@
+{
+  "profiles": [
+    "runtime.json",
+    "../../profiles/scpcb-mavless.json"
+  ],
+  "functions": [
+    {
+      "name": "ErrorLog",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "ErrorLog",
+      "parameters": [],
+      "returnType": "String"
+    },
+    {
+      "name": "TextureBumpEnvMat",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "TextureBumpEnvMat",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer",
+        "Float"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "TextureBumpEnvOffset",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "TextureBumpEnvOffset",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "TextureBumpEnvScale",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "TextureBumpEnvScale",
+      "parameters": [
+        "Integer",
+        "Float"
+      ],
+      "returnType": "Void"
+    },
+    {
+      "name": "TextureLodBias",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.Commands",
+      "method": "TextureLodBias",
+      "parameters": [
+        "Float"
+      ],
+      "returnType": "Void"
+    }
+  ]
+}

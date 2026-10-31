@@ -20,6 +20,7 @@
     <Project Path="tests/BlitzCS.CLI.Tests/BlitzCS.CLI.Tests.csproj" />
     <Project Path="tests/Blitz3DCS.Windowing.Tests/Blitz3DCS.Windowing.Tests.csproj" />
     <Project Path="tests/Blitz3DCS.Engine.Tests/Blitz3DCS.Engine.Tests.csproj" />
+    <Project Path="tests/BlitzCS.OriginalRuntime.Host.Tests/BlitzCS.OriginalRuntime.Host.Tests.csproj" />
     <Project Path="tests/Blitz3DCS.Audio.Tests/Blitz3DCS.Audio.Tests.csproj" />
     <Project Path="tests/Blitz3DCS.Graphics.D3D11.Tests/Blitz3DCS.Graphics.D3D11.Tests.csproj" />
     <Project Path="tests/Blitz3DCS.Engine.Windows.Tests/Blitz3DCS.Engine.Windows.Tests.csproj" />

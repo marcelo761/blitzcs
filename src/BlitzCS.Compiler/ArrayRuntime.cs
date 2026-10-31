@@ -51,7 +51,7 @@ internal sealed class __BlitzArray<T>
         if ((uint)index1 >= (uint)l[1]) throw Fail(location, 1, index1);
         return ref d[index0 + index1 * l[0]];
     }
-    internal ref T Element(int[] indices, string location)
+    internal ref T Element(scoped System.ReadOnlySpan<int> indices, string location)
     {
         if (data is null) throw Error(location, "array has not been dimensioned.");
         var offset = 0;

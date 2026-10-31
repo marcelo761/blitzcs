@@ -1,0 +1,44 @@
+{
+  "success": true,
+  "architecture": "x86",
+  "compiler": "BlitzCS",
+  "engine": "original runtime.dll",
+  "sourceUnchanged": true,
+  "runtimeUnchanged": true,
+  "stages": [
+    {
+      "stage": "compile",
+      "exitCode": 0,
+      "managedLog": "compile-managed.log"
+    },
+    {
+      "stage": "execute",
+      "exitCode": 0,
+      "managedLog": "execute-managed.log"
+    }
+  ],
+  "frame": {
+    "width": 640,
+    "height": 480,
+    "center": [
+      127,
+      127,
+      127
+    ],
+    "corner": [
+      0,
+      0,
+      0
+    ],
+    "nonBlackPixels": 25600
+  },
+  "sourceSHA256": "3a7a80b91580deff8f0d6d69ebdb9f7e0250972d03a85bab1002a5c0f4bdd2be",
+  "runtimeSHA256": "ba120a4a0f15f2ac48e1e86f6465137bd480d0b4a288cae2534a6fe0ecad1a4e",
+  "sdkIntegrity": {
+    "filesCheckedAgainstOriginalArchive": 2061,
+    "changed": 0
+  },
+  "hostFramework": ".NET 10.0.12",
+  "protonVersion": "11.0",
+  "BCSBRETranslationUsed": false
+}

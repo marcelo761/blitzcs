@@ -5,6 +5,20 @@ namespace BlitzCS.Compiler.Tests;
 
 public sealed class ConstantCompilerTests
 {
+    [Fact]
+    public void ScpNonfiniteConstantsEmitAndExecuteWithIeeeValues()
+    {
+        const string source = "Const INFINITY# = (999.0) ^ (99999.0), NAN# = (-1.0) ^ (0.5)\nGlobal positive#=INFINITY\nGlobal negative#=-INFINITY\nGlobal invalid#=NAN\nGlobal zero#=-0.0\n";
+        ArrayCompilerTests.WithAssembly(source, assembly =>
+        {
+            var type=assembly.GetType("BB")!;
+            Assert.True(float.IsPositiveInfinity((float)type.GetField("positive")!.GetValue(null)!));
+            Assert.True(float.IsNegativeInfinity((float)type.GetField("negative")!.GetValue(null)!));
+            Assert.True(float.IsNaN((float)type.GetField("invalid")!.GetValue(null)!));
+            Assert.Equal(unchecked((int)0x80000000),BitConverter.SingleToInt32Bits((float)type.GetField("zero")!.GetValue(null)!));
+        });
+    }
+
     [Theory]
     [InlineData("Const A%=6, B%=A*7\nGlobal result=B", 42)]
     [InlineData("Global result=ANSWER\nConst ANSWER%=42", 42)]

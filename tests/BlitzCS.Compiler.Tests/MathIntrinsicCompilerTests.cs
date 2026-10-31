@@ -6,6 +6,17 @@ namespace BlitzCS.Compiler.Tests;
 public sealed class MathIntrinsicCompilerTests
 {
     [Fact]
+    public void PiIsTheSinglePrecisionLanguageConstantInExpressions()
+    {
+        ArrayCompilerTests.WithAssembly("Global value#=Pi\nGlobal doubled#=2*pI", assembly =>
+        {
+            var globals = assembly.GetType("BB")!;
+            Assert.Equal(unchecked((int)0x40490FDB), BitConverter.SingleToInt32Bits((float)globals.GetField("value")!.GetValue(null)!));
+            Assert.Equal(2 * MathF.PI, globals.GetField("doubled")!.GetValue(null));
+        }, "pi-original-contract.bb");
+    }
+
+    [Fact]
     public void AbsAndSgnExpressionsCompileInIntegerAndFloatContexts()
     {
         ArrayCompilerTests.WithAssembly("""

@@ -1,0 +1,324 @@
+{
+  "metadata": {
+    "description": "Direct original Windows x86 library bindings; no media engine implementation.",
+    "fmodContractSource": "https://github.com/g-truc/shooter/blob/master/external/fmod-3.75/api/inc/fmod.h",
+    "movieContractSource": "Original SCP:CB 1.3.11 BlitzMovie.decls"
+  },
+  "functions": [
+    {
+      "name": "FSOUND_Init",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_Init",
+      "parameters": [
+        "Integer",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Init@12",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_Close",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_Close",
+      "parameters": [],
+      "returnType": "Void",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Close@0",
+        "callingConvention": "StdCall"
+      },
+      "legacySignatureOverride": {
+        "returnType": "Void",
+        "reason": "The original FMOD 3.75 vendor header declares FSOUND_Close as void; its historical Integer declaration cannot supply a return value."
+      },
+      "legacyAdapter": true
+    },
+    {
+      "name": "FSOUND_SetVolume",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_SetVolume",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Void",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_SetVolume@8",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_SetPaused",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_SetPaused",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Void",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_SetPaused@8",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_StopSound",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_StopSound",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Void",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_StopSound@4",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_Stream_Play",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_Stream_Play",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Stream_Play@8",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_Stream_Stop",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_Stream_Stop",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Stream_Stop@4",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_Stream_Close",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_Stream_Close",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Stream_Close@4",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_Stream_Open",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_Stream_Open",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_Stream_Open@16",
+        "callingConvention": "StdCall"
+      },
+      "legacyAdapter": true
+    },
+    {
+      "name": "FSOUND_IsPlaying",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_IsPlaying",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_IsPlaying@4",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_SetPan",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_SetPan",
+      "parameters": [
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_SetPan@8",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_SetOutput",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_SetOutput",
+      "parameters": [
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_SetOutput@4",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_GetVersion",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_GetVersion",
+      "parameters": [],
+      "returnType": "Float",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_GetVersion@0",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "FSOUND_GetError",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "FSOUND_GetError",
+      "parameters": [],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "fmod.dll",
+        "export": "_FSOUND_GetError@0",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "BlitzMovie_Open",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "BlitzMovie_Open",
+      "parameters": [
+        "String"
+      ],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "BlitzMovie.dll",
+        "export": "_BLITZMOVIE_Open@4",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "BlitzMovie_Close",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "BlitzMovie_Close",
+      "parameters": [],
+      "returnType": "Void",
+      "nativeContract": {
+        "library": "BlitzMovie.dll",
+        "export": "_BLITZMOVIE_Close@0",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "BlitzMovie_GetWidth",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "BlitzMovie_GetWidth",
+      "parameters": [],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "BlitzMovie.dll",
+        "export": "_BLITZMOVIE_GetWidth@0",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "BlitzMovie_GetHeight",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "BlitzMovie_GetHeight",
+      "parameters": [],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "BlitzMovie.dll",
+        "export": "_BLITZMOVIE_GetHeight@0",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "BlitzMovie_Play",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "BlitzMovie_Play",
+      "parameters": [],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "BlitzMovie.dll",
+        "export": "_BLITZMOVIE_Play@0",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "BlitzMovie_Stop",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "BlitzMovie_Stop",
+      "parameters": [],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "BlitzMovie.dll",
+        "export": "_BLITZMOVIE_Stop@0",
+        "callingConvention": "StdCall"
+      }
+    },
+    {
+      "name": "BlitzMovie_OpenDecodeToImage",
+      "assembly": "Bridge/bin/Release/net10.0/BlitzCS.OriginalRuntime.Bridge.dll",
+      "type": "BlitzCS.OriginalRuntime.NativeMedia",
+      "method": "BlitzMovie_OpenDecodeToImage",
+      "parameters": [
+        "String",
+        "Integer",
+        "Integer"
+      ],
+      "returnType": "Integer",
+      "nativeContract": {
+        "library": "BlitzMovie.dll",
+        "export": "_BLITZMOVIE_OpenDecodeToImage@12",
+        "callingConvention": "StdCall"
+      }
+    }
+  ]
+}

@@ -32,6 +32,19 @@ public class BasicCompilerTests
         Assert.Contains("System.Console.WriteLine(v0);", output);
     }
 
+    [Theory]
+    [InlineData("Print\n")]
+    [InlineData("Print:Print 1")]
+    [InlineData("Print")]
+    [InlineData("If 1 Then Print Else Print \"else\"")]
+    [InlineData("If 1 Then\nPrint\nElse\nPrint \"else\"\nEndIf")]
+    public void EmptyPrintWritesAnEmptyLineAtStatementBoundaries(string source)
+    {
+        var output = BasicCompiler.Compile(source, "empty-print.bb");
+
+        Assert.Contains("System.Console.WriteLine(\"\");", output);
+    }
+
     [Fact]
     public void ArithmeticPreservesPrecedenceParenthesesAndUnarySigns()
     {
@@ -55,7 +68,6 @@ public class BasicCompilerTests
     [InlineData("Print Next")]
     [InlineData("Print Print")]
     [InlineData("Print End")]
-    [InlineData("Print ")]
     [InlineData("Graphics3D 640,480")]
     [InlineData("Print 1,2")]
     [InlineData("Print \"a\" - 1")]

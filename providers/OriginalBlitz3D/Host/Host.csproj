@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><RuntimeIdentifier>win-x86</RuntimeIdentifier><PlatformTarget>x86</PlatformTarget><AssemblyName>BlitzCS.OriginalRuntime.Host</AssemblyName></PropertyGroup>
+<PropertyGroup Condition="'$(OriginalApplicationName)' != ''">
+  <AssemblyName>$(OriginalApplicationName)</AssemblyName>
+  <OutputType>WinExe</OutputType>
+  <DefineConstants>$(DefineConstants);ORIGINAL_RUNTIME_APPLICATION</DefineConstants>
+</PropertyGroup>
+<ItemGroup><ProjectReference Include="../Bridge/Bridge.csproj"/><ProjectReference Include="../../../src/BlitzCS.CLI/BlitzCS.CLI.csproj"/></ItemGroup>
+</Project>

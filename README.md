@@ -1,8 +1,20 @@
-# BlitzCS
+
+
+<p align="center">
+  <img src="blitzcs-wordmark.png" alt="Modern BlitzBasic compiler powered by C# and .NET" width="700">
+</p>
+
+
+
+
+
+# BlitzCS - Same Code. More Performance. More Integrations.
 
 BlitzCS is an experimental, general-purpose BlitzBasic language compiler and interoperability infrastructure for .NET 10. It compiles BASIC and embedded C# into one assembly through Roslyn, with typed calls and shared state in both directions.
 
-Created and led by **Marcelo Buratti de Freitas Filho**, the project explores how legacy BASIC programs can move to a managed runtime while integrating modern C# and native libraries. Compatibility research uses the original Blitz3D compiler and real legacy projects, including SCP: Containment Breach. These are reference targets, not a restriction on what BlitzCS can be used to build.
+AI coding agents are used to support implementation, research, testing, and code review. Architectural decisions, project direction, and technical priorities are established by the project creator.
+
+Created and led by **Marcelo Buratti de Freitas Filho**, BlitzCS explores how legacy BASIC programs can move to a managed runtime while integrating modern C# and native libraries. Compatibility research uses the original Blitz3D compiler and real legacy projects, including SCP: Containment Breach. These are reference targets, not a restriction on what BlitzCS can be used to build.
 
 BlitzCS is an independent project. It is not an official Blitz Research, Microsoft, FMOD, or SCP project.
 
@@ -19,7 +31,7 @@ dotnet run --project src/BlitzCS.CLI -c Release --no-build -- build samples/Hybr
 dotnet artifacts/answer.dll
 ```
 
-The program prints `42`. The compiler also writes generated C#, portable debugging symbols and runtime configuration alongside the assembly. Generated programs need .NET 10; compilation needs the SDK and Roslyn. External runtime libraries must accompany programs that use them.
+The program prints `42`. Emitted assemblies enable JIT optimizations; see [compiler performance](docs/compiler-performance.md) for array indexing measurements. The compiler also writes generated C#, portable debugging symbols and runtime configuration alongside the assembly. Generated programs need .NET 10; compilation needs the SDK and Roslyn. External runtime libraries must accompany programs that use them.
 
 This is a source distribution: no published NuGet package, global tool installation, or downloadable release is claimed here. Linux x64 is the verified development platform. Other platforms and native-library combinations need validation.
 
@@ -50,6 +62,8 @@ This is a source distribution: no published NuGet package, global tool installat
 **BlitzCS is language infrastructure; Blitz3DCS is an engine integration built on it.** The compiler has no dependency on the Blitz3DCS projects. Other engines can register their own typed external functions without adopting Blitz3D APIs.
 
 See [compiler architecture](docs/architecture.md), [external functions](docs/external-functions.md), [native interoperability](docs/native-interop-m13.md) and the [proposed Blitz3DCS architecture](docs/blitz3dcs-architecture.md).
+
+Historical API [profiles](docs/api-profiles.md) compose declarations and real providers through `--externals`. Declaration validation does not imply runtime support; builds reject required unbound calls. See [measured original-source compatibility](docs/legacy-source-compatibility.md).
 
 ## BASIC and C# in one program
 
@@ -166,3 +180,5 @@ Blitz Research Ltd and the original Blitz3D authors provided the legacy compiler
 ## Legacy window and input host
 
 The [M20 input example](samples/LegacyInput/window-input.bb) opens an SDL3 window and processes native keyboard/mouse events through typed external bindings, with shared BASIC/C# state. See [setup, contracts and verified limitations](docs/m20-windowing-input.md). This window host supplies no 3D rendering or Win32 adapter; the original SCP project still has unresolved runtime dependencies.
+
+Historical `.decls` discovery, catalog composition and optional binding traces are documented in [legacy dependency resolution](docs/legacy-dependency-resolution.md); [SCP:CB results](docs/scp-legacy-dependency-results.md) distinguish semantic acceptance from executable generation.

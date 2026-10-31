@@ -19,6 +19,23 @@ public static class CliApplication
             target = args[targetAt + 1];
             args = [.. args[..targetAt], .. args[(targetAt + 2)..]];
         }
+        var externalPaths = new List<string>();
+        string? tracePath = null;
+        var remaining = new List<string>();
+        for (var index = 0; index < args.Length; index++)
+        {
+            if (args[index] is "--externals" or "--trace-resolution")
+            {
+                var option = args[index];
+                if (++index >= args.Length || args[index].StartsWith("--", StringComparison.Ordinal))
+                { error.WriteLine(option + " expects a path."); return 2; }
+                if (option == "--externals") externalPaths.Add(args[index]);
+                else if (tracePath is null) tracePath = args[index];
+                else { error.WriteLine("--trace-resolution may only be supplied once."); return 2; }
+            }
+            else remaining.Add(args[index]);
+        }
+        args = remaining.ToArray();
         string? packageOutput = null;
         string? assets = null;
         var graphical = args.Contains("--gui");
@@ -37,14 +54,16 @@ public static class CliApplication
             packageOutput = args[outputAt + 1];
             args = [.. args[..outputAt], .. args[(outputAt + 2)..]];
         }
-        var packageBuild = args.Length is 2 or 4 && args[0] == "build" && (args.Length == 2 || args[2] == "--externals");
+        var packageBuild = args.Length == 2 && args[0] == "build";
         var syntaxOnly = args.Length == 2 && args[0] == "check-syntax";
-        var semanticsOnly = args.Length is 2 or 4 && args[0] == "check-semantics" && (args.Length == 2 || args[2] == "--externals");
-        if (!packageBuild && !syntaxOnly && !semanticsOnly && (args.Length is not (4 or 6) || args[0] != "build" || args[2] != "-o" || args.Length == 6 && args[4] != "--externals"))
+        var semanticsOnly = args.Length == 2 && args[0] == "check-semantics";
+        var dependencyAudit = args.Length == 2 && args[0] == "audit-dependencies";
+        if (syntaxOnly && (externalPaths.Count > 0 || tracePath is not null) || !packageBuild && !syntaxOnly && !semanticsOnly && !dependencyAudit && (args.Length != 4 || args[0] != "build" || args[2] != "-o"))
         {
-            error.WriteLine("Usage: blitzcs build <source.bb> [-o <package-directory|output.dll>] [--externals <catalog.json>] [--target linux-x64|windows-x64] [--assets <directory>] [--gui]");
+            error.WriteLine("Usage: blitzcs build <source.bb> [-o <package-directory|output.dll>] [--externals <catalog-or-decls>]... [--trace-resolution <report.json>] [--target linux-x64|windows-x64] [--assets <directory>] [--gui]");
             error.WriteLine("       blitzcs check-syntax <source.bb>");
-            error.WriteLine("       blitzcs check-semantics <source.bb> [--externals <catalog.json>]");
+            error.WriteLine("       blitzcs audit-dependencies <source.bb> [--externals <catalog-or-decls>]... [--trace-resolution <report.json>]");
+            error.WriteLine("       blitzcs check-semantics <source.bb> [--externals <catalog-or-decls>]... [--trace-resolution <report.json>]");
             return 2;
         }
 
@@ -59,14 +78,19 @@ public static class CliApplication
                 output.WriteLine("Syntax validated; semantics, external binding and assembly emission were not checked.");
                 return 0;
             }
-            if (semanticsOnly)
+            if (semanticsOnly || dependencyAudit)
             {
-                using var semanticCatalog = args.Length == 4
-                    ? ExternalCatalog.Load(args[3])
+                using var semanticCatalog = externalPaths.Count > 0
+                    ? ExternalCatalog.LoadMany(externalPaths)
                     : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
+                if (dependencyAudit || tracePath is not null)
+                {
+                    var report = DependencyResolutionReport.Create(File.ReadAllText(sourcePath),sourcePath,semanticCatalog,tracePath,assets);
+                    if (dependencyAudit) { output.WriteLine(report.Json); return report.Unresolved == 0 ? 0 : 1; }
+                }
                 var unbound = BasicCompiler.CheckSemantics(File.ReadAllText(sourcePath), sourcePath, semanticCatalog.Functions);
                 foreach (var call in unbound)
-                    output.WriteLine($"{call.SourcePath}({call.Line},{call.Column}): external function '{call.Name}' has a declared signature but no implementation.");
+                    output.WriteLine($"{call.SourcePath}({call.Line},{call.Column}): {call.MissingImplementationMessage}");
                 output.WriteLine($"Semantic validation succeeded; {unbound.Count} external call(s) lack implementations.");
                 return 0;
             }
@@ -74,9 +98,10 @@ public static class CliApplication
             {
                 // Application and translated native code must always agree about the runtime target.
                 var applicationTarget = target is null ? CompilationTarget.Win64 : TargetCapabilities.ParseTarget(target);
-                using var packageCatalog = args.Length == 4
-                    ? ExternalCatalog.Load(args[3], target, isPackageBuild: true)
+                using var packageCatalog = externalPaths.Count > 0
+                    ? ExternalCatalog.LoadMany(externalPaths, target, isPackageBuild: true)
                     : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
+                if (tracePath is not null) _ = DependencyResolutionReport.Create(File.ReadAllText(sourcePath),sourcePath,packageCatalog,tracePath,assets);
                 var code = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, packageCatalog.Functions, out var inputs);
                 var name = Path.GetFileNameWithoutExtension(sourcePath);
                 var destination = packageOutput ?? Path.Combine("dist", name);
@@ -86,26 +111,31 @@ public static class CliApplication
                     destination = Path.Combine(Path.GetDirectoryName(destination) ?? ".", name);
                 }
                 ApplicationPublisher.Build(code, destination, name, applicationTarget, packageCatalog,
-                    inputs.Concat(packageCatalog.CatalogInputs ?? []), output, error, assets, graphical);
+                    inputs.Concat(packageCatalog.InputPaths ?? []), output, error, assets, graphical);
                 return 0;
             }
             if (packageOutput is not null || assets is not null || graphical)
                 throw new ArgumentException("--assets and --gui require an application package build.");
             var outputPath = Path.GetFullPath(args[3]);
-            using var catalog = args.Length == 6
-                ? ExternalCatalog.Load(args[5], target, isPackageBuild: false)
+            using var catalog = externalPaths.Count > 0
+                ? ExternalCatalog.LoadMany(externalPaths, target, isPackageBuild: false)
                 : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
+            if (tracePath is not null) _ = DependencyResolutionReport.Create(File.ReadAllText(sourcePath),sourcePath,catalog,tracePath);
             if (target is not null)
             {
                 var explicitTarget = TargetCapabilities.ParseTarget(target);
                 foreach (var native in catalog.NativeLibraries.Except(catalog.BinaryLibraries ?? []))
                     TargetCapabilities.ValidateNativeLibrary(native, explicitTarget);
             }
+            // Binary binding diagnostics precede BASIC semantic diagnostics; output paths are validated once
+            // the compiler has reported its source inputs and before anything is written.
             var binaries = BinaryTranslationStep.Prepare(catalog, outputPath, error, target);
             var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions, out var sourceInputs);
+            binaries.ValidateInputs(sourceInputs.Concat(catalog.InputPaths ?? [])
+                .Concat(catalog.Functions.ReferencePaths).Concat(catalog.NativeLibraries));
             DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram",
                 referencePaths: catalog.Functions.ReferencePaths, nativeLibraryPaths: catalog.NativeLibraries,
-                inputPaths: sourceInputs.Concat(catalog.CatalogInputs ?? []));
+                inputPaths: sourceInputs.Concat(catalog.InputPaths ?? []));
             binaries.Publish(output);
             output.WriteLine(outputPath);
             return 0;

@@ -69,14 +69,5 @@ internal static class DataRuntime
         return output.ToString();
     }
 
-    private static string Float(float value)
-    {
-        if (float.IsNaN(value)) return "global::System.Single.NaN";
-        if (float.IsPositiveInfinity(value)) return "global::System.Single.PositiveInfinity";
-        if (float.IsNegativeInfinity(value)) return "global::System.Single.NegativeInfinity";
-        var text = value.ToString("R", CultureInfo.InvariantCulture);
-        if (text == "-0") return "-0.0f";
-        if (text == "0") return "0.0f";
-        return text + "f";
-    }
+    private static string Float(float value) => FloatLiteral.Emit(value);
 }
