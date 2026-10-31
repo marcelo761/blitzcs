@@ -27,10 +27,17 @@ public static partial class LegacyGraphics
         catch (System.ComponentModel.Win32Exception) { return 0; }
     }
 
+    /// <summary>
+    /// Original bbFreeFont: <c>debugFont( f ); if( f==curr_font ) bbSetFont( default ); gx_graphics-&gt;freeFont( f );</c>
+    /// with <c>gxGraphics::freeFont: if( font_set.erase( f ) ) delete f;</c>. <c>debugFont</c> ("Font does not exist")
+    /// only fires when the program runs with the debug flag (<c>if( debug )</c>); a release build, which is what
+    /// shipped games run, treats 0, a never-valid handle and an already-freed handle as silent no-ops (LoadFont returns
+    /// 0 on failure and SCP:CB frees such records). The adapter follows the release build.
+    /// </summary>
     public static void FreeFont(int font)
     {
         CheckThreadIfStarted();
-        if (!Fonts.TryGetValue(font, out var state)) throw new ArgumentException("Font does not exist.", nameof(font));
+        if (!Fonts.TryGetValue(font, out var state)) return;
         if (font == _defaultFont) return;
         if (_currentFont == font) _currentFont = DefaultFont();
         Fonts.Remove(font);

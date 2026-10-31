@@ -8,7 +8,7 @@ namespace Blitz3DCS.Engine.Windows.Tests;
 public sealed class LegacyGraphicsLifecycleTests
 {
     [Fact]
-    public void Free_zero_handles_are_no_ops_but_invalid_nonzero_handles_still_fail()
+    public void Free_zero_handles_are_no_ops_and_unknown_textures_too_but_unknown_entities_still_fail()
     {
         WithCleanState(() =>
         {
@@ -18,8 +18,12 @@ public sealed class LegacyGraphicsLifecycleTests
             LegacyGraphics.FreeTexture(0);
 
             Assert.Equal(string.Empty, LegacyScene.EntityName(entity));
+            // bbFreeEntity: `if( !e ) return; if( debug ){ debugEntity(e); erase(e); } delete e;` - only 0 is defined,
+            // a dangling entity is "Entity does not exist" (debug) or undefined behaviour (release), so it stays an error.
             Assert.Throws<KeyNotFoundException>(() => LegacyGraphics.FreeEntity(int.MaxValue));
-            Assert.Throws<ArgumentException>(() => LegacyGraphics.FreeTexture(int.MaxValue));
+            // bbFreeTexture: `if( !t ) return; debugTexture(t); if( texture_set.erase( t ) ) delete t;` - debugTexture only
+            // throws under `if( debug )`, so a release build ignores a never-valid handle (this used to assert a throw).
+            LegacyGraphics.FreeTexture(int.MaxValue);
         });
     }
 

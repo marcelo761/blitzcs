@@ -50,6 +50,10 @@ public static partial class LegacyGraphics
         }
     }
 
+    /// <summary>
+    /// Original bbFreeBrush: <c>if( !b ) return; debugBrush(b); if( brush_set.erase( b ) ) delete b;</c>. 0, unknown
+    /// and already-freed handles are no-ops in a release build (<c>debugBrush</c> only throws under the debug flag).
+    /// </summary>
     public static void FreeBrush(int brush)
     {
         CheckThreadIfStarted();

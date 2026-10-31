@@ -243,13 +243,18 @@ public static partial class LegacyGraphics
         }
     }
 
+    /// <summary>
+    /// Original bbFreeTexture: <c>if( !t ) return; debugTexture(t); if( texture_set.erase( t ) ) delete t;</c>.
+    /// 0 always returns; <c>debugTexture</c> ("Texture does not exist") only fires with the debug flag, so in a release
+    /// build a never-valid or already-freed handle is a silent no-op (the erase fails and nothing is deleted).
+    /// <c>delete t</c> only drops this handle's reference: the canvas lives on while a brush still holds the texture,
+    /// and when it does die <c>~gxCanvas</c> ends an outstanding lock instead of failing
+    /// (<c>if( locked_cnt ) surf-&gt;Unlock( 0 )</c>).
+    /// </summary>
     public static void FreeTexture(int texture)
     {
         CheckThreadIfStarted();
-        if (texture == 0) return;
-        var rep = GetTexture(texture);
-        EnsureTextureUnlocked(rep);
-        Textures.Remove(texture);
+        if (!Textures.Remove(texture, out var rep)) return;
         rep.ReleaseCallerHandle();
         DisposeIfUnreferenced(rep);
     }
@@ -574,6 +579,14 @@ public static partial class LegacyGraphics
 
     internal static void RegisterTextureForTesting(TextureRep rep) => Textures.Add(rep.Handle, rep);
     internal static void ForgetTextureForTesting(int handle) => Textures.Remove(handle);
+    internal static bool TextureRegisteredForTesting(int handle) => Textures.ContainsKey(handle);
+
+    /// <summary>Adds a second caller handle for a registered texture, like GetBrushTexture does.</summary>
+    internal static void RegisterTextureAliasForTesting(int alias, TextureRep rep)
+    {
+        rep.RetainCallerHandle();
+        Textures.Add(alias, rep);
+    }
 
     private static TextureRep GetTexture(int texture) => Textures.TryGetValue(texture, out var rep)
         ? rep : throw new ArgumentException($"Texture handle {texture} is invalid or has been freed.", nameof(texture));
@@ -626,13 +639,20 @@ public static partial class LegacyGraphics
     private static void DisposeIfUnreferenced(TextureRep rep)
     {
         if (rep.CallerHandles != 0 || rep.BindingReferences != 0 || rep.Disposed) return;
-        if (rep.Frames.Any(frame => frame.BufferHandle == _selectedBuffer)) _selectedBuffer = BackBufferHandle;
+        DeselectBuffersOf(rep);
         foreach (var frame in rep.Frames)
         {
-            TextureBuffers.Remove(frame.BufferHandle);
+            // The canvas destructor ends an outstanding LockBuffer; the locked pixel copy dies with the buffer.
+            if (TextureBuffers.Remove(frame.BufferHandle, out var buffer)) buffer.LockedPixels = null;
             frame.Resource.Dispose();
         }
         rep.Disposed = true;
+    }
+
+    /// <summary>Original bbFreeImage selects the front canvas when a frame being freed is the current canvas.</summary>
+    private static void DeselectBuffersOf(TextureRep rep)
+    {
+        if (rep.Frames.Any(frame => frame.BufferHandle == _selectedBuffer)) _selectedBuffer = BackBufferHandle;
     }
 
     private static void ReleaseBinding(TextureRep rep)

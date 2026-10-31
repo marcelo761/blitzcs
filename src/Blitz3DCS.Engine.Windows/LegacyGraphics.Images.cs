@@ -86,12 +86,23 @@ public static partial class LegacyGraphics
         return CreateImageFromFrames(width, height, frames);
     }
 
+    /// <summary>
+    /// Original bbFreeImage (bbgraphics.cpp): <c>if( !image_set.erase(i) ) return;</c>. There is no debugImage call
+    /// and no error path, so 0, a never-valid handle and an already-freed handle are silent no-ops in every build
+    /// (SCP:CB's "Antialiased text" toggle frees a font record's backup image even when that record never had one).
+    /// When a frame of the image is the current canvas the original first selects the front canvas, then
+    /// <c>delete i</c> frees every frame canvas, and <c>~gxCanvas</c> ends any outstanding lock
+    /// (<c>if( locked_cnt ) surf-&gt;Unlock( 0 )</c>) without an error.
+    /// </summary>
     public static void FreeImage(int image)
     {
         CheckThreadIfStarted();
+        if (!Images.Remove(image, out var state)) return;
+        // Only a real free may close the movie: an unmatched FreeImage(0) must not stop a movie whose Image is the default 0.
         if (_movie?.Image == image) BlitzMovie_Close();
-        if (!Images.Remove(image, out var state)) throw new ArgumentOutOfRangeException(nameof(image));
-        if (Textures.ContainsKey(state.Texture)) FreeTexture(state.Texture);
+        if (!Textures.TryGetValue(state.Texture, out var rep)) return;
+        DeselectBuffersOf(rep);
+        FreeTexture(state.Texture);
     }
 
     public static int ImageWidth(int image) => GetImage(image).Width;
@@ -360,6 +371,12 @@ public static partial class LegacyGraphics
         _nextImageHandle = next;
         return handle;
     }
+
+    /// <summary>Registers an image over an already-registered texture without a renderer (Linux-runnable lifetime tests).</summary>
+    internal static int RegisterImageForTesting(int texture, int width, int height, int frames) =>
+        RegisterImage(new ImageState(texture, width, height, frames, 0, 0));
+
+    internal static bool ImageRegisteredForTesting(int image) => Images.ContainsKey(image);
 
     private static bool RectanglesOverlap(long x1, long y1, long width1, long height1,
         long x2, long y2, long width2, long height2) =>

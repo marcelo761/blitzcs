@@ -75,6 +75,12 @@ public static partial class LegacyGraphics
         finally { EngineTrace.Exit(); }
     }
 
+    /// <summary>
+    /// Original bbFreeEntity: <c>if( !e ) return; if( debug ){ debugEntity(e); erase(e); } delete e;</c>. Only 0 is a
+    /// defined no-op. An unknown or already-freed entity is "Entity does not exist" under the debug flag and an
+    /// undefined-behaviour <c>delete</c> of a dangling pointer in a release build, so there is no lenient behaviour to
+    /// copy and the adapter keeps reporting it.
+    /// </summary>
     public static void FreeEntity(int entity)
     {
         if (!EngineTrace.Hooked) { FreeEntityCore(entity); return; }
