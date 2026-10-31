@@ -224,8 +224,14 @@ internal sealed partial class X64CodeGen
     {
         FaultExitLabel = E.NewLabel(); Trap1Label = E.NewLabel(); Trap2Label = E.NewLabel(); Trap3Label = E.NewLabel(); ExitCommonLabel = E.NewLabel(); DispatchLabel = E.NewLabel(); EnterLabel = E.NewLabel();
         var trapStore = E.NewLabel();
-        // Host offset 0 is the trap routine: dispatch table entries that are 0 land here (untranslated indirect target).
+        // Host offset 0 is the miss routine: dispatch table entries that are 0 and out-of-range targets land here with r9d = the guest VA.
+        // It first tries the foreign (cross-module) dispatch, then falls through to the untranslated-target trap (kind 1).
         E.Place(Trap1Label);
+        var trap1Kind = E.NewLabel(); var missSlow = E.NewLabel();
+        EmitForeignDispatch(missSlow);
+        E.Place(missSlow);
+        EmitMissHandlerCall(trap1Kind);
+        E.Place(trap1Kind);
         A(Instruction.Create(Code.Mov_rm32_imm32, Ctx(CtxTrapKind), 1u));
         E.Place(trapStore);
         A(Instruction.Create(Code.Mov_rm64_r64, Ctx(CtxTrapAddress), Register.R9));
@@ -251,10 +257,17 @@ internal sealed partial class X64CodeGen
         EmitDispatchPreservingFlags();
 
         var importExt = E.NewLabel();
-        for (var k = 0; k < image.Imports.Count + dynamicStubs; k++)
+        var runtimeFirst = image.Imports.Count + dynamicStubs;
+        for (var k = 0; k < runtimeFirst + ImportStubLayout.RuntimeStubCount; k++)
         {
             var body = E.NewLabel(); ImportBodyLabels.Add(body);
             E.Place(body);
+            // Import stub contract (ImportStubLayout): the guest's callee-saved registers at the call, and for the runtime stubs also EAX, go into the call context.
+            A(Instruction.Create(Code.Mov_rm32_r32, Ctx(ImportStubLayout.CtxGuestEbx), Register.EBX));
+            A(Instruction.Create(Code.Mov_rm32_r32, Ctx(ImportStubLayout.CtxGuestEbp), Register.EBP));
+            A(Instruction.Create(Code.Mov_rm32_r32, Ctx(ImportStubLayout.CtxGuestEsi), Register.ESI));
+            A(Instruction.Create(Code.Mov_rm32_r32, Ctx(ImportStubLayout.CtxGuestEdi), Register.EDI));
+            if (k >= runtimeFirst) A(Instruction.Create(Code.Mov_rm32_r32, Ctx(ImportStubLayout.CtxGuestEax), Register.EAX));
             A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.ESP));
             A(Instruction.Create(Code.Mov_r64_rm64, Register.RSP, Ctx(CtxNativeRsp)));
             if (Win64)
@@ -300,6 +313,118 @@ internal sealed partial class X64CodeGen
             Jmp(DispatchLabel);
         }
         EmitImportExtendedReturn(importExt);
+    }
+
+    private const uint RegistryCellOffset = ModuleRegistryLayout.CellOffset;
+    private const int RegistryHeaderSize = ModuleRegistryLayout.HeaderSize, RegistryRecordSize = ModuleRegistryLayout.RecordSize,
+        RecGuestBase = ModuleRegistryLayout.GuestBase, RecBound = ModuleRegistryLayout.Bound, RecHostBase = ModuleRegistryLayout.HostBase, RecTable = ModuleRegistryLayout.Table;
+
+    /// <summary>
+    /// The miss path of the dispatch (host offset 0). Entered with r9d = guest VA and the guest flags live (the flag-preserving dispatch jumps here),
+    /// so the flags are saved with pushfq on the guest stack (RSP is the guest ESP; the 8 bytes below it are free) and restored before the jump.
+    /// Checks the module's cached record, then walks published registry records newest first. A record matches when VA - guestBase is below its bound;
+    /// its table must be live and the entry non-zero. On a match r12/r13 become the target module's code base and dispatch table (r14 call context and r15 TEB are shared by the whole thread
+    /// and stay) and execution continues in the target module. Everything else leaves through <paramref name="miss"/> (the kind 1 trap), clobbering only r8, r10, r11.
+    /// </summary>
+    private void EmitForeignDispatch(ulong miss)
+    {
+        var loop = E.NewLabel(); var next = E.NewLabel(); var scan = E.NewLabel(); var found = E.NewLabel();
+        A(Instruction.Create(Code.Pushfq));
+        // Each module remembers its last foreign record. Records never move or get reused;
+        // recheck the bound on every hit so retirement/retranslation falls back to the walk.
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R10, new MemoryOperand(Register.RIP, (long)dataBase + ModuleRegistryLayout.CachedRecordCellOffset, 8)));
+        A(Instruction.Create(Code.Test_rm64_r64, Register.R10, Register.R10));
+        Jcc(ConditionCode.e, scan);
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R9D));
+        A(Instruction.Create(Code.Sub_r32_rm32, Register.R8D, M(Register.R10, RecGuestBase)));
+        A(Instruction.Create(Code.Cmp_r32_rm32, Register.R8D, M(Register.R10, RecBound)));
+        Jcc(ConditionCode.b, found);
+        E.Place(scan);
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R10, new MemoryOperand(Register.RIP, (long)dataBase + RegistryCellOffset, 8)));
+        A(Instruction.Create(Code.Test_rm64_r64, Register.R10, Register.R10));
+        Jcc(ConditionCode.e, miss);
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R11D, M(Register.R10)));          // record count (published with a release store after the record is complete)
+        A(Instruction.Create(Code.Shl_rm32_imm8, Register.R11D, (byte)5));
+        A(Instruction.Create(Code.Lea_r64_m, Register.R11, M(Register.R10, Register.R11, 1, RegistryHeaderSize)));   // end of the published records
+        A(Instruction.Create(Code.Add_rm64_imm8, Register.R10, RegistryHeaderSize));
+        A(Instruction.Create(Code.Xchg_rm64_r64, Register.R10, Register.R11));             // cursor = end, lower bound = first record
+        E.Place(loop);
+        A(Instruction.Create(Code.Cmp_r64_rm64, Register.R10, Register.R11));
+        Jcc(ConditionCode.be, miss);
+        A(Instruction.Create(Code.Sub_rm64_imm8, Register.R10, RegistryRecordSize));       // newest live units tend to be the next dynamic target
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R9D));
+        A(Instruction.Create(Code.Sub_r32_rm32, Register.R8D, M(Register.R10, RecGuestBase)));
+        A(Instruction.Create(Code.Cmp_r32_rm32, Register.R8D, M(Register.R10, RecBound)));   // unsigned: also rejects va < guestBase; a retired record has bound 0
+        Jcc(ConditionCode.ae, next);
+        E.Place(found);
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R11, M(Register.R10, RecTable)));
+        A(Instruction.Create(Code.Test_rm64_r64, Register.R11, Register.R11));
+        Jcc(ConditionCode.e, miss);
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, M(Register.R11, Register.R8, 4)));
+        A(Instruction.Create(Code.Test_rm32_r32, Register.R8D, Register.R8D));
+        Jcc(ConditionCode.e, miss);                                                       // inside the module but not translated code
+        A(Instruction.Create(Code.Mov_rm64_r64, new MemoryOperand(Register.RIP, (long)dataBase + ModuleRegistryLayout.CachedRecordCellOffset, 8), Register.R10));
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R12, M(Register.R10, RecHostBase)));
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R13, Register.R11));
+        A(Instruction.Create(Code.Lea_r64_m, Register.R8, M(Register.R12, Register.R8, 1)));
+        A(Instruction.Create(Code.Popfq));
+        A(Instruction.Create(Code.Jmp_rm64, Register.R8));
+        E.Place(next);
+        Jmp(loop);
+    }
+
+    /// <summary>
+    /// Slow path of the miss routine (docs/binary-dynamic-code.md): no published module has translated code at r9d. When the registry header carries a miss handler
+    /// (<see cref="ModuleRegistryLayout.MissHandler"/>, installed by the runtime for code the guest generates at run time), it is called on the native stack as
+    /// <c>uint handler(registry, guestVa, callContext)</c> with the complete guest state saved (general registers, flags on the guest stack, x87/SSE with fxsave)
+    /// and the host's x87 control word and MXCSR loaded. A non-zero result means a record that translates the address is now published: the guest state is restored
+    /// and the registry walk runs again. Zero (or no handler) leaves through <paramref name="trap"/> (kind 1) with r9d = the guest VA and the flags still pushed.
+    /// </summary>
+    private void EmitMissHandlerCall(ulong trap)
+    {
+        const int FxArea = 520;   // 512-byte fxsave image + 8 bytes that re-align RSP after the 11 pushes below
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R10, new MemoryOperand(Register.RIP, (long)dataBase + RegistryCellOffset, 8)));
+        A(Instruction.Create(Code.Test_rm64_r64, Register.R10, Register.R10));
+        Jcc(ConditionCode.e, trap);
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R11, M(Register.R10, ModuleRegistryLayout.MissHandler)));
+        A(Instruction.Create(Code.Test_rm64_r64, Register.R11, Register.R11));
+        Jcc(ConditionCode.e, trap);
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.R8, Register.RSP));                 // guest ESP (below it: the pushed flags)
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.RSP, Ctx(CtxNativeRsp)));           // 16-byte aligned, as for the import stubs
+        foreach (var r in new[] { Register.R8, Register.R9, Register.RAX, Register.RCX, Register.RDX, Register.RBX, Register.RBP, Register.RSI, Register.RDI, Register.R12, Register.R13 })
+            A(Instruction.Create(Code.Push_r64, r));
+        A(Instruction.Create(Code.Sub_rm64_imm32, Register.RSP, FxArea));
+        A(Instruction.Create(Code.Fxsave64_m512byte, M(Register.RSP, 0)));
+        A(Instruction.Create(Code.Fninit));
+        A(Instruction.Create(Code.Fldcw_m2byte, Ctx(CtxSavedFcw)));
+        A(Instruction.Create(Code.Ldmxcsr_m32, Ctx(CtxSavedMxcsr)));
+        A(Instruction.Create(Code.Cld));
+        if (Win64)
+        {
+            A(Instruction.Create(Code.Mov_r64_rm64, Register.RCX, Register.R10));
+            A(Instruction.Create(Code.Mov_r32_rm32, Register.EDX, Register.R9D));
+            A(Instruction.Create(Code.Mov_r64_rm64, Register.R8, Register.R14));
+            A(Instruction.Create(Code.Sub_rm64_imm8, Register.RSP, 32));
+            A(Instruction.Create(Code.Call_rm64, Register.R11));
+            A(Instruction.Create(Code.Add_rm64_imm8, Register.RSP, 32));
+        }
+        else
+        {
+            A(Instruction.Create(Code.Mov_r64_rm64, Register.RDI, Register.R10));
+            A(Instruction.Create(Code.Mov_r32_rm32, Register.ESI, Register.R9D));
+            A(Instruction.Create(Code.Mov_r64_rm64, Register.RDX, Register.R14));
+            A(Instruction.Create(Code.Call_rm64, Register.R11));
+        }
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R11D, Register.EAX));
+        A(Instruction.Create(Code.Fxrstor64_m512byte, M(Register.RSP, 0)));
+        A(Instruction.Create(Code.Add_rm64_imm32, Register.RSP, FxArea));
+        foreach (var r in new[] { Register.R13, Register.R12, Register.RDI, Register.RSI, Register.RBP, Register.RBX, Register.RDX, Register.RCX, Register.RAX, Register.R9, Register.R8 })
+            A(Instruction.Create(Code.Pop_r64, r));
+        A(Instruction.Create(Code.Mov_r64_rm64, Register.RSP, Register.R8));
+        A(Instruction.Create(Code.Test_rm32_r32, Register.R11D, Register.R11D));
+        Jcc(ConditionCode.e, trap);
+        A(Instruction.Create(Code.Popfq));
+        Jmp(Trap1Label);
     }
 
     private bool Win64 => abi == HostAbi.Win64;
@@ -383,9 +508,11 @@ internal sealed partial class X64CodeGen
     private void EmitImportExtendedReturn(ulong label)
     {
         E.Place(label);
-        var noEdx = E.NewLabel(); var noSt0 = E.NewLabel();
+        var noEdx = E.NewLabel(); var noSt0 = E.NewLabel(); var redirect = E.NewLabel();
         A(Instruction.Create(Code.And_rm32_imm32, Register.R9D, 0x7FFFFFFF));
         A(Instruction.Create(Code.Mov_r32_rm32, Register.R10D, Ctx(CtxImportFlags)));
+        A(Instruction.Create(Code.Test_rm32_imm32, Register.R10D, (int)ImportStubLayout.RedirectFlag));
+        Jcc(ConditionCode.ne, redirect);
         A(Instruction.Create(Code.Test_rm32_imm32, Register.R10D, 2));
         Jcc(ConditionCode.e, noSt0);
         A(Instruction.Create(Code.Fld_m80fp, Ctx(CtxSt0Raw)));
@@ -399,6 +526,21 @@ internal sealed partial class X64CodeGen
         A(Instruction.Create(Code.Lea_r32_m, Register.R8D, M(Register.R8D, Register.R9D, 1, 4)));
         A(Instruction.Create(Code.Mov_r32_rm32, Register.ESP, Register.R8D));
         A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, Register.R10D));
+        Jmp(DispatchLabel);
+
+        // Redirect (ImportStubLayout.RedirectFlag): EAX = guest address of a CONTEXT-shaped register image. All eight general registers are loaded from it and
+        // execution continues at its Eip through the dispatch (an untranslated Eip traps by name like any other indirect target).
+        E.Place(redirect);
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R10D, Register.EAX));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EDI, M(Register.R10, ImportStubLayout.ImageEdi)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.ESI, M(Register.R10, ImportStubLayout.ImageEsi)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EBX, M(Register.R10, ImportStubLayout.ImageEbx)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EDX, M(Register.R10, ImportStubLayout.ImageEdx)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.ECX, M(Register.R10, ImportStubLayout.ImageEcx)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EAX, M(Register.R10, ImportStubLayout.ImageEax)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.EBP, M(Register.R10, ImportStubLayout.ImageEbp)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.R8D, M(Register.R10, ImportStubLayout.ImageEip)));
+        A(Instruction.Create(Code.Mov_r32_rm32, Register.ESP, M(Register.R10, ImportStubLayout.ImageEsp)));
         Jmp(DispatchLabel);
     }
 
@@ -558,6 +700,7 @@ internal sealed partial class X64CodeGen
             Jmp(kind == 2 ? Trap2Label : Trap1Label);
         }
         EmitFsTrapStubs();
+        EmitLateTraps();
         EmitShadowTables();
     }
 
@@ -749,6 +892,7 @@ internal sealed partial class X64CodeGen
                 fsOperand = fm;
             }
         }
+        if (TryLowerSegmentOrFastFail(g, fsOperand, out var segFalls)) return segFalls;
         for (var op = 0; op < i.OpCount; op++)
         {
             var k = i.GetOpKind(op);
@@ -897,7 +1041,14 @@ internal sealed partial class X64CodeGen
 
         var oc = i.Code.ToOpCode();
         if (oc.Encoding == EncodingKind.D3NOW) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "3DNow! is not supported"); return false; }
-        if (oc.Encoding != EncodingKind.Legacy) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "VEX/EVEX/XOP encodings are not supported"); return false; }
+        if (oc.Encoding == EncodingKind.VEX && i.Code is Code.VEX_Vzeroall)
+        {
+            // vzeroall in 64-bit mode would also clear ymm8-15, which the host keeps for its own use: clear the 8 registers a 32-bit guest has.
+            foreach (var y in Ymm0To7) A(Instruction.Create(Code.VEX_Vpxor_ymm_ymm_ymmm256, y, y, y));
+            return true;
+        }
+        if (oc.Encoding != EncodingKind.Legacy && oc.Encoding != EncodingKind.VEX) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "EVEX/XOP encodings are not supported (VEX is passed through)"); return false; }
+        if (oc.Encoding == EncodingKind.VEX && VexRejection(i) is { } vexWhy) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", vexWhy); return false; }
         if (!oc.Mode64) { Unsupported(g, "BC_UNSUPPORTED_INSTRUCTION", "not valid in 64-bit mode and has no lowering"); return false; }
         if (oc.IsPrivileged || oc.IsStackInstruction || i.Mnemonic is Mnemonic.In or Mnemonic.Out or Mnemonic.Insb or Mnemonic.Insw or Mnemonic.Insd
             or Mnemonic.Outsb or Mnemonic.Outsw or Mnemonic.Outsd or Mnemonic.Int or Mnemonic.Int1 or Mnemonic.Into or Mnemonic.Syscall

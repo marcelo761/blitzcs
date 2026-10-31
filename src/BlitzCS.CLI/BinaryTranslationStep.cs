@@ -16,12 +16,21 @@ internal static class BinaryTranslationStep
     /// <summary>Artifacts are target specific. Precedence: --target, the catalog's binaryTarget, BLITZCS_BINARY_TARGET, then windows-x64 (the primary target).</summary>
     internal static string ResolveTarget(ExternalCatalogResult catalog, string? requested) => ResolveTarget(catalog.BinaryTarget, requested);
 
+    internal static CompilationTarget ResolveCompilationTarget(ExternalCatalogResult catalog, string? requested) =>
+        ResolveCompilationTarget(catalog.BinaryTarget, requested);
+
+    internal static CompilationTarget ResolveCompilationTarget(string? catalogTarget, string? requested)
+    {
+        if (requested is not null) return TargetCapabilities.ParseTarget(requested);
+        if (catalogTarget is not null) return TargetCapabilities.ParseTarget(catalogTarget);
+        var fromEnvironment = Environment.GetEnvironmentVariable(TargetEnvironmentVariable);
+        return string.IsNullOrWhiteSpace(fromEnvironment) ? CompilationTarget.Win64 : TargetCapabilities.ParseTarget(fromEnvironment);
+    }
+
     internal static string ResolveTarget(string? catalogTarget, string? requested)
     {
-        if (requested is not null) return BinaryTargets.Normalize(requested);
-        if (catalogTarget is not null) return catalogTarget;
-        var fromEnvironment = Environment.GetEnvironmentVariable(TargetEnvironmentVariable);
-        return string.IsNullOrWhiteSpace(fromEnvironment) ? BinaryTargets.WindowsX64 : BinaryTargets.Normalize(fromEnvironment);
+        var target = ResolveCompilationTarget(catalogTarget, requested);
+        return target.BinaryCompilerTargetOs() ?? target.CanonicalName();
     }
 
     /// <summary>
@@ -51,21 +60,23 @@ internal static class BinaryTranslationStep
     /// base from <see cref="ModuleBaseAllocator"/> (a single library keeps its preferred base on Linux; for windows-x64 every library is placed in the Windows image window) and the cache key includes it.
     /// Unprovided imports are reported to <paramref name="warnings"/> (or fail the build for libraries with <c>"unboundImports": "error"</c>).
     /// </summary>
-    internal static PreparedBinaries Prepare(ExternalCatalogResult catalog, string outputPath, TextWriter? warnings = null, string? target = null)
+    internal static PreparedBinaries Prepare(ExternalCatalogResult catalog, string outputPath, TextWriter? warnings = null, string? target = null, bool isPackageBuild = false)
     {
         var pending = new List<PendingBinary>();
         if (catalog.BinaryLibraries is not { Count: > 0 } libraries) return new(pending);
-        var targetOs = ResolveTarget(catalog, target);
+        var compilationTarget = ResolveCompilationTarget(catalog, target);
         var specs = catalog.LibrarySpecs ?? [.. libraries.Select(path => new BinaryLibrarySpec(path))];
+        foreach (var spec in specs)
+            TargetCapabilities.ValidateLegacyBinaryForRecompilation(spec.Path, compilationTarget, isPackageBuild);
+        var targetOs = compilationTarget.BinaryCompilerTargetOs()!;
         var profile = catalog.BinaryProfile is null ? OptimizationProfile.Release
             : Enum.TryParse<OptimizationProfile>(catalog.BinaryProfile, ignoreCase: true, out var parsed) ? parsed
             : throw new ArgumentException($"Unknown binaryProfile '{catalog.BinaryProfile}'; expected Debug, Release or ReleasePgo.");
         var cacheDirectory = BinaryCache.Directory();
         var outputDirectory = Path.GetDirectoryName(outputPath)!;
-        foreach (var spec in specs)
-            if (!BinaryBuild.IsPe32X86(spec.Path))
-                throw new ArgumentException($"Binary library '{spec.Path}' is not a PE32 x86 image.");
         var images = specs.Select(spec => PeReader.Read(File.ReadAllBytes(spec.EffectivePath))).ToArray();
+        for (var i = 0; i < specs.Count; i++)
+            TargetCapabilities.ValidateTargetImportCapabilities(specs[i].FileName, images[i], compilationTarget);
         // windows-x64 rebases every library (a single one too) into the Windows image window; on Linux a single library keeps its preferred base.
         var bases = specs.Count > 1 || ModuleBaseAllocator.IsWindowsTarget(targetOs) ? ModuleBaseAllocator.Allocate([.. specs.Select((spec, i) => (spec.FileName, images[i]))], null, targetOs) : null;
         var artifacts = new TranslationArtifact[specs.Count];
@@ -84,7 +95,7 @@ internal static class BinaryTranslationStep
                     + string.Join(Environment.NewLine, errors.Take(20).Select(d => $"  {d.Code} at RVA 0x{d.GuestRva ?? 0:X}: {d.Message}"))
                     + (errors.Length > 20 ? $"{Environment.NewLine}  ... {errors.Length - 20} more" : "")
                     + PackedHint(library, errors));
-            foreach (var binding in catalog.BinaryBindings?.Where(b => b.LibraryPath == library && b.Intrinsic is null) ?? [])
+            foreach (var binding in catalog.BinaryBindings?.Where(b => b.LibraryPath == library && b.Intrinsic is null && b.CommandRva is null && b.Win32SystemDll is null) ?? [])
                 CheckBinding(binding, result.Artifact);
             artifacts[i] = result.Artifact;
             pending.Add(new(library, Path.Combine(outputDirectory, Path.GetFileName(library) + ".bcx"), new ArtifactSerializer().Serialize(result.Artifact), result, spec));
@@ -165,10 +176,11 @@ internal static class BinaryTranslationStep
             throw new ArgumentException($"External function {label}: the calling convention cannot be inferred from the export; set binary.convention to 'cdecl', 'stdcall', 'thiscall' or 'fastcall'.");
         if (export.Convention != GuestCallingConvention.Unknown && binding.Convention != GuestCallingConvention.Unknown && export.Convention != binding.Convention)
             throw new ArgumentException($"External function {label}: the catalog says {binding.Convention} but the export decoration says {export.Convention}.");
-        if (effective is GuestCallingConvention.Stdcall or GuestCallingConvention.Fastcall && export.ArgBytes is { } bytes && bytes != 4 * binding.Parameters.Count)
+        var effectiveArgCount = binding.ExportArgCount ?? binding.Parameters.Count;
+        if (effective is GuestCallingConvention.Stdcall or GuestCallingConvention.Fastcall && export.ArgBytes is { } bytes && bytes != 4 * effectiveArgCount)
             throw new ArgumentException(effective == GuestCallingConvention.Stdcall
-                ? $"External function {label}: stdcall export pops {bytes} byte(s) but the declaration passes {4 * binding.Parameters.Count}."
-                : $"External function {label}: the fastcall decoration says {bytes} byte(s) of parameters but the declaration passes {4 * binding.Parameters.Count}.");
+                ? $"External function {label}: stdcall export pops {bytes} byte(s) but the declaration passes {4 * effectiveArgCount}."
+                : $"External function {label}: the fastcall decoration says {bytes} byte(s) of parameters but the declaration passes {4 * effectiveArgCount}.");
         if (effective == GuestCallingConvention.Thiscall && (binding.Parameters.Count == 0 || binding.Parameters[0] != ExternalValueType.Integer))
             throw new ArgumentException($"External function {label}: a thiscall binding needs an Integer first parameter, which is passed as 'this' in ECX.");
     }

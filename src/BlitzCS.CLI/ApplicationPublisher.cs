@@ -9,27 +9,20 @@ internal static class ApplicationPublisher
 {
     internal static void Build(string generated, string destination, string name,
         string target, ExternalCatalogResult catalog, IEnumerable<string> inputs, TextWriter output,
+        TextWriter error, string? assets, bool graphical) =>
+        Build(generated, destination, name, TargetCapabilities.ParseTarget(target), catalog, inputs, output, error, assets, graphical);
+
+    internal static void Build(string generated, string destination, string name,
+        CompilationTarget target, ExternalCatalogResult catalog, IEnumerable<string> inputs, TextWriter output,
         TextWriter error, string? assets, bool graphical)
     {
-        var windows = target == "windows-x64";
+        var windows = target.IsWindows();
         var externalFiles = catalog.Functions.ReferencePaths.Concat(catalog.NativeLibraries).Distinct().ToArray();
         if (windows && externalFiles.GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
             throw new ArgumentException("Windows dependencies must have distinct filenames regardless of case.");
-        var header = new byte[20];
         foreach (var native in catalog.NativeLibraries.Except(catalog.BinaryLibraries ?? []))
         {
-            using var stream = File.OpenRead(native);
-            if (windows)
-            {
-                using var pe = new PEReader(stream);
-                if (pe.PEHeaders.CoffHeader.Machine != Machine.Amd64 || pe.PEHeaders.PEHeader?.Magic != PEMagic.PE32Plus)
-                    throw new ArgumentException($"Native library '{Path.GetFileName(native)}' is not Windows x64. Declare legacy PE32 libraries in binaryLibraries for recompilation.");
-            }
-            else
-            {
-                if (stream.Read(header) != 20 || !header.AsSpan(0, 4).SequenceEqual(new byte[] { 0x7f, 69, 76, 70 }) || header[4] != 2 || header[18] != 62)
-                    throw new ArgumentException($"Native library '{Path.GetFileName(native)}' is not Linux x64.");
-            }
+            TargetCapabilities.ValidateNativeLibrary(native, target);
         }
         var destinationPath = DotNetEmitter.CanonicalPath(destination);
         const string ownershipFile = ".blitzcs-package";
@@ -59,7 +52,7 @@ internal static class ApplicationPublisher
         {
             var stage = Path.Combine(workspace, "input");
             var assemblyPath = Path.Combine(stage, name + ".dll");
-            var binaries = BinaryTranslationStep.Prepare(catalog, assemblyPath, error, target);
+            var binaries = BinaryTranslationStep.Prepare(catalog, assemblyPath, error, target.CanonicalName(), isPackageBuild: true);
             binaries.ValidateInputs(inputs.Concat(catalog.Functions.ReferencePaths).Concat(catalog.NativeLibraries));
             const string startup = """
                 internal static class BlitzStartup
@@ -69,25 +62,14 @@ internal static class ApplicationPublisher
                 }
                 """;
             DotNetEmitter.Emit(generated + Environment.NewLine + startup, assemblyPath, "BlitzProgram", catalog.Functions.ReferencePaths,
-                catalog.NativeLibraries, inputs);
+                catalog.NativeLibraries, inputs, Microsoft.CodeAnalysis.OptimizationLevel.Release);
             binaries.Publish(output);
             // Publish a shell to obtain the SDK's apphost, runtimeconfig and dependency graph.
             // Keep the original Roslyn assembly: generated binding assemblies can reference runtime
             // implementation types, which cannot be recompiled against SDK reference-pack facades.
             File.WriteAllText(Path.Combine(stage, "PublishEntry.cs"),
                 "internal static class BlitzProgram { public static void Main() {} }");
-            var properties = new XElement("PropertyGroup",
-                new XElement("TargetFramework", "net10.0"),
-                new XElement("LangVersion", "14.0"),
-                new XElement("OutputType", graphical ? "WinExe" : "Exe"),
-                new XElement("AssemblyName", name),
-                new XElement("StartupObject", "BlitzProgram"),
-                new XElement("EnableDefaultItems", "false"),
-                new XElement("GenerateAssemblyInfo", "false"),
-                new XElement("UseAppHost", "true"),
-                new XElement("SelfContained", "true"),
-                new XElement("PublishTrimmed", "false"),
-                new XElement("PublishSingleFile", "false"));
+            var properties = CreatePropertyGroup(name, graphical);
             var items = new XElement("ItemGroup",
                 new XElement("Compile", new XAttribute("Include", "PublishEntry.cs")));
             foreach (var file in Directory.EnumerateFiles(stage))
@@ -119,7 +101,7 @@ internal static class ApplicationPublisher
                 UseShellExecute = false
             };
             foreach (var arg in new[] { "publish", projectPath, "-c", "Release", "-r",
-                         target == "windows-x64" ? "win-x64" : "linux-x64", "--self-contained", "true", "-o", package, "--nologo" })
+                         target.RuntimeIdentifier(), "--self-contained", "true", "-o", package, "--nologo" })
                 start.ArgumentList.Add(arg);
             using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the .NET SDK publisher.");
             var stdout = process.StandardOutput.ReadToEndAsync();
@@ -135,6 +117,7 @@ internal static class ApplicationPublisher
                 throw new InvalidOperationException($".NET SDK publishing failed ({process.ExitCode}). Install the .NET 10 SDK and restore access to the target runtime packs.{Environment.NewLine}{stdout.Result}{stderr.Result}");
             File.Copy(assemblyPath, Path.Combine(package, name + ".dll"), overwrite: true);
             File.Copy(Path.ChangeExtension(assemblyPath, ".pdb"), Path.Combine(package, name + ".pdb"), overwrite: true);
+            if (windows) PrecompileGameAssembly(Path.Combine(package, name + ".dll"), package, workspace, error);
             if (assets is not null)
             {
                 var packagedNames = new HashSet<string>(Directory.EnumerateFiles(package, "*", SearchOption.AllDirectories)
@@ -174,8 +157,66 @@ internal static class ApplicationPublisher
                 if (replacing) Directory.Delete(backup, true);
             }
             finally { if (Directory.Exists(stagedDestination)) Directory.Delete(stagedDestination, true); }
-            output.WriteLine(Path.Combine(destinationPath, name + (target == "windows-x64" ? ".exe" : "")));
+            output.WriteLine(Path.Combine(destinationPath, name + (windows ? ".exe" : "")));
         }
         finally { Directory.Delete(workspace, recursive: true); }
     }
+
+    /// <summary>
+    /// Compiles the generated game assembly ahead of time (ReadyToRun) so its very large methods are not
+    /// JIT-compiled at tier 0 on first call. The SDK publish only precompiles the shell, because the original
+    /// Roslyn assembly is copied over it. Skipped when the crossgen2 pack is not
+    /// in the local NuGet cache; failures keep the IL-only assembly.
+    /// </summary>
+    internal static void PrecompileGameAssembly(string assembly, string package, string workspace, TextWriter error)
+    {
+        try
+        {
+            var host = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
+            var os = OperatingSystem.IsWindows() ? "win" : OperatingSystem.IsMacOS() ? "osx" : "linux";
+            var packs = Path.Combine(Environment.GetEnvironmentVariable("NUGET_PACKAGES") ??
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages"),
+                $"microsoft.netcore.app.crossgen2.{os}-{host}");
+            if (!Directory.Exists(packs)) return; // Offline cache without the pack: keep the IL-only assembly.
+            var tool = Directory.EnumerateDirectories(packs).OrderByDescending(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .Select(dir => Path.Combine(dir, "tools", OperatingSystem.IsWindows() ? "crossgen2.exe" : "crossgen2"))
+                .FirstOrDefault(File.Exists);
+            if (tool is null) return;
+            var output = Path.Combine(workspace, "r2r-" + Path.GetFileName(assembly));
+            var start = new ProcessStartInfo(tool) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            foreach (var arg in new[] { assembly, "-o", output, "-r", Path.Combine(package, "*.dll"),
+                         "--targetos", "windows", "--targetarch", "x64", "-O" })
+                start.ArgumentList.Add(arg);
+            using var process = Process.Start(start)!;
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(300_000)) { process.Kill(entireProcessTree: true); process.WaitForExit(); File.Delete(output); error.WriteLine("warning: crossgen2 timed out; game assembly stays IL-only."); return; }
+            Task.WaitAll(stdout, stderr);
+            if (process.ExitCode != 0 || !File.Exists(output)) { error.WriteLine("warning: crossgen2 failed; game assembly stays IL-only."); return; }
+            File.Move(output, assembly, overwrite: true);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            error.WriteLine("warning: could not precompile the game assembly: " + exception.Message);
+        }
+    }
+
+    internal static XElement CreatePropertyGroup(string name, bool graphical) =>
+        new("PropertyGroup",
+            new XElement("TargetFramework", "net10.0"),
+            new XElement("LangVersion", "14.0"),
+            new XElement("OutputType", graphical ? "WinExe" : "Exe"),
+            new XElement("AssemblyName", name),
+            new XElement("StartupObject", "BlitzProgram"),
+            new XElement("EnableDefaultItems", "false"),
+            new XElement("GenerateAssemblyInfo", "false"),
+            new XElement("UseAppHost", "true"),
+            new XElement("SelfContained", "true"),
+            new XElement("PublishTrimmed", "false"),
+            new XElement("PublishSingleFile", "false"),
+            new XElement("PublishReadyToRun", "true"),
+            new XElement("TieredPGO", "true"),
+            new XElement("InvariantGlobalization", "true"),
+            new XElement("ConcurrentGarbageCollection", "true"),
+            new XElement("ServerGarbageCollection", "false"));
 }

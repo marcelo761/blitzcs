@@ -31,7 +31,7 @@ out="$root/artifacts/wine"; mkdir -p "$out"
 
 # Real-library tests read these variables; a Linux path is handed to the Windows process through Wine's Z: drive (Z:\var\home\...).
 # Without them the real-library tests are reported SKIPPED (with the reason) by the runner: warn loudly so a green run is not mistaken for full coverage.
-for v in BLITZCS_REAL_PE32_DIR BLITZCS_PACKED_SAMPLE; do
+for v in BLITZCS_REAL_PE32_DIR BLITZCS_PACKED_SAMPLE BLITZCS_BLITZ3D_DIR; do
   val="${!v:-}"
   if [ -z "$val" ]; then
     echo "WARNING: $v is not set: real-library tests will be SKIPPED (not passed). Set $v to run them; see docs/wine-testing.md." >&2

@@ -7,4 +7,9 @@
   <ItemGroup>
     <ProjectReference Include="../BlitzCS.BinaryCompiler/BlitzCS.BinaryCompiler.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="BlitzCS.BinaryCompiler.Win32.Tests" />
+    <InternalsVisibleTo Include="BlitzCS.BinaryCompiler.Win32" />
+    <InternalsVisibleTo Include="BlitzCS.BinaryCompiler.Tests" />
+  </ItemGroup>
 </Project>

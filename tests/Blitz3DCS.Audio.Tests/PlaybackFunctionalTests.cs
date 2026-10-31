@@ -162,21 +162,36 @@ public sealed class PlaybackFunctionalTests
                 ("FSOUND_Init", nameof(FSOUND.Init)), ("FSOUND_Close", nameof(FSOUND.Close)),
                 ("FSOUND_Sample_Load", nameof(FSOUND.SampleLoad)), ("FSOUND_Sample_Free", nameof(FSOUND.SampleFree)),
                 ("FSOUND_PlaySample", nameof(FSOUND.PlaySample)), ("FSOUND_SetVolume", nameof(FSOUND.SetVolume)),
-                ("FSOUND_GetVolume", nameof(FSOUND.GetVolume)), ("FSOUND_SetPan", nameof(FSOUND.SetPan)),
+                ("FSOUND_GetVolume", nameof(FSOUND.GetVolume)), ("FSOUND_GetPosition", nameof(FSOUND.GetPosition)),
+                ("FSOUND_SetPan", nameof(FSOUND.SetPan)),
                 ("FSOUND_GetPan", nameof(FSOUND.GetPan)), ("FSOUND_SetFrequency", nameof(FSOUND.SetFrequency)),
                 ("FSOUND_GetFrequency", nameof(FSOUND.GetFrequency)), ("FSOUND_SetPaused", nameof(FSOUND.SetPaused)),
-                ("FSOUND_GetPaused", nameof(FSOUND.GetPaused)), ("FSOUND_StopSound", nameof(FSOUND.StopSound))
+                ("FSOUND_GetPaused", nameof(FSOUND.GetPaused)), ("FSOUND_StopSound", nameof(FSOUND.StopSound)),
+                ("FSOUND_SetListener3D", nameof(FSOUND.SetListener3D)),
+                ("FSOUND_SetSpatialSettings", nameof(FSOUND.SetSpatialSettings)),
+                ("FSOUND_PlaySample3D", nameof(FSOUND.PlaySample3D)),
+                ("FSOUND_SetChannel3D", nameof(FSOUND.SetChannel3D)),
+                ("FSOUND_SetChannel2D", nameof(FSOUND.SetChannel2D))
             };
             var registry = new ExternalFunctionRegistry(methods.Select(item =>
                 new ExternalFunction(item.Name, typeof(FSOUND).GetMethod(item.Method)!)));
             var source = """
                 Global sample%
                 Global channel%
+                Global spatial%
                 Print FSOUND_Init(44100,8,0)
+                Print FSOUND_SetSpatialSettings(1,1,1,343.3)
+                Print FSOUND_SetListener3D(0,0,0,0,0,0,0,0,1,0,1,0)
                 sample%=FSOUND_Sample_Load("tone.wav",0)
                 Print sample%>0
+                spatial%=FSOUND_PlaySample3D(sample%,10,0,0,0,0,0)
+                Print spatial%>0
+                Print FSOUND_SetChannel3D(spatial%,10,0,0,0,0,0,0.5,50)
+                Print FSOUND_SetChannel2D(spatial%)
+                Print FSOUND_StopSound(spatial%)
                 channel%=FSOUND_PlaySample(sample%)
                 Print channel%>0
+                Print FSOUND_GetPosition(channel%)
                 Print FSOUND_SetVolume(channel%,64)
                 Print FSOUND_GetVolume(channel%)
                 Print FSOUND_SetPan(channel%,0)
@@ -216,7 +231,7 @@ public sealed class PlaybackFunctionalTests
             catch (OperationCanceledException) { process.Kill(true); throw; }
 
             Assert.Equal(0, process.ExitCode);
-            Assert.Equal("1\n1\n1\n1\n64\n1\n0\n1\n22050\n1\n1\n1\n1\n", (await stdout).Replace("\r\n", "\n"));
+            Assert.Equal("1\n1\n1\n1\n1\n1\n1\n1\n1\n0\n1\n64\n1\n0\n1\n22050\n1\n1\n1\n1\n", (await stdout).Replace("\r\n", "\n"));
             Assert.Equal("", await stderr);
         }
         finally { Directory.Delete(directory, true); }

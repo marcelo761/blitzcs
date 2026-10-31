@@ -1,7 +1,11 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Blitz3DCS.Runtime/Blitz3DCS.Runtime.csproj" />
+    <Project Path="src/Blitz3DCS.Engine/Blitz3DCS.Engine.csproj" />
+    <Project Path="src/Blitz3DCS.Windowing/Blitz3DCS.Windowing.csproj" />
     <Project Path="src/Blitz3DCS.Audio/Blitz3DCS.Audio.csproj" />
+    <Project Path="src/Blitz3DCS.Graphics.D3D11/Blitz3DCS.Graphics.D3D11.csproj" />
+    <Project Path="src/Blitz3DCS.Engine.Windows/Blitz3DCS.Engine.Windows.csproj" />
     <Project Path="src/BlitzCS.LegacyRuntime/BlitzCS.LegacyRuntime.csproj" />
     <Project Path="src/BlitzCS.CLI/BlitzCS.CLI.csproj" />
     <Project Path="src/BlitzCS.Compiler/BlitzCS.Compiler.csproj" />
@@ -14,8 +18,12 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BlitzCS.CLI.Tests/BlitzCS.CLI.Tests.csproj" />
+    <Project Path="tests/Blitz3DCS.Windowing.Tests/Blitz3DCS.Windowing.Tests.csproj" />
+    <Project Path="tests/Blitz3DCS.Engine.Tests/Blitz3DCS.Engine.Tests.csproj" />
     <Project Path="tests/BlitzCS.OriginalRuntime.Host.Tests/BlitzCS.OriginalRuntime.Host.Tests.csproj" />
     <Project Path="tests/Blitz3DCS.Audio.Tests/Blitz3DCS.Audio.Tests.csproj" />
+    <Project Path="tests/Blitz3DCS.Graphics.D3D11.Tests/Blitz3DCS.Graphics.D3D11.Tests.csproj" />
+    <Project Path="tests/Blitz3DCS.Engine.Windows.Tests/Blitz3DCS.Engine.Windows.Tests.csproj" />
     <Project Path="tests/BlitzCS.Compiler.Tests/BlitzCS.Compiler.Tests.csproj" />
     <Project Path="tests/BlitzCS.NativeInterop.Tests/BlitzCS.NativeInterop.Tests.csproj" />
     <Project Path="tests/BlitzCS.BinaryCompiler.Tests/BlitzCS.BinaryCompiler.Tests.csproj" />
@@ -25,5 +33,6 @@
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/WinTestRunner/WinTestRunner.csproj" />
+    <Project Path="tools/GenerateWindowsRuntimeCatalog/GenerateWindowsRuntimeCatalog.csproj" />
   </Folder>
 </Solution>

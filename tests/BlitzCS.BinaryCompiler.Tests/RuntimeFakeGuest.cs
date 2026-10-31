@@ -48,7 +48,7 @@ internal sealed class FakeGuest
             Export("callimp_twice", GuestCallingConvention.Cdecl, null);
         }
         var size = image.SizeOfImage;
-        var artifact = new TranslationArtifact(1, image.Sha256, "fake", image.ImageBase, size, host, 0x1000, 0, (uint)Thunks, (uint)Ctx,
+        var artifact = new TranslationArtifact(ArtifactSerializer.CurrentVersion, image.Sha256, "fake", image.ImageBase, size, host, 0x1000, 0, (uint)Thunks, (uint)Ctx,
             offsets["enter"], size, size + 0x10,
             withEntry ? [new AddressMapEntry(image.EntryPointRva, offsets["dllmain"])] : [], exports, image.Imports, [],
             TargetOs: abi == FakeGuestAbi.Win64 ? BinaryTargets.WindowsX64 : null);   // null = legacy = linux-sysv (what these tests always used)

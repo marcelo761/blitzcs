@@ -37,8 +37,12 @@ An API that no service registers is absent: `Resolve` returns null, so `GuestMod
 | Msvcrt (cdecl) | malloc, calloc, realloc, free, memcpy, memmove, memset, memcmp, memchr, strlen, strcmp, _stricmp, strncmp, strcpy, strncpy, strcat, strchr, strrchr, strstr, abs, labs, atoi, toupper, tolower, sprintf, _snprintf |
 | Msvcrt.Runtime (cdecl) | `_initterm`, `_initterm_e` (callbacks into guest code), `_errno`, `_ftol` (x87 argument, EDX:EAX result), `_CIpow` (ST1/ST0 arguments, ST0 result), sin, cos, atan, log, pow, sqrt, fabs, floor, fmod, ldexp, frexp (double stack arguments, ST0 result), clock, rand, srand, qsort, `_vsnprintf`, wcstombs, `operator new` / `operator delete`, fopen/fclose/fread/fseek/ftell (binary modes only), `_isctype`; DATA exports `__mb_cur_max` (1), `_adjust_fdiv` (0), `_pctype` ("C" locale class table) |
 | Kernel32.Extra | CreateThread (real host thread running the guest routine), ResumeThread, GetExitCodeThread, Set/GetThreadPriority (recorded, host scheduling unchanged), DisableThreadLibraryCalls, GetSystemDirectoryA, GetWindowsDirectoryA, GetDriveTypeA (only C:), OutputDebugStringA (host sink or dropped) |
+| Kernel32.Resources | FindResourceA/W, FindResourceExA/W, LoadResource, LockResource, SizeofResource, FreeResource: the module's `.rsrc` directory is parsed in its mapped image (module NULL = main exe; MAKEINTRESOURCE ids, `#n` strings, case-insensitive names; language fallback; ERROR_RESOURCE_TYPE/NAME/LANG/DATA_NOT_FOUND). HRSRC is the data-entry address, LoadResource the data address in the image. No EnumResource*/UpdateResource |
+| Kernel32.Srw | InitializeSRWLock, Acquire/Release/TryAcquire SRWLock Exclusive/Shared, InitializeConditionVariable, SleepConditionVariableCS/SRW, WakeConditionVariable, WakeAllConditionVariable (host state keyed by the guest word; releasing an unheld lock, exclusive self re-acquire and a CS held more than once in SleepConditionVariableCS raise `Win32UsageException`; timeout = ERROR_TIMEOUT) |
+| Kernel32.Time | GetSystemTime, GetLocalTime, SystemTimeToFileTime, FileTimeToSystemTime (1601..30827), GetTimeZoneInformation, SystemTimeToTzSpecificLocalTime (`Win32Options.TimeZone`, default host zone), GetDateFormatW / GetTimeFormatW (invariant and en-US only; other locales fail with ERROR_INVALID_PARAMETER) |
+| Winmm (timer resolution) | timeGetDevCaps, timeBeginPeriod, timeEndPeriod: the host's winmm on a Windows host (the period changes the host timer resolution); elsewhere caps 1..1000000 ms and TIMERR_NOCANDO (97) for a period out of range or an unmatched timeEndPeriod |
 | Winmm | waveOutGetNumDevs / waveInGetNumDevs / mixerGetNumDevs = 0; every device-id call fails with MMSYSERR_BADDEVICEID (numbered device) or MMSYSERR_NODRIVER (WAVE_MAPPER); every handle call fails with MMSYSERR_INVALHANDLE (no open can succeed); timeGetTime; timeSetEvent (TIME_CALLBACK_FUNCTION, one-shot/periodic, real host timer thread) and timeKillEvent. No mci* |
-| Winsock.Core | htonl, htons, ntohl, ntohs, WSAStartup, WSACleanup, WSAGetLastError, WSASetLastError, `__WSAFDIsSet` (WSOCK32 by ordinal 8, 9, 14, 15, 111, 112, 115, 116, 151, checked against a Windows-compatible export table; WS2_32 by name). No socket/connect/send/recv/select |
+| Winsock.Core | htonl, htons, ntohl, ntohs, WSAStartup, WSACleanup, WSAGetLastError, WSASetLastError, `__WSAFDIsSet` (WSOCK32 and WS2_32 by name and by ordinal 8, 9, 14, 15, 111, 112, 115, 116, 151, checked against Windows-compatible export tables). No socket/connect/send/recv/select |
 | Winsock | inet_addr, inet_ntoa for WSOCK32 (by name and ordinals 10/11, checked against a Windows export table) and WS2_32 (by name) |
 
 ## Documented behaviour relied on, and approximations
@@ -59,7 +63,8 @@ ERROR_ALREADY_EXISTS).
     (the memory is private, so no copy ever happens; VirtualQuery reports what was requested); `PAGE_NOCACHE`/`PAGE_WRITECOMBINE` are accepted and have no effect.
     The managed accessors (`GuestMemory.Read/Write`) apply the same rules, so a host write into a read-only page throws `GuestMemoryException`; a guest write is a hardware fault.
   * `PAGE_EXECUTE*` on guest data is recorded (VirtualQuery reports it) but the host never maps it executable (W^X): the page stays readable, and writable when requested.
-    Jumping into it ends in the ordinary "untranslated target" trap (`GuestTrapException`, kind 1, with the address), never in native execution.
+    Jumping into it never executes it natively: on windows-x64 the code there is translated at run time and its pages are write guarded (docs/binary-dynamic-code.md);
+    on linux-x64 it is a named trap (`GuestTrapException`, kind 1, with the address). Pages so translated (`GuestPageKind.DynamicCode`) follow the code rules below.
   * Pages of translated code (every page of an executable section of a translated image): a request that makes them writable (`READWRITE`, `WRITECOPY`, `EXECUTE_READWRITE`,
     `EXECUTE_WRITECOPY`) throws `Win32SelfModifyingCodeException` (a `Win32UsageException`; the guest call fails with `GuestImportException` whose inner exception it is) naming the
     module, the page range and the requested protection. `READONLY`, `EXECUTE` and `EXECUTE_READ` are no-ops that report `PAGE_EXECUTE_READ` as the old protection; `PAGE_NOACCESS`
@@ -103,6 +108,8 @@ ERROR_ALREADY_EXISTS).
   `CoCreateInstance` never returns S_OK: no COM server is loaded by this component. It returns CO_E_NOTINITIALIZED before `CoInitialize`,
   REGDB_E_CLASSNOTREG for an unregistered class, CLASS_E_CLASSNOTAVAILABLE when the virtual registry names a server that cannot be hosted here, and
   always NULLs `*ppv`. Hosting an in-proc server through an explicit host registration API is out of scope.
+- **user32** on a Windows host: bridged to the host's user32/gdi32/ddraw/dinput8 by default (docs/binary-user32-bridge.md). The sandbox subset below is what a non-Windows host and
+  `Win32Options.HostWindowing = None` get.
 - **user32** (`User32BasicService`): `GetDesktopWindow` returns the opaque sandbox handle `0x00010010`; `IsWindow`/`IsWindowVisible`/`MessageBoxA` validate
   HWNDs (ERROR_INVALID_WINDOW_HANDLE). `MessageBoxA` calls `Win32Options.MessageBoxHandler`; without one it faults naming `user32!MessageBoxA`. Every other
   window API is unresolved and faults by name.
@@ -159,3 +166,70 @@ and the cdecl MSVCRT functions through its IAT. Win32 semantics cannot be observ
 from the documentation rather than compared with native execution. Tests that analyse real binaries read the directory from
 `BLITZCS_REAL_PE32_DIR` and do nothing when it is unset; no binary is copied into the repository. Guest-loading tests belong to the xunit
 collection `GuestRuntime`.
+
+
+## Running an EXE (BcRun) and the start-up set
+
+`tools/BcRun` (`dotnet run --project tools/BcRun -- <exe> [--target windows-x64|linux-x64] [--base 0x..] [--allow-errors] [--env N=V] [--sandbox DIR] [--cache-dir DIR] [--no-guest-dlls] [--verbose] [--trace] -- <args>`)
+reads the PE32 EXE, picks a base with `ModuleBaseAllocator` for the host (windows-x64 needs >= 0x20000000; the artifact only runs on its own OS, so a windows-x64 run is a
+win-x64 publish of BcRun under Wine), translates (`--allow-errors` lets unsupported sites become named traps), builds the Win32 environment (command line `"C:\name.exe" args`,
+`MainModuleBase` = the loaded base, OS version = the image's declared version through `Win32ProcessInfo.VersionForImage`, stdio = BcRun's own, `C:\` = the sandbox directory, default the EXE's directory),
+loads the module and calls `RunExecutable`. The exit code of BcRun is the guest's (125 = the run itself failed). The host environment is never inherited (`--env`).
+
+New services (Kernel32.Startup, Kernel32.Wide; the class summaries are the contract): GetStartupInfoW, GetCommandLineW, GetModuleFileNameW, GetModuleHandleW/ExW/ExA, LoadLibraryW/ExW/ExA,
+GetSystemTimeAsFileTime, GetTickCount64, IsDebuggerPresent, IsProcessorFeaturePresent (CPUID of the host; PF_FASTFAIL_AVAILABLE false), UnhandledExceptionFilter (EXCEPTION_CONTINUE_SEARCH),
+Encode/DecodePointer, the SList family, Fls*, HeapSetInformation, InitializeCriticalSectionEx, CreateFileW, FindFirstFileExW/FindNextFileW, GetFileSizeEx, SetFilePointerEx,
+GetConsoleMode/CP/OutputCP, WriteConsoleA/W, ReadConsoleW (a console only when `Win32Options.Std*IsConsole`; redirected handles fail with ERROR_INVALID_HANDLE like Windows),
+Get/SetCurrentDirectoryA/W (relative file names resolve against it), GetFullPathNameA/W, Get/SetEnvironmentVariableW/A (the environment is mutable per process), GetUserDefaultLCID, IsValidLocale,
+EnumSystemLocalesW, GetLocaleInfoW (subset; other LCTYPEs raise `Win32UsageException`), CompareStringW (code-unit order, NORM_IGNORECASE/SORT_STRINGSORT only), LCMapStringEx, IsValidCodePage.
+The virtual machine has exactly one locale, en-US. Deliberately absent: RaiseException and RtlUnwind (no structured-exception dispatcher; they fault by name).
+
+## Guest DLLs (LoadLibrary of a DLL in the sandbox)
+
+`GuestLibraryLoader` (set in `Win32Options.GuestLibraries`; BcRun creates one unless `--no-guest-dlls`) makes `LoadLibraryA/W/ExA/ExW`, `GetModuleHandleA/W/ExA/ExW`, `GetModuleFileNameA/W`,
+`GetProcAddress` and `FreeLibrary` work for guest DLLs. Emulated DLLs (kernel32, user32, ...) and host-registered modules keep their old behaviour and are looked up first.
+
+* **Lookup.** A name with a directory is resolved as written through the file sandbox (`C:\bin\linker.dll`, case-insensitive, drive letter mapped); a bare name is searched in the
+  directory of the main module, the sandbox root and the current directory; `.dll` is appended when there is no extension. Missing: `NULL` + `ERROR_MOD_NOT_FOUND` (126). Not a
+  translatable PE32 DLL (garbage, an EXE, translation Errors without `--allow-errors`): `ERROR_BAD_EXE_FORMAT` (193). `LOAD_LIBRARY_AS_DATAFILE`, `DONT_RESOLVE_DLL_REFERENCES` and the
+  image-resource flags: `ERROR_NOT_SUPPORTED`.
+* **Loading.** The DLL is translated on its first load (`TranslationCache` when `--cache-dir` is set: the second run is a cache hit), at a base chosen by `ModuleBaseAllocator` that avoids every
+  module already loaded (`windows-x64`: >= 0x20000000; rebased through `PeImage.Rebase`), added to the SAME `GuestModuleSet` as the EXE with its own `Win32ImportResolver`/`Win32Context`
+  (own heap, handles, TLS), then `DllMain(DLL_PROCESS_ATTACH)` runs. `FALSE` or a fault: `NULL` + `ERROR_DLL_INIT_FAILED` (1114) and the module is removed again. DLLs the DLL imports and that
+  are found in the sandbox are loaded first (reference counted); imports that are neither emulated nor in the sandbox stay unbound and fault by name when called.
+  The set serialises Add/LoadAll/Unload with one lock; loading only adds new modules at new bases and links the memories of the peers (copy-on-write arrays), so running guest code is not disturbed.
+* **HMODULE** = the module's guest base. Repeated loads return the same HMODULE and count references; `GetModuleHandleEx` without flags adds one, `PIN` keeps the module for the process,
+  `UNCHANGED_REFCOUNT` adds none. `FreeLibrary` decrements; at zero `DLL_PROCESS_DETACH` + unload run. A module another loaded module still
+  imports from stays loaded (diagnosed). `GetModuleFileName(hmod)` returns `C:\<path inside the sandbox>`.
+* **GetProcAddress** on a guest module returns the REAL guest address, as Windows does: module base + export RVA (code and data exports alike; a forwarder resolves to the address it
+  forwards to, through the set or to an implemented API). Programs do arithmetic with it (blitzcc's linker.dll computes the entry RVA of runtime.dll as `GetProcAddress(...) - base`), so
+  no stub stands in between. A call through it is an ordinary indirect call: the dispatch miss of the calling module consults the process-wide module registry and enters the export's
+  translated code (docs/binary-multimodule.md); the callee pops its own arguments on the shared guest stack, so cdecl, stdcall, thiscall and a bare `jmp [iat]` thunk export all work
+  without any calling-convention knowledge or inference. By ordinal or by name the answer is the same address; asking twice returns it twice. The dynamic stub pool
+  (`DynamicStubs`, `GuestLibraryOptions.DynamicStubsForLoaders`) remains only for what has no guest address of its own: GetProcAddress on emulated system DLLs and COM vtables.
+* **Per-module Win32 state.** Each module has its own context: heap, handles (files, events), TLS, FLS, environment snapshot and current directory are not shared between the EXE and a DLL
+  (a HANDLE or a heap block from one module is meaningless in another). The module table, the sandbox and `Win32Options` are shared. A pointer to guest memory of any module is valid in all of them.
+* **Known limit (next blocker for blitzcc.exe):** a function pointer or C++ vtable that crosses a module boundary (the EXE calls a virtual method of an object a DLL returned) traps in the caller,
+  whose dispatch table only knows its own code (docs/binary-multimodule.md, Limits).
+
+
+## One process, one Win32 state (modules of a GuestModuleSet)
+
+Windows has one process heap, handle table, TLS/FLS index space, environment, current directory, command line and module list per process. `new GuestModuleSet(name => new Win32ImportResolver(...))` (one resolver, one `Win32Context` per module) is still allowed and still means
+"separate processes"; the modules of one *program* use `Win32ImportResolver.SharedFactory(options)` (what `GuestLibraryLoader` and `BcRun` do) or `resolver.ForAnotherModule()`: the views share the registry, the service instances and **one `Win32Context`** (refcounted: the context is disposed with the last view).
+
+What is process-wide: the default and private heaps (`GetProcessHeap`/`HeapAlloc` in one module, `HeapFree` in another; CRT `malloc`/`free`), virtual memory, the handle table (events, mutexes, files, threads), critical sections, `TlsAlloc`/`FlsAlloc` indices (the value per thread), `GetLastError`/`SetLastError`
+(per thread), the registry, the environment block, command line, current directory, the module list (`GetModuleHandle`, `LoadLibrary` bookkeeping), the process fault flag. What stays per module: `GuestModule.Current` (stub provider and `AllocateStub` pool, DllMain reason bookkeeping, `GetModuleHandle(NULL)` = `Win32Options.MainModuleBase`).
+
+Memory: reads and writes go through the calling module's `GuestMemory`, which sees every module's regions (peers are linked when a module joins, before its DllMain runs). Allocations (heaps, virtual memory, permanent strings, COM objects) come from the first module that used the context, which is pinned
+(`GuestMemory.PinAsProcessAnchor`): `GuestModuleSet.Unload` refuses it while other modules are loaded. In the LoadLibrary flow that is the executable. Tests: `SharedWin32StateTests` (heap, CRT heap, TLS index, last error, event and critical section across two DLLs; the per-module resolver variant is the mutation witness).
+
+## File and path contracts for the compile-and-link path (FilePathService)
+
+Sandboxed like `FileService` (same path translation, case folding and handle table). The class summary of `FilePathService` is the contract. CopyFileA/W and CopyFileExA/W (ERROR_FILE_EXISTS 80 with
+bFailIfExists, ERROR_FILE_NOT_FOUND 2 / ERROR_PATH_NOT_FOUND 3, the target is overwritten otherwise, last-write time and read-only attribute are copied; progress routine and cancel flag are refused with
+ERROR_NOT_SUPPORTED), DeleteFileA/W, MoveFileA/W, MoveFileExA/W (ERROR_ALREADY_EXISTS 183 unless MOVEFILE_REPLACE_EXISTING; delay-until-reboot refused), GetFileAttributesA/W (replaces the former A-only
+version in `FileService`), GetFileAttributesExA/W, SetFileAttributesA/W (only READONLY is representable on the host), GetFileTime, SetFileTime, CreateDirectoryA/W, RemoveDirectoryA/W (ERROR_DIR_NOT_EMPTY 145),
+GetTempPathA/W (`C:\Temp\`), GetTempFileNameA/W, SearchPathA/W, GetLongPathNameA/W. Already present: GetFileSize(Ex), SetFilePointer(Ex), SetEndOfFile, FlushFileBuffers, Get/SetCurrentDirectory,
+GetFullPathName, CreateFile dispositions, FindFirst/NextFile. Not provided (no caller): GetShortPathName (no 8.3 names), CopyFile with a progress routine.
+Verified by `tests/BlitzCS.BinaryCompiler.Win32.Tests/FilePathTests.cs` and by the original blitzcc.exe finishing `-o` on both BcRun targets (docs/blitz3d-readiness.md, S6).

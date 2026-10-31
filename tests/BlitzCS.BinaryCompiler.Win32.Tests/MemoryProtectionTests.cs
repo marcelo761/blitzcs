@@ -108,7 +108,7 @@ public sealed class MemoryProtectionTests : IDisposable
             var smc = Assert.IsType<Win32SelfModifyingCodeException>(e.InnerException);
             Assert.IsAssignableFrom<Win32UsageException>(smc);
             Assert.Contains("self-modifying code", smc.Message);
-            Assert.Contains("ahead-of-time translation cannot honour", smc.Message);
+            Assert.Contains("translation cannot honour", smc.Message);
             Assert.Contains("translated module at base 0x" + Base.ToString("X8"), smc.Message);
             Assert.Contains($"0x{code & ~0xFFFu:X8}", smc.Message);
             Assert.Contains($"0x{writable:X}", smc.Message);
@@ -186,14 +186,23 @@ public sealed class MemoryProtectionTests : IDisposable
     }
 
     [Fact]
-    public void Jumping_into_guest_generated_code_traps_instead_of_running_it()
+    public void Guest_generated_code_is_translated_never_run_natively()
     {
         var p = Alloc(4096, 0x40);   // PAGE_EXECUTE_READWRITE: the guest generates code here
         Assert.Equal(0x40u, Query(p).Protect);
         module.Memory.Write(p, [0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3]);   // mov eax, 42 ; ret
-        var trap = Assert.Throws<GuestTrapException>(() => module.Bind("callp", GuestCallingConvention.Cdecl, 1).Call(p));
-        Assert.Contains($"0x{p:X8}", trap.Message);
-        Assert.Contains("untranslated code", trap.Message);
-        module.Bind("nop", GuestCallingConvention.Cdecl, 0).Call();   // the module survived the trap
+        if (OperatingSystem.IsWindows())
+        {
+            // Translated at run time (docs/binary-dynamic-code.md); the host page itself never becomes executable.
+            Assert.Equal(42u, module.Bind("callp", GuestCallingConvention.Cdecl, 1).Call(p));
+            Assert.Equal(0x40u, Query(p).Protect);
+        }
+        else
+        {
+            var trap = Assert.Throws<GuestTrapException>(() => module.Bind("callp", GuestCallingConvention.Cdecl, 1).Call(p));
+            Assert.Contains($"0x{p:X8}", trap.Message);
+            Assert.Contains("only the windows-x64 runtime has", trap.Message);
+        }
+        module.Bind("nop", GuestCallingConvention.Cdecl, 0).Call();   // the module survived
     }
 }

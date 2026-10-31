@@ -203,7 +203,7 @@ What the six images need beyond that, in the order a start-up reaches it:
 | 9 | **Command line and environment**: `Win32Options.CommandLine` default `program.exe`; environment blocks are served empty by default and read from the host never | `ProcessService.cs` | present, defaults must be set per run |
 | 10 | **Dynamic loading of guest DLLs** (`LoadLibraryExW`) | blitzcc.exe strings name `runtime.dll`, `linker.dll`, `debugger.dll` (not traced); Win32 `LoadLibraryA` serves emulated system DLLs and registered host modules only | missing for guest DLLs |
 | 11 | `fs:` offsets used: `0x00`, `0x18`, `0x30` only (non-speculative code), all modelled; `gs:` used once, in the data region of blitzcc.exe | `BC_SEGMENT_OVERRIDE` | no gap |
-| 12 | SEH: `__try` chains are built (see `docs/binary-seh.md`); exception dispatch is not needed for a normal run | decision in that document | none now |
+| 12 | SEH: `__try` chains are built; software-exception dispatch (`RaiseException`, `RtlUnwind`) is implemented for frame-based SEH within one guest call (see `docs/binary-seh.md`, "Implementation") | `SehDifferentialTests`, `BlitzccDifferentialTests` | hardware faults and the cases listed there stay named faults |
 
 ## 5. Ranked next mechanisms and recommended order
 
@@ -211,14 +211,14 @@ Each item is reusable beyond Blitz3D (any MSVC-built PE32). Counts are from sect
 
 | rank | mechanism | evidence (exact counts) | unblocks |
 |---|---|---|---|
-| 1 | **Lower reads of segment registers** (`mov r/m16, sreg`, `push sreg`): store the flat-model selectors (the values a WoW64 process sees: `cs=0x23`, `ss=ds=es=gs=0x2B`, `fs=0x53`) and keep `pop sreg`/`mov sreg, r` as named faults | 115 + 10 + 1 reachable sites, 6/6 images, 5 CRT functions per image; 421 more speculative | with rank 2: ide.exe, linker.dll, runtime.dll become error-free by this survey's counts |
+| 1 | **Lower reads of segment registers** (`mov r/m16, sreg`, `push sreg`): store the flat-model selectors (the values expected for a WoW64 process on windows-x64 (`cs=0x23`, `ss=ds=es=gs=0x2B`, `fs=0x53`; documented values, NOT validated against real Windows hardware: the PE32 oracle under Wine reads `fs=0x63`, `gs=0x6B`, Wine's own GDT); linux-sysv reads `fs=gs=0`, as the ELF32 oracle does) and keep `pop sreg`/`mov sreg, r` as named faults | 115 + 10 + 1 reachable sites, 6/6 images, 5 CRT functions per image; 421 more speculative | with rank 2: ide.exe, linker.dll, runtime.dll become error-free by this survey's counts |
 | 2 | **`int 29h` as a named fail-fast trap** (ECX = failure code), distinct from the generic trap kind | 25 reachable, 6/6 images; 11 speculative | same |
 | 3 | **A virtual CPU model for `cpuid`/`xgetbv`/`IsProcessorFeaturePresent`** (no AVX/AVX2/OSXSAVE, SSE2 baseline, stable vendor/family) and a policy for VEX in code that is dormant under that model (a deferred run-time trap reported as a Warning, not a load-blocking Error) | 20 reachable VEX sites in 3 images (Blitz3D.exe 8, blitzcc.exe 8, debugger.dll 4); 85 speculative; cpuid is host-passthrough today, so detection would pick AVX2 on a modern host | Blitz3D.exe, debugger.dll; also removes a host-dependent result |
 | 4 | **Data-in-code**: do not let a fall-through sweep or imprecise root turn address tables in `.text` into reachable code (stop at unconditional terminators; reject runs that decode as `arpl/bound/lds/les/in/out/push es`) | blitzcc.exe: 3 regions, 17 blocking `BC_UNSUPPORTED_INSTRUCTION` + 1 `BC_SEGMENT_OVERRIDE`; 747 speculative warnings overall, 134 of them ring-0 opcodes | blitzcc.exe |
 | 5 | **EXE entry path** (`GuestModule`/`BinaryLibrary` run `mainCRTStartup`, map `Win32ExitProcessException` to an exit code, set `MainModuleBase` and the PEB image base from the loaded module, command line, stdio) | 3 EXEs; none runnable today | any EXE |
 | 6 | **PEB completeness**: `ProcessParameters` (with `RTL_USER_PROCESS_PARAMETERS`: Flags, ImagePathName, CommandLine, Environment), `NtGlobalFlag`, `ProcessHeap`, OS version, `Ldr`; and make an unmodelled PEB read fail loudly instead of reading a zero page | 2 distinct PEB reads per image in non-speculative code (offsets +0x10 and +0x68) | any MSVC 2015+ image |
 | 7 | **kernel32 modern-CRT set** (21 functions in the entry closure of all six images, 8 more in five) plus Unicode/locale/console variants | counts in section 3: absent 12-13 + 8-18 + 4-5 functions per image in the CRT/wide/SEH groups | the start-up of every image |
-| 8 | **`RaiseException`/`UnhandledExceptionFilter` as a named terminal fault**, then (only if a scenario needs it) software exceptions as designed in `docs/binary-seh.md` | blitzcc.exe: 44 reachable `throw` sites, 33 in the entry closure; 0 reachable `RtlUnwind` | compile-error paths of blitzcc.exe |
+| 8 | **Software exceptions** (`RaiseException`, `RtlUnwind`): done, see `docs/binary-seh.md` ("Implementation"); an unhandled one is the named `GuestUnhandledException` | blitzcc.exe: 44 reachable `throw` sites, 33 in the entry closure | compile-error paths of blitzcc.exe (done, see below) |
 | 9 | **Guest `LoadLibrary`/`GetProcAddress` for DLLs of the same set** (`ModuleLinker` exists; the Win32 `LoadLibrary` does not consult it) | blitzcc.exe's string table names runtime.dll/linker.dll/debugger.dll | blitzcc.exe driving linker.dll |
 | 10 | **Window/message contract** (user32 + gdi32 + a headless window sink): 35 + 14 functions for runtime.dll, 232 + 108 for the IDEs | 74 + 19 call sites in runtime.dll; 6,413 + 1,005 in debugger.dll | runtime.dll start-up (it creates windows in its initialisation path, not traced) |
 | 11 | **DirectX/COM creation contracts** (`DirectDrawCreateEx`, `DirectInput8Create`, `DirectXFileCreate` return COM objects) and winmm timers (`timeGetDevCaps/BeginPeriod/EndPeriod`, 4 functions) | runtime.dll only: 4 creation functions, 11 call sites; the DirectDraw/Direct3D surface behind them is the large part and is explicitly not started here | Blitz3D programs, graphics |
@@ -234,3 +234,202 @@ blitzcc.exe (kernel32 only; 35 absent functions), followed by linker.dll (33). N
 2. **`docs/binary-abi-coverage.md` is stale on static TLS** ("Unsupported ... Refused at translation/load" vs `TLS_HANDLED`; the three SDK images with a TLS directory translate without `BC_TLS_UNSUPPORTED`). Not edited (owned by another agent).
 3. **`cpuid` is host passthrough**, which makes the CRT feature detection, and therefore the executed code path, depend on the host CPU. Not a crash by itself, but a reproducibility hazard; rank 3.
 4. **Survey tool memory**: translating and building the CFG for the 2 MB images peaks at about 1.5 GB RSS (two passes per image, both keep full instruction maps). Fine for a survey, relevant if the same CFG is ever built twice in production.
+
+## Run log: blitzcc.exe under BCSBRE (S2)
+
+Mechanisms added: `tools/BcRun`, `GuestModule.RunExecutable` (EXE entry path, `IGuestProcessExit`), PEB ProcessParameters/Ldr/OS fields (`docs/binary-teb-contract.md`), and the
+kernel32 start-up/wide set (`docs/binary-win32.md`). The image was extracted into a fresh directory from `Blitz3D-V1.118.zip` and never executed directly; every run below is the
+translated guest. Translation used `--allow-errors` (S1's removal of the reachable unsupported-instruction Errors was not yet in): 0 traps fired on the start-up path
+(the Errors are `cli`, `bound`, `arpl`, segment-register push/pop, `in/out`, `int1`, `insb` in data-in-code regions that are never executed).
+
+Observed runs (SDK root as sandbox, `--env blitzpath=C:\`; reported OS 6.0.6002 from the image's declared 6.0):
+
+| target | args | stdout | exit code |
+|---|---|---|---|
+| linux-x64 (native, base 0x10000000) | none | `Can't find blitzpath environment variable` (without the env var) | 0xFFFFFFFF (255) |
+| linux-x64 | none, `-h` | `Unable to open linker.dll` | 0xFFFFFFFF (255 as a process status) |
+| linux-x64 | `+h` | `Usage error` | 255 |
+| windows-x64 (win-x64 BcRun under Wine, Proton 11.0, base 0x50000000) | none, `-h` | `Unable to open linker.dll` | 255 |
+
+The CRT start-up ran to completion, the program reached its own `main`, read `getenv("blitzpath")`, parsed its arguments and ended through ExitProcess.
+
+**Remaining blocker (exact):** the usage text ("Usage: blitzcc [-h|-q|+q|-c|-d|-k|+k|-v|-o exefile] [sourcefile.bb]", string at file offset 0x5D9E8) is printed only after blitzcc has loaded
+`<blitzpath>/bin/linker.dll` and `runtime.dll` and called their exports (`linkerGetLinker`, ...). The trace ends `KERNEL32.dll!LoadLibraryExW` (wide path of `C:\bin\linker.dll`) -> `GetLastError` ->
+`GetModuleHandleExW` -> `ExitProcess(-1)`. This needs **guest DLL loading from LoadLibrary**: translate the DLL, load it as a second `GuestModule` with its own resolver, register it in the
+module table with its export addresses, make those addresses callable from the EXE (bridge stubs, as `GuestModuleSet` does for static imports), and share memory visibility between the modules. The
+other unbound imports of the image, `RaiseException` and `RtlUnwind`, were not called on this path.
+
+### Guest DLL loading (S3)
+
+Mechanism: `GuestLibraryLoader` (docs/binary-win32.md, "Guest DLLs"): LoadLibrary of `C:\bin\linker.dll` / `C:\bin\runtime.dll` translates them on first use (cached with `--cache-dir`), loads them into the same
+`GuestModuleSet` as blitzcc.exe, runs DllMain and returns the guest base as HMODULE; GetProcAddress returns a stub of the EXE's dynamic pool that forwards to the export.
+
+Observed (SDK root as sandbox, `--env blitzpath=C:\`, `--allow-errors`; the EXE still reports 8 translation Errors here: `cli`, `arpl`, a gs-prefixed `jae` and others in data-in-code regions; linker.dll and
+runtime.dll translate with 0 Errors), `--verbose` log:
+
+```
+BcRun: loaded guest DLL C:\bin\linker.dll at 0x100A0000
+BcRun: GetProcAddress(linker!linkerGetLinker) -> stub 0x10081580 (cdecl; inferred from the export's ret instructions)
+BcRun: loaded guest DLL C:\bin\runtime.dll at 0x100F0000
+BcRun: GetProcAddress(runtime!runtimeGetRuntime) -> stub 0x10081590 (cdecl; inferred from the export's ret instructions)
+BcRun: GuestTrapException: Guest control flow reached untranslated code at 0x100A41D0 (indirect target not discovered at build time).
+```
+
+stdout: empty (0 bytes); BcRun exit code 125 (the run failed, not the guest). linux-x64: 4.3 s cold, 1.6 s with the translation cache. windows-x64 (win-x64 BcRun under Wine, Proton 11.0): the same log with
+bases 0x50000000 (EXE), 0x500A0000, 0x500F0000 and the same outcome. The usage text is not reached (blitzcc calls the linker object before it prints), so no source file could be compiled and no output file exists.
+
+**Next blocker (exact):** both exports return C++ interface objects (`Linker*`, `Runtime*`). blitzcc calls a virtual method through the vtable, whose slot holds a linker.dll code address
+(vtable slot at linker RVA 0x2139c -> RVA 0x41D0, a `mov eax, 0x2045e; ret`). The EXE's dispatch table only covers the EXE image, so the indirect call lands in the trap routine. The cross-module
+function pointer is the limit already documented in docs/binary-multimodule.md. A fix belongs in the code generator/runtime: a dispatch-miss fallback that recognises an address inside a peer module and
+jumps into the peer's translated code (done in S4; GetProcAddress now returns real addresses as well). Then runtime.dll
+start-up (imports DINPUT8, DDRAW, d3dxof, GDI32, SHELL32 are not provided) and the user32/gdi32 contracts follow.
+
+### Cross-module dispatch and one Win32 state (S4)
+
+Mechanism: the dispatch-miss routine consults the process-wide module registry and continues in the other module (docs/binary-multimodule.md section 3); the modules of the set share one TEB per thread and one `Win32Context` (docs/binary-win32.md).
+Observed (extracted SDK as sandbox, `--env blitzpath=C:\`, `--allow-errors`, linux-x64, translation cache warm, 2-5 s):
+
+| args | stdout | exit |
+|---|---|---|
+| `-h` | `Usage: blitzcc [-h|-q|+q|-c|-d|-k|+k|-v|-o exefile] [sourcefile.bb]` followed by the option list | 0 |
+| `-v` | `Compiler version:11.18:SoLoud`, `Runtime version:11.18:SoLoud`, `Debugger version:0.0:`, `Linker version:11.18:SoLoud` | 0 |
+| `-c C:\tmp\hello.bb` (`Print "hi"` / `WaitKey`) | `BlitzCC V1.118`, copyright line, `Compiling "C:\tmp\hello.bb"`, `Parsing...`, `Generating...`, `Translating...`, `Assembling...` | 0 |
+| none | empty | 0 |
+| `+h` | `Usage error` | 255 |
+| `-o C:\tmp\hello.exe C:\tmp\hello.bb` | the lines above plus `Creating executable "C:\tmp\hello.exe"...` | 125 (BcRun failure) |
+
+`-o` fails with `GuestImportException: The guest called unbound import KERNEL32.dll!CopyFileA, which no host service provides.` (blitzcc copies its runtime stub; the trace shows `GetProcAddress(runtime!_bbWinMain@0)` and `FreeLibrary(runtime)` just before).
+**Next blocker (exact):** `KERNEL32!CopyFileA` (then writing the executable through the sandbox); the runtime.dll start-up (user32/gdi32/DirectDraw/DirectInput imports, `DINPUT8`, `DDRAW`, `d3dxof`, `GDI32`, `SHELL32` are reported as not provided) has not been reached because `-v`/`-c` only call the version/compile virtuals, which do not initialise it.
+
+### Base independence of the code/data decision
+
+For images with a base relocation table the control-flow graph no longer depends on the load base. A fixup can only sit inside the displacement or immediate field of an instruction, so a decoded instruction that overlaps a relocated dword anywhere else (opcode, prefix, ModRM or SIB bytes) is an absolute-address table inside `.text` and is treated as data; the data-run trial decode uses the same test. The older heuristics (function-start trial decode, data after a call, rejected-mnemonic list) remain the fallback for images without relocations. Measured on the six SDK images, translating at 0x10000000 and at 0x50000000 yields identical sets of translated instruction RVAs, and the 8 spurious `BC_UNSUPPORTED_INSTRUCTION` errors seen in `blitzcc.exe` at 0x10000000 are gone (a fixed base the target cannot use still reports `BC_BASE_UNUSABLE_ON_TARGET`, which is a target policy and independent of this rule).
+
+### Compile and link finish (S6)
+
+The only missing contract was `KERNEL32!CopyFileA` (new `FilePathService`, below); no window, DirectX or registry access was needed for `-o`. SDK copy as writable sandbox (`C:\` = sandbox), `--env blitzpath=C:\`, `--allow-errors`.
+Verbatim stdout of `blitzcc -o C:\tmp\srcN.exe C:\tmp\srcN.bb` (BcRun exit 0 on linux-x64 and on windows-x64 under Wine/Proton 11.0):
+
+```
+BlitzCC V1.118
+(C)opyright 2000-2003 Blitz Research Ltd
+Compiling "C:\tmp\src1.bb"
+Parsing...
+Generating...
+Translating...
+Assembling...
+Creating executable "C:\tmp\src1.exe"...
+```
+
+| source | output | size | head |
+|---|---|---|---|
+| src1: `Print "hello"` | src1.exe | 1126912 | `MZ`, `PE\0\0` at e_lfanew, machine 0x014C |
+| src2: loop + function + Dim array + Type + While (20 lines) | src2.exe | 1127936 | same |
+| src3: `Include "C:\tmp\inc.bb"` (second file in the sandbox) + call | src3.exe | 1126912 | same (content differs from src1) |
+
+`cmp` of the linux-x64 and windows-x64 outputs: byte-identical for all three. No produced exe was executed. Next step: compare against the native Wine reference compile of the same sources.
+
+## blitzcc compile-error path
+
+`blitzcc -c` on a source with an error (StartNetGame.bb, JoyUDir.bb in the SDK) reports the error with a C++ `throw` deep in the parser/semantic phase that blitzcc's `main` catches. With guest SEH
+(`docs/binary-seh.md`, "Implementation") BcRun prints exactly the native diagnostic and ends with `ExitProcess(0xFFFFFFFF)` (process status 255, as native under Wine): pinned by
+`BlitzccDifferentialTests.ACompileErrorInTheParserPrintsTheNativeDiagnosticAndExitCode` and `AnUnknownFunctionPrintsTheNativeDiagnosticAndExitCode` (linux-x64, and windows-x64 under Wine). A translator defect that hid
+this for JoyUDir (code before a throw helper call dropped by the data-after-call probe) is fixed. The corpus differential (`docs/blitz3d-reference.md`) now compares these two error runs too.
+
+## Produced executable start-up
+
+Static evidence only, measured at HEAD `bd30724`. The counts in sections 3 to 5 predate the current Win32 component (it now registers 156 of the 693 distinct imports, not 106) and are superseded here where they differ.
+
+Method and limits:
+* The SDK was extracted into a new empty temporary directory. Nothing from it was executed or copied into the repository.
+* No produced exe exists on this machine (no `/tmp/blitzcc-corpus.*`). Producing one runs `blitzcc.exe` through BcRun, and its `-o` path loads `runtime.dll` (`GetProcAddress(runtime!_bbWinMain@0)`, `FreeLibrary`), which executes that DLL's `DllMain`. That is excluded, so `bin/runtime.dll` is the proxy. The produced exe is runtime-sized (1,126,912 bytes against 1,126,400), but its import table was not read and the proxy is unverified.
+* Import tables: `tools/survey/pe_imports.py` (`python3 -I`, read-only).
+* Implemented or absent: `BcSurvey sdk` (`Win32ImportResolver.Analyze`, the registry verdict per `dll!name`).
+* Start-up set: `BcSurvey startup <pe> [export ...]` (`tools/survey/BcSurvey/Startup.cs`), the functions reached by direct calls and tail jumps from the entry or `DllMain` and from each export. Indirect calls are not followed. The `_bbWinMain@0` closure contains 253 indirect call sites, so the direct set is a lower bound.
+* Join: `tools/survey/startup_table.py`. Full per-name table: `tools/survey/startup-runtime-table.tsv` (210 rows, columns `implemented`, `group`, `direct_sites`, `upper_sites`, `roots`).
+
+| image | distinct imports | implemented | absent | absent in the direct start-up set |
+|---|---|---|---|---|
+| bin/runtime.dll (proxy for the produced exe) | 210 | 118 | 92 | 3 (from `_bbWinMain@0`); 0 from `DllMain` |
+| bin/blitzcc.exe | 82 | 82 | 0 | 0 |
+| Blitz3D.exe (IDE launcher, not on the path) | 74 | 70 | 4 | 4 (`CreateProcessA`, `GetDC`, `WaitForInputIdle`, `GetDeviceCaps`) |
+
+runtime.dll, by subsystem (`implemented / absent`; "direct" = absent with a call site in the `_bbWinMain@0` start-up set):
+
+| subsystem | imports | impl | absent | direct |
+|---|---|---|---|---|
+| user32 window/message | 37 | 2 | 35 | 0 |
+| ws2_32 (ordinals only) | 23 | 0 | 23 | 0 |
+| gdi32 / gdiplus | 14 | 0 | 14 | 0 |
+| kernel32 memory/resources | 11 | 7 | 4 | 3 |
+| kernel32 other / file / console / locale | 63 | 56 | 7 | 0 |
+| kernel32 sync/threads/TLS | 15 | 14 | 1 | 0 |
+| kernel32 CRT/startup, SEH, module loading | 26 | 26 | 0 | 0 |
+| DirectX/COM creation (ddraw, dinput8, d3dxof) | 4 | 0 | 4 | 0 |
+| winmm | 12 | 9 | 3 | 0 |
+| ole32 | 4 | 4 | 0 | 0 |
+| shell32 / shell-theme | 1 | 0 | 1 | 0 |
+| **total** | **210** | **118** | **92** | **3** |
+
+Top 10 blockers for the first frame, in start-up order:
+
+| rank | import(s) | implemented | subsystem | needed at start (static evidence) or later | headless with truthful semantics? |
+|---|---|---|---|---|---|
+| 1 | kernel32 `FindResourceA`, `LoadResource`, `LockResource` | no | kernel32 resources | **start**: one direct call each from `_bbWinMain@0` | yes: read the loaded image's resource directory |
+| 2 | user32 `RegisterClassA`, `CreateWindowExA`, `ShowWindow`, `UpdateWindow`, `DefWindowProcA`, `DestroyWindow`, `Get/SetWindowLongA`, `UnregisterClassA` | no | user32 window | later by direct closure; needed by any Graphics3D path (indirect calls only) | yes for handles and state (window sink), not for pixels |
+| 3 | user32 `PeekMessageA`, `GetMessageA`, `DispatchMessageA`, `PostMessageA`, `SetForegroundWindow` | no | user32 message | the frame loop (indirect) | yes: queue semantics |
+| 4 | DDRAW `DirectDrawCreateEx`, `DirectDrawEnumerateExA`; DINPUT8 `DirectInput8Create`; d3dxof `DirectXFileCreate` | no | COM creation | the Graphics3D path (indirect) | a failure HRESULT is truthful but ends Graphics3D; a frame needs a display host |
+| 5 | gdi32 `CreateCompatibleDC`, `DeleteDC`, `CreateFontA`, `SelectObject`, `DeleteObject`, `GetStockObject`, `GetTextMetricsA`, `GetTextExtentPoint32A`, `GetCharABCWidthsA`, `ExtTextOutA`, `SetTextColor`, `SetBkColor`, `Add/RemoveFontResourceA` | no | gdi32 | the Print path (indirect) | DC and object bookkeeping yes; metrics and pixels need a font engine and a host |
+| 6 | user32 `GetCursorPos`, `SetCursorPos`, `ShowCursor`, `SetCursor`, `LoadCursorA`, `SetCapture`, `ReleaseCapture`, `ClientToScreen`, `ScreenToClient`, `GetClientRect`, `GetWindowRect`, `MoveWindow`, `SetWindowPos`, `MapVirtualKeyA`, `ToAscii` | no | user32 input/geometry | the Graphics3D and input path (indirect) | from the sink's state yes; real pointer or keyboard state needs a host |
+| 7 | user32 `BeginPaint`, `EndPaint`, `InvalidateRect` | no | user32 paint | the paint path (indirect) | only as no-op paint, which is truthful only if no pixels are expected |
+| 8 | winmm `timeBeginPeriod`, `timeEndPeriod`, `timeGetDevCaps` | no | winmm | the timing path (indirect) | yes: documented fixed caps |
+| 9 | kernel32 `AcquireSRWLockExclusive`, `ReleaseSRWLockExclusive`, `WakeAllConditionVariable`, `SleepConditionVariableSRW` | no | kernel32 sync | indirect only | yes for a single guest thread |
+| 10 | kernel32 `GetTimeZoneInformation`, `SystemTimeToTzSpecificLocalTime`, `FileTimeToSystemTime`, `GetDateFormatW`, `GetTimeFormatW` | no | kernel32 time/locale | indirect only | yes: a documented fixed zone |
+
+Not on the static start-up path: ws2_32 (23 ordinals, not reached even by address-taken functions), `GetSystemMetrics` and `SystemParametersInfoA` (no call site in any closure), `ShellExecuteA` (address-taken only). Rank 1 is the only blocker proven on the direct path. Ranks 2 to 10 are the names a Graphics3D or Print path needs by semantics; the static closure cannot prove that they run, because `runtime.dll`'s address-taken functions cover 5,258 of its 5,261 functions, so no upper bound follows without modelling vtables and object layouts.
+
+Headless versus a real host: ranks 1, 3, 8, 9 and 10 (and the state side of 2 and 6) can be satisfied headlessly with truthful semantics. Pixel output (5, 7, the frame part of 4) and live pointer or keyboard state (6) need a real display host. The Windows target could host them with the platform's own user32, ddraw and GDI, but the Win32 component emulates these APIs in managed code and does not forward them, so this would be a new host service behind the registry. For the Linux target, the untracked `src/Blitz3DCS.Windowing` was not evaluated. Neither has been started, and nothing here shows that a produced exe runs once they exist.
+
+### Measured: the produced `Print "hello"` exe under BcRun (windows-x64, Wine 11 / Proton 11.0, Xvfb)
+
+Built by the original blitzcc through BcRun (`docs/blitz3d-reference.md`, `out_hello.exe` SHA-256 `d7d54f53...`, 210 imports), run with
+`BcRun hello.exe --target windows-x64` in a prefix with the vkd3d DLLs (`BLITZCS_WINE_GRAPHICS=1`), `BLITZCS_AUDIO=none`, Wine audio drivers disabled. The window, GDI and DirectX
+calls go to the host's DLLs through the bridge (`docs/binary-user32-bridge.md`); ranks 2 to 9 above are therefore no longer blockers on this target (the Linux target is unchanged).
+Start-up as traced (`--trace`, 4,824 Win32/COM calls):
+
+1. `LoadCursorA(NULL, IDC_ARROW)`, `GetStockObject`, `RegisterClassA`, `CreateWindowExA` (four host messages re-enter the guest window procedure, each passed on with `DefWindowProcA`), `UpdateWindow`.
+2. `DirectDrawEnumerateExA` (host callback into the guest), `DirectDrawCreateEx`, `GetDisplayMode`, `QueryInterface(IDirect3D7)`, `IDirect3D7::EnumDevices` and `EnumDisplayModes` (callbacks), `timeGetDevCaps`, `timeBeginPeriod`, `WSAStartup` (WS2_32 #115).
+3. Graphics: `DirectDrawCreateEx`, `SetCooperativeLevel(hwnd)`, primary surface, clipper with `SetHWnd`, back buffer, `timeSetEvent`, `QueryInterface(IDirectDraw)` (version 1), `Blt` clears.
+4. The default font: `SystemParametersInfoA(SPI_GET/SETFONTSMOOTHING)`, `CreateFontA`, `CreateCompatibleDC`, 224 x `GetTextExtentPoint32A` + `GetCharABCWidthsA` (one per character), a surface `GetDC`, 224 x `ExtTextOutA` into it, `ReleaseDC`.
+5. Window placement (`SetWindowLongA`, `SetWindowPos`, `GetWindowRect`, `GetClientRect`, `GetSystemMetrics`, `ClientToScreen`, `MoveWindow`, with nested window-procedure calls), `DirectInput8Create`, `EnumDevices`.
+6. The message loop and the first frame: `PeekMessageA`/`DispatchMessageA`, `TestCooperativeLevel`, `IsLost`, `WM_PAINT` handled by `BeginPaint`, `GetClientRect`, `ClientToScreen`, `Blt` of the back buffer to the primary surface, `EndPaint`.
+
+**Formerly the next fault** (exit 125): `GuestTrapException: Guest control flow reached untranslated code at 0x781A0000`, right after the first frame. That address is the
+runtime's `VirtualAlloc(PAGE_EXECUTE_READWRITE)` copy of the compiled program (RCDATA resource #1111, `push ebx; push esi; push edi; push ebp; mov ebp,esp; ... call rel32`
+plus fix-ups the runtime applies before calling it). It did not exist when the image was translated.
+
+**Now (windows-x64):** code generated at run time is translated when control reaches it (`docs/binary-dynamic-code.md`). One translation (entry `0x781A0000`, one page,
+28 instructions, about 130 ms), no store into the guarded page after it. The program then draws "hello" (`Lock`/`Unlock`, five glyph `Blt`s into the back buffer, `Blt` to
+the front buffer, `InvalidateRect`, a second `WM_PAINT` that presents it), `End` posts the close message, the runtime destroys the window, tears DirectDraw/winmm/WinSock
+down and calls `ExitProcess(0)`: BcRun exits 0 with no fault. Visual check: the same program with `Delay 6000` after `Print`, captured from the Xvfb display, shows the
+window with "hello" at its top left. The runtime's second executable allocation (128 bytes, `VirtualAlloc(PAGE_EXECUTE_READWRITE)` in a routine that frees the previous one
+first) was made but not executed in this run. linux-x64 still stops at the same address, now with a message naming the missing write guard.
+
+Teardown note: with `BLITZCS_AUDIO=virtual` (SoLoud's background `winmmThread` waiting on `WaitForSingleObject(INFINITE)` inside the module), `BcRunner` now uses
+`GuestModuleSet.DisposeAtProcessExit`, which calls `Win32Context.BeginProcessExit()` to stop active timers/audio streams, release held critical sections and wake background
+waits before detaching modules, so both normal exits and mid-run traps tear down promptly (`BcRunTests.TrappingExecutableWithBackgroundAudioAndEventThreadsDisposesPromptly`).
+
+### Measured: a produced `Graphics3D` exe under BcRun (windows-x64, Wine 11 / Proton 11.0, Xvfb)
+
+Built by the original `blitzcc.exe` through `BcRunner.Run` and then executed through `BcRunner.Run` in the same test
+(`BlitzccDifferentialTests.ProducedGraphics3DExecutableRendersTexturedMeshReadsPixelsAndInputAndExitsZero`, verified with both `BLITZCS_AUDIO=none` and `BLITZCS_AUDIO=virtual`):
+`Graphics3D 320,240,0,2`, camera with `CameraClsColor 16,32,64`, directional light, procedurally textured cube (`CreateTexture 16,16`, `CreateCube`, `EntityColor 240,80,32`,
+`EntityFX 1`, `EntityTexture`), three frames of `TurnEntity`/`UpdateWorld`/`RenderWorld`/`Flip`, `KeyDown`/`MouseX`/`MouseY`, and `LockBuffer`/`ReadPixelFast`/`UnlockBuffer` at
+the screen centre (cube) and corner (background), writing the verified RGB values to a file before `End`.
+
+* **Direct3D 7 path exercised**: `IDirect3D7::CreateDevice` (`IID_IDirect3DHALDevice`), `CreateVertexBuffer`, `IDirect3DVertexBuffer7::Lock`/`Unlock` (via the guest shadow buffer),
+  `IDirect3DDevice7::SetViewport`, `SetTransform`, `SetRenderState`, `SetTexture`, `SetTextureStageState`, `SetMaterial`, `SetLight`, `LightEnable`, `Clear` (with `float dvZ` passed
+  in `XMM`), `BeginScene`, `DrawIndexedPrimitiveVB`, `EndScene`, and DirectInput8 keyboard/mouse polling (`GetDeviceState`, `GetDeviceData`).
+* **Second dynamic-code translation**: calling `ReadPixelFast` executes the runtime's second `VirtualAlloc(PAGE_EXECUTE_READWRITE)` allocation (the pixel-format conversion thunk,
+  entry `0x78200040`, 1 entry, 5 instructions, 76 bytes of host code, ~1.0 ms) alongside the main program region at `0x781A0000` (1 entry, 179 instructions, 2,526 bytes of host code).
+* **Result**: `BcRunner.Run` exits 0 (`ExitProcess(0)`) with `ok=1`, reading `16,32,64` at `(2,2)` (camera clear colour) and `240,80,32` at `(160,120)` (lit textured cube).

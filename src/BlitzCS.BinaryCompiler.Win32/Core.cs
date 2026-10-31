@@ -15,7 +15,8 @@ public static class Win32Error
         NotEnoughMemory = 8, InvalidData = 13, OutOfMemory = 14, NoMoreFiles = 18, NotSupported = 50, FileExists = 80, InvalidParameter = 87,
         InsufficientBuffer = 122, ModNotFound = 126, ProcNotFound = 127, NegativeSeek = 131, BadPathname = 161, AlreadyExists = 183,
         EnvVarNotFound = 203, InvalidAddress = 487, NoMoreItems = 259, InvalidFlags = 1004, NoUnicodeTranslation = 1113, HandleEof = 38,
-        NotOwner = 288, TooManyPosts = 298, InvalidUserBuffer = 1784, NotEnoughQuota = 1816, BadLength = 24, NoAccess = 998;
+        NotOwner = 288, TooManyPosts = 298, InvalidUserBuffer = 1784, NotEnoughQuota = 1816, BadLength = 24, NoAccess = 998, BadExeFormat = 193, DllInitFailed = 1114,
+        Timeout = 1460, ResourceDataNotFound = 1812, ResourceTypeNotFound = 1813, ResourceNameNotFound = 1814, ResourceLangNotFound = 1815;
 }
 
 /// <summary>Raised when the guest calls the emulated Win32 surface in a way real Windows would answer with a crash or undefined behaviour (for example leaving an unowned critical section). The guest call is abandoned; nothing is silently ignored.</summary>
@@ -26,7 +27,7 @@ public class Win32UsageException(string message) : Exception(message);
 /// Ahead-of-time translation cannot follow self-modifying code: succeeding would let the guest write bytes that the translated code never reads. The request is therefore refused by name.
 /// </summary>
 public sealed class Win32SelfModifyingCodeException(string module, uint start, uint end, uint requestedProtection)
-    : Win32UsageException($"The guest asked to make translated code writable (self-modifying code), which ahead-of-time translation cannot honour: VirtualProtect on {module}, range 0x{start:X8}-0x{end:X8}, requested protection 0x{requestedProtection:X}.")
+    : Win32UsageException($"The guest asked to make translated code writable (self-modifying code), which translation cannot honour: VirtualProtect on {module}, range 0x{start:X8}-0x{end:X8}, requested protection 0x{requestedProtection:X}.")
 {
     public string Module { get; } = module;
     public uint Start { get; } = start;
@@ -35,7 +36,7 @@ public sealed class Win32SelfModifyingCodeException(string module, uint start, u
 }
 
 /// <summary>ExitProcess/TerminateProcess(self). The host process is never terminated: the guest call is abandoned with this exception (it is the inner exception of the runtime's GuestImportException).</summary>
-public sealed class Win32ExitProcessException(uint exitCode, string api) : Exception($"The guest called {api}({exitCode}); the host process keeps running.")
+public sealed class Win32ExitProcessException(uint exitCode, string api) : Exception($"The guest called {api}({exitCode}); the host process keeps running."), IGuestProcessExit
 {
     public uint ExitCode { get; } = exitCode;
 }
@@ -67,10 +68,14 @@ public interface IWin32Memory
     ulong NextMappedAddress(uint address) => 0x1_0000_0000UL;
     /// <summary>Changes the host protection of whole pages and records <paramref name="tag"/> (see <see cref="GuestMemory.TryProtect"/>). The default refuses.</summary>
     bool TryProtect(uint address, uint length, MemoryProtection protection, uint tag, out string? refusal) { refusal = "this memory does not support protection changes"; return false; }
+    /// <summary>Records that the guest asked for these pages to be executable (or no longer executable): where code generated at run time may be translated. The default ignores it.</summary>
+    void SetGuestExecutable(uint address, uint length, bool executable) { }
+    /// <summary>Drops translations of code generated at run time in the range (decommit). The default has none.</summary>
+    int InvalidateDynamicCode(uint address, uint length) => 0;
 }
 
 /// <summary>Adapts the runtime's <see cref="GuestMemory"/>.</summary>
-public sealed class GuestMemoryAdapter(GuestMemory memory) : IWin32Memory
+public sealed class GuestMemoryAdapter(GuestMemory memory, GuestMemory? allocator = null) : IWin32Memory
 {
     private sealed class Alloc(GuestBuffer buffer) : IWin32Allocation
     {
@@ -80,6 +85,7 @@ public sealed class GuestMemoryAdapter(GuestMemory memory) : IWin32Memory
     }
 
     public GuestMemory Memory { get; } = memory;
+    public GuestMemory? Allocator { get; } = allocator;
     public byte ReadByte(uint a) => Memory.ReadByte(a);
     public uint ReadUInt32(uint a) => Memory.ReadUInt32(a);
     public void WriteByte(uint a, byte v) => Memory.WriteByte(a, v);
@@ -88,10 +94,13 @@ public sealed class GuestMemoryAdapter(GuestMemory memory) : IWin32Memory
     public void Write(uint a, ReadOnlySpan<byte> s) => Memory.Write(a, s);
     public string ReadAnsiString(uint a, int max = 65536) => Memory.ReadAnsiString(a, max);
     public bool IsMapped(uint a, uint l) => Memory.IsMapped(a, l);
-    public IWin32Allocation Allocate(int size) => new Alloc(Memory.Allocate(size));
+    /// <summary>Allocations come from <paramref name="allocator"/> when given (the process anchor of a shared Win32 state), else from this memory's own module.</summary>
+    public IWin32Allocation Allocate(int size) => new Alloc((Allocator ?? Memory).Allocate(size));
     public bool TryQueryPage(uint a, out GuestPageInfo info) => Memory.TryQueryPage(a, out info);
     public ulong NextMappedAddress(uint a) => Memory.NextMappedAddress(a);
     public bool TryProtect(uint a, uint l, MemoryProtection p, uint tag, out string? refusal) => Memory.TryProtect(a, l, p, tag, out refusal);
+    public void SetGuestExecutable(uint a, uint l, bool executable) => Memory.SetGuestExecutable(a, l, executable);
+    public int InvalidateDynamicCode(uint a, uint l) => Memory.InvalidateDynamicCode(a, l);
 }
 
 public static class Win32MemoryExtensions
@@ -171,6 +180,9 @@ public readonly ref struct Win32Call
 
     private readonly GuestCall? guest;
 
+    /// <summary>The guest call behind this API call (for APIs implemented by the guest runtime itself, such as SEH); throws when the API runs for host code.</summary>
+    internal GuestCall Guest => guest ?? throw new Win32UsageException("This API needs a running guest module.");
+
     /// <summary>Calls guest code at <paramref name="address"/> (callbacks such as _initterm entries, qsort comparers). Only available when the API runs for a guest module.</summary>
     public uint CallGuest(uint address, params ReadOnlySpan<uint> args) =>
         (guest ?? throw new Win32UsageException("This API calls back into guest code and needs a running guest module.")).CallGuest(address, args);
@@ -194,6 +206,12 @@ public readonly ref struct Win32Call
 
     /// <summary>Also returns <paramref name="value"/> in EDX (high half of a 64-bit result).</summary>
     public void ReturnEdx(uint value) => (guest ?? throw new Win32UsageException("EDX results need a running guest module.")).SetReturnEdx(value);
+
+    /// <summary>
+    /// Sets the high half of a 64-bit result (EDX for a guest; always also recorded in <see cref="Win32Context.HighResult"/> so host-side callers and tests can read it).
+    /// The low half is the handler's return value.
+    /// </summary>
+    public void ReturnHigh(uint value) { Ctx.HighResult = value; guest?.SetReturnEdx(value); }
 
     /// <summary>Returns a double in ST0.</summary>
     public void ReturnSt0(double value) => (guest ?? throw new Win32UsageException("x87 results need a running guest module.")).SetReturnSt0(value);
@@ -235,6 +253,7 @@ public sealed class Win32Registry
     public static string NormalizeDll(string dll)
     {
         var d = dll.ToLowerInvariant();
+        if (d is "crtdll" or "crtdll.dll") return "msvcrt.dll";
         return Path.HasExtension(d) ? d : d + ".dll";
     }
 
@@ -297,14 +316,22 @@ public sealed class Win32Options
 {
     /// <summary>Directory that "C:\" and relative Windows paths map into. Null: every path-based file API fails with ERROR_ACCESS_DENIED.</summary>
     public string? SandboxRoot { get; init; }
+    /// <summary>Loads guest DLLs for LoadLibrary* / GetModuleHandle* / GetProcAddress / FreeLibrary (null: only the emulated DLLs and host-registered modules are loadable). See <see cref="GuestLibraryLoader"/>.</summary>
+    public GuestLibraryLoader? GuestLibraries { get; init; }
     public bool CaseInsensitiveFileNames { get; init; } = true;
     public string CommandLine { get; init; } = "program.exe";
     public string MainModulePath { get; init; } = "C:\\program.exe";
     public uint MainModuleBase { get; init; } = 0x00400000;
     public IReadOnlyDictionary<string, string> Environment { get; init; } = new Dictionary<string, string>();
+    /// <summary>Time zone the guest sees (GetTimeZoneInformation, GetLocalTime). Default: the host's local zone.</summary>
+    public TimeZoneInfo? TimeZone { get; init; }
     public int AnsiCodePage { get; init; } = 1252;
     public int OemCodePage { get; init; } = 437;
     public Win32Version Version { get; init; } = new();
+    /// <summary>True: the standard handles are console handles (GetConsoleMode succeeds, WriteConsole/ReadConsole work on them). False (default): redirected streams, where the console APIs fail with ERROR_INVALID_HANDLE exactly as on Windows.</summary>
+    public bool StdoutIsConsole { get; init; }
+    public bool StderrIsConsole { get; init; }
+    public bool StdinIsConsole { get; init; }
     public Stream? Stdin { get; init; }
     public Stream? Stdout { get; init; }
     public Stream? Stderr { get; init; }
@@ -321,6 +348,20 @@ public sealed class Win32Options
     /// <summary>DirectSound reached through <c>dsound.dll!DirectSoundCreate</c> (see docs/binary-com.md). Default: the host's native dsound on a Windows host (including Wine), unavailable elsewhere (DSERR_NODRIVER). None: always DSERR_NODRIVER.</summary>
     public DirectSoundBackendKind DirectSound { get; init; } = DirectSoundBackendKind.Default;
 
+    /// <summary>
+    /// user32/gdi32 (windows, messages, GDI text) and the DirectX COM creation functions. Default: bridged to the host's native DLLs on a Windows host (including Wine), absent elsewhere
+    /// (docs/binary-user32-bridge.md). None: the previous sandbox subset (only the desktop window exists, every other window API faults by name). Host on a non-Windows host throws.
+    /// </summary>
+    public HostWindowingKind HostWindowing { get; init; } = HostWindowingKind.Default;
+
+    /// <summary>True when <see cref="HostWindowing"/> selects the host bridge on this host.</summary>
+    public bool UsesHostWindowing => HostWindowing switch
+    {
+        HostWindowingKind.None => false,
+        HostWindowingKind.Host => OperatingSystem.IsWindows() ? true : throw new Win32UsageException("Win32Options.HostWindowing = Host needs a Windows host (Windows or Wine)."),
+        _ => OperatingSystem.IsWindows(),
+    };
+
     /// <summary>waveOut backend (see docs/binary-audio.md). Default: HostWinmm on a Windows host (including Wine), None elsewhere. The environment variable BLITZCS_AUDIO=host|virtual|none overrides it.</summary>
     public WaveOutBackendKind WaveOut { get; init; } = WaveOutBackendKind.Default;
     /// <summary>VirtualSink: records every consumed buffer to this RIFF WAV file. HostWinmm: records every buffer written. Ignored (with a diagnostic) for the None backend.</summary>
@@ -329,21 +370,32 @@ public sealed class Win32Options
     public WaveOutObserver? WaveOutObserver { get; init; }
     /// <summary>VirtualSink only: the raw consume-time slices (about 10 ms each). HostWinmm cannot know consumption times and never calls it.</summary>
     public WaveOutObserver? WaveOutSliceObserver { get; init; }
+    /// <summary>Optional caller-owned per-COM-method profiler. Null (default) leaves COM calls on the unprofiled path.</summary>
+    public BlitzCS.BinaryCompiler.Win32.Com.ComBridgeProfiler? ComBridgeProfiler { get; init; }
 }
 
-/// <summary>Per-process emulation state shared by the services. One instance must serve exactly one guest module.</summary>
+/// <summary>Per-process emulation state shared by the services. One instance serves one guest process: a single module, or all modules of a <see cref="GuestModuleSet"/> when the resolvers were made with <see cref="Win32ImportResolver.SharedFactory"/>.</summary>
 public sealed class Win32Context : IDisposable
 {
     private readonly object bindGate = new();
     private IWin32Memory? memory;
     private object? memoryOwner;
     private readonly ThreadLocal<uint> lastError = new(() => 0);
+    private readonly ThreadLocal<uint> highResult = new(() => 0);
     private uint nextHandle = 0x100;
     private readonly ConcurrentDictionary<uint, object> handles = new();
 
     public Win32Context(Win32Options options)
     {
         Options = options;
+        if (options.ComBridgeProfiler is { } configuredProfiler)
+            ComBridgeProfiler = configuredProfiler;
+        else if (Environment.GetEnvironmentVariable("BLITZCS_PROFILE_COM_PATH") is { Length: > 0 } profilePath)
+        {
+            var environmentProfiler = new BlitzCS.BinaryCompiler.Win32.Com.ComBridgeProfiler(profilePath, exportAtProcessExit: true);
+            ComBridgeProfiler = environmentProfiler;
+            AddDisposable(environmentProfiler);
+        }
         Heaps = new HeapState(this);
         Virtual = new VirtualState();
         Sync = new SyncState();
@@ -353,6 +405,7 @@ public sealed class Win32Context : IDisposable
     }
 
     public Win32Options Options { get; }
+    internal BlitzCS.BinaryCompiler.Win32.Com.ComBridgeProfiler? ComBridgeProfiler { get; }
 
     private static readonly Action<string>? EnvironmentTrace = Environment.GetEnvironmentVariable("BLITZCS_WIN32_TRACE") == "1" ? (m => { Console.Error.WriteLine(m); Console.Error.Flush(); }) : null;
 
@@ -366,6 +419,11 @@ public sealed class Win32Context : IDisposable
     internal void AddDisposable(IDisposable d) { lock (disposablesGate) disposables = [.. disposables, d]; }
 
     private Exception? processFault;
+    private int exitingThreadId;
+    private readonly ManualResetEventSlim exitEvent = new(false);
+
+    internal bool IsExiting => Volatile.Read(ref exitingThreadId) != 0;
+    internal bool IsExitingOnAnotherThread => Volatile.Read(ref exitingThreadId) is var t && t != 0 && t != Environment.CurrentManagedThreadId;
 
     /// <summary>
     /// Set when a guest thread terminated abnormally. On Windows an unhandled fault ends the whole process; here the process is the host, so
@@ -375,8 +433,42 @@ public sealed class Win32Context : IDisposable
 
     public void PoisonProcess(Exception cause) => Interlocked.CompareExchange(ref processFault, cause, null);
 
+    /// <summary>
+    /// Stops background host timers and audio streams, releases any critical sections held by the exiting thread, and wakes background guest threads parked in waits so they exit
+    /// <see cref="GuestModule.CallAddress"/> before module detachment runs.
+    /// </summary>
+    public void BeginProcessExit()
+    {
+        Interlocked.CompareExchange(ref exitingThreadId, Environment.CurrentManagedThreadId, 0);
+        exitEvent.Set();
+        WinmmService.StopTimers(this);
+        Sync.AbortForProcessExit();
+        foreach (var v in handles.Values)
+        {
+            switch (v)
+            {
+                case KernelEvent ke: ke.Abort(); break;
+                case KernelMutex km: km.Abort(); break;
+                case KernelThread kt: kt.Done.Abort(); break;
+                case WaveOutStream ws: ws.Dispose(); break;
+            }
+        }
+    }
+
+    internal void Sleep(int milliseconds)
+    {
+        if (milliseconds <= 0) { Thread.Yield(); return; }
+        using (GuestModule.Current?.SuspendMemoryWriterForHostWait())
+            if (exitEvent.Wait(milliseconds) && IsExitingOnAnotherThread)
+                throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
+    }
+
+    internal IDisposable? SuspendGuestMemoryWriterForHostWait() => GuestModule.Current?.SuspendMemoryWriterForHostWait();
+
     internal void ThrowIfPoisoned()
     {
+        if (IsExitingOnAnotherThread)
+            throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
         if (Volatile.Read(ref processFault) is { } f)
             throw new Win32UsageException($"A guest thread terminated abnormally ({f.GetType().Name}: {f.Message}); further Win32 calls are refused because the program state is undefined.");
     }
@@ -386,8 +478,18 @@ public sealed class Win32Context : IDisposable
     internal TlsState Tls { get; }
     internal ProcessState Process { get; }
     internal FileState Files { get; }
+    internal FlsState Fls { get; } = new();
 
     public uint LastError { get => lastError.Value; set => lastError.Value = value; }
+
+    /// <summary>High 32 bits of the last 64-bit result of the calling thread (see <see cref="Win32Call.ReturnHigh"/>).</summary>
+    public uint HighResult { get => highResult.Value; internal set => highResult.Value = value; }
+
+    /// <summary>Per-process random value that EncodePointer/DecodePointer mix into pointers (Windows keeps a similar process cookie).</summary>
+    internal uint PointerCookie { get; } = (uint)(System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, int.MaxValue) |  0x10001);
+
+    /// <summary>Serialises the lock-free list (SList) operations, which Windows performs with interlocked instructions on guest memory.</summary>
+    internal object SListGate { get; } = new();
 
     /// <summary>Sets the last error and returns <paramref name="result"/> (FALSE/NULL by default).</summary>
     public uint Fail(uint error, uint result = 0) { LastError = error; return result; }
@@ -403,14 +505,31 @@ public sealed class Win32Context : IDisposable
 
     public uint CurrentThreadId => 1000u + 4u * (uint)Environment.CurrentManagedThreadId;
 
-    /// <summary>Binds the context to the memory of the first guest module that calls it; another module is refused.</summary>
+    private bool sharedByModules;
+    internal bool IsSharedByModules => sharedByModules;
+    private GuestMemory? anchor;
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<GuestMemory, IWin32Memory> moduleMemories = new();
+
+    /// <summary>
+    /// Declares that several modules of one guest process use this context (<see cref="Win32ImportResolver.ForAnotherModule"/>). Their memories are all accepted; reads and
+    /// writes go through the calling module's own memory (which sees every module's regions), allocations (heaps, virtual memory, process-lifetime strings) come from the
+    /// first module that used the context, which is pinned (<see cref="GuestMemory.PinAsProcessAnchor"/>): it cannot be unloaded while other modules are loaded.
+    /// </summary>
+    internal void MarkShared() { lock (bindGate) { sharedByModules = true; anchor?.PinAsProcessAnchor(); } }
+
+    /// <summary>Binds the context to the memory of the first guest module that calls it; another module is refused unless the context is shared by the modules of one process.</summary>
     internal IWin32Memory Bind(GuestMemory guest)
     {
         lock (bindGate)
         {
-            if (memory is null) { memoryOwner = guest; memory = new GuestMemoryAdapter(guest); }
-            else if (!ReferenceEquals(memoryOwner, guest)) throw new Win32UsageException("This Win32ImportResolver already serves another guest module; create one resolver per module.");
-            return memory;
+            if (memory is null)
+            {
+                memoryOwner = guest; anchor = guest; memory = new GuestMemoryAdapter(guest);
+                if (sharedByModules) guest.PinAsProcessAnchor();
+            }
+            if (ReferenceEquals(memoryOwner, guest)) return memory;
+            if (!sharedByModules) throw new Win32UsageException("This Win32ImportResolver already serves another guest module; create one resolver per module, or share the process state with Win32ImportResolver.SharedFactory / ForAnotherModule.");
+            return moduleMemories.GetValue(guest, g => new GuestMemoryAdapter(g, anchor));
         }
     }
 
@@ -419,7 +538,10 @@ public sealed class Win32Context : IDisposable
         lock (bindGate)
         {
             if (memory is null) { memory = mem; memoryOwner = mem; }
-            else if (!ReferenceEquals(memoryOwner, mem)) throw new Win32UsageException("This context is already bound to another memory.");
+            else if (!ReferenceEquals(memoryOwner, mem)
+                     && !ReferenceEquals(memory, mem)
+                     && !(mem is GuestMemoryAdapter a && (ReferenceEquals(memoryOwner, a.Memory) || (sharedByModules && (ReferenceEquals(anchor, a.Allocator) || ReferenceEquals(anchor, a.Memory))))))
+                throw new Win32UsageException("This context is already bound to another memory.");
         }
     }
 
@@ -444,6 +566,8 @@ public sealed class Win32Context : IDisposable
         Process.Dispose();
         foreach (var v in handles.Values) (v as IDisposable)?.Dispose();
         foreach (var d in Interlocked.Exchange(ref disposables, []).Reverse()) d.Dispose();
+        exitEvent.Dispose();
         lastError.Dispose();
+        highResult.Dispose();
     }
 }

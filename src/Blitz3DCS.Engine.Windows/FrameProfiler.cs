@@ -1,0 +1,429 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+using Blitz3DCS.Engine;
+using Blitz3DCS.Graphics.D3D11;
+
+namespace Blitz3DCS.Engine.Windows;
+
+/// <summary>
+/// Pure aggregation core of the frame profiler: per-phase tick accumulators, a ring of the last
+/// <c>window</c> frames for mean/p95/max, and a one-line report. Allocation-free except when reporting.
+/// Definitions (when a frame phase index is supplied): 'frame' = Flip-to-Flip wall time (previous Flip's end to this
+/// Flip's end, including game/BASIC logic, waiting and vsync); 'engine' = sum of the top-level adapter phases
+/// (UpdateWorld, RenderWorld, 2D, CopyRect, present; nested phases such as anim/skinning/submit are not added twice);
+/// 'outside' = frame - engine (game logic outside the adapter plus waiting).
+/// A frame whose 'frame' time exceeds the hitch threshold additionally emits one immediate [hitch] line.
+/// </summary>
+internal sealed class FrameProfiler
+{
+    private readonly string[] _phaseNames;
+    private readonly string[] _counterNames;
+    private readonly int _window;
+    private readonly double _msPerTick;
+    private readonly Action<string> _sink;
+    private readonly long[] _current;
+    private readonly long[] _currentCounters;
+    private readonly long[][] _samples;      // [phase][frame]
+    private readonly long[] _counterTotals;
+    private readonly long[] _allocSamples;
+    private readonly long[] _scratch;
+    private readonly int _frameIndex;
+    private readonly int[] _engineIndexes;
+    private readonly long _hitchTicks;
+    private readonly Func<string>? _hitchExtra;
+    private readonly long[] _engineSamples;
+    private readonly long[] _outsideSamples;
+    private int _frames;
+    private long _gcGen0, _gcGen1, _gcGen2;
+    private long _totalFrames;
+
+    internal FrameProfiler(string[] phaseNames, string[] counterNames, int window, long ticksPerSecond, Action<string> sink,
+        int frameIndex = -1, int[]? engineIndexes = null, double hitchMs = 0, Func<string>? hitchExtra = null)
+    {
+        _frameIndex = frameIndex;
+        _engineIndexes = engineIndexes ?? [];
+        _hitchTicks = hitchMs > 0 ? (long)(hitchMs * ticksPerSecond / 1000.0) : 0;
+        _hitchExtra = hitchExtra;
+        _engineSamples = new long[window];
+        _outsideSamples = new long[window];
+        _phaseNames = phaseNames;
+        _counterNames = counterNames;
+        _window = window;
+        _msPerTick = 1000.0 / ticksPerSecond;
+        _sink = sink;
+        _current = new long[phaseNames.Length];
+        _currentCounters = new long[counterNames.Length];
+        _samples = new long[phaseNames.Length][];
+        for (var i = 0; i < _samples.Length; i++) _samples[i] = new long[window];
+        _counterTotals = new long[counterNames.Length];
+        _allocSamples = new long[window];
+        _scratch = new long[window];
+    }
+
+    internal void Write(string line) => _sink(line);
+    internal int FramesInWindow => _frames;
+    internal long TotalFrames => _totalFrames;
+
+    internal void AddTicks(int phase, long ticks) => _current[phase] += ticks;
+    internal void AddCount(int counter, long amount = 1) => _currentCounters[counter] += amount;
+
+    /// <summary>Closes the current frame; emits a report line when the window is full.</summary>
+    internal void EndFrame(long allocatedBytes, int gen0, int gen1, int gen2)
+    {
+        long engine = 0, outside = 0;
+        if (_frameIndex >= 0)
+        {
+            foreach (var index in _engineIndexes) engine += _current[index];
+            outside = Math.Max(0, _current[_frameIndex] - engine);
+            _engineSamples[_frames] = engine;
+            _outsideSamples[_frames] = outside;
+            if (_hitchTicks > 0 && _current[_frameIndex] > _hitchTicks) _sink(FormatHitch(engine, outside, allocatedBytes, gen0, gen1, gen2));
+        }
+        for (var i = 0; i < _current.Length; i++) { _samples[i][_frames] = _current[i]; _current[i] = 0; }
+        for (var i = 0; i < _currentCounters.Length; i++) { _counterTotals[i] += _currentCounters[i]; _currentCounters[i] = 0; }
+        _allocSamples[_frames] = allocatedBytes;
+        _gcGen0 += gen0; _gcGen1 += gen1; _gcGen2 += gen2;
+        _frames++;
+        _totalFrames++;
+        if (_frames == _window) Report();
+    }
+
+    /// <summary>Emits a line for the frames collected so far (used at exit) and starts a new window.</summary>
+    internal void Flush()
+    {
+        if (_frames > 0) Report();
+    }
+
+    /// <summary>Formats the immediate hitch line for the frame currently being closed (before its accumulators reset).</summary>
+    internal string FormatHitch(long engine, long outside, long allocatedBytes, int gen0, int gen1, int gen2)
+    {
+        var text = new StringBuilder(384);
+        text.Append(CultureInfo.InvariantCulture,
+            $"[hitch] frame#{_totalFrames + 1} frame={_current[_frameIndex] * _msPerTick:F1}ms engine={engine * _msPerTick:F1}ms outside={outside * _msPerTick:F1}ms");
+        for (var p = 0; p < _phaseNames.Length; p++)
+            if (p != _frameIndex && _current[p] != 0) text.Append(CultureInfo.InvariantCulture, $" {_phaseNames[p]}={_current[p] * _msPerTick:F1}");
+        for (var c = 13; c < _counterNames.Length; c++)
+            if (_currentCounters[c] != 0) text.Append(CultureInfo.InvariantCulture, $" {_counterNames[c]}={_currentCounters[c]}");
+        text.Append(CultureInfo.InvariantCulture, $" allocB={allocatedBytes} gc0/1/2={gen0}/{gen1}/{gen2}");
+        if (_hitchExtra is not null) text.Append(' ').Append(_hitchExtra());
+        return text.ToString();
+    }
+
+    private static long Percentile95(long[] values, long[] scratch, int n)
+    {
+        Array.Copy(values, scratch, n);
+        Array.Sort(scratch, 0, n);
+        return scratch[Math.Min(n - 1, (int)Math.Ceiling(n * 0.95) - 1)];
+    }
+
+    private void Report()
+    {
+        var n = _frames;
+        var text = new StringBuilder(512);
+        text.Append(CultureInfo.InvariantCulture, $"[profile] frames={_totalFrames} window={n}");
+        if (_frameIndex >= 0)
+        {
+            long es = 0, em = 0, os = 0, om = 0;
+            for (var i = 0; i < n; i++) { es += _engineSamples[i]; em = Math.Max(em, _engineSamples[i]); os += _outsideSamples[i]; om = Math.Max(om, _outsideSamples[i]); }
+            text.Append(CultureInfo.InvariantCulture,
+                $" [frame=Flip-to-Flip wall time; engine=sum of adapter phases UpdateWorld+RenderWorld+2D+CopyRect+present; outside=frame-engine (game logic+waiting)] engine={es * _msPerTick / n:F3}/{Percentile95(_engineSamples, _scratch, n) * _msPerTick:F3}/{em * _msPerTick:F3}ms outside={os * _msPerTick / n:F3}/{Percentile95(_outsideSamples, _scratch, n) * _msPerTick:F3}/{om * _msPerTick:F3}ms");
+        }
+        for (var p = 0; p < _phaseNames.Length; p++)
+        {
+            long sum = 0, max = 0;
+            for (var i = 0; i < n; i++) { var v = _samples[p][i]; sum += v; _scratch[i] = v; if (v > max) max = v; }
+            Array.Sort(_scratch, 0, n);
+            var p95 = _scratch[Math.Min(n - 1, (int)Math.Ceiling(n * 0.95) - 1)];
+            text.Append(CultureInfo.InvariantCulture,
+                $" {_phaseNames[p]}={sum * _msPerTick / n:F3}/{p95 * _msPerTick:F3}/{max * _msPerTick:F3}ms");
+        }
+        for (var c = 0; c < _counterNames.Length; c++)
+            text.Append(CultureInfo.InvariantCulture, $" {_counterNames[c]}={(double)_counterTotals[c] / n:F1}");
+        long alloc = 0, allocMax = 0;
+        for (var i = 0; i < n; i++) { alloc += _allocSamples[i]; allocMax = Math.Max(allocMax, _allocSamples[i]); }
+        text.Append(CultureInfo.InvariantCulture, $" allocB={alloc / n}/{allocMax} gc0/1/2={_gcGen0}/{_gcGen1}/{_gcGen2}");
+        _sink(text.ToString());
+        _frames = 0;
+        Array.Clear(_counterTotals);
+        _gcGen0 = _gcGen1 = _gcGen2 = 0;
+    }
+}
+
+/// <summary>
+/// Per-frame render-queue tallies kept in plain integer fields (no slot lookup or profiler fetch per draw) and
+/// folded into the profiler counters once per frame by <see cref="Flush"/>.
+/// </summary>
+internal struct RenderTally
+{
+    internal int Visited, Meshes, CullFrustum, CullDist, Opaque, Alpha, Additive, OtherBlend, Sprite, Masked, Anim, Batchable;
+    /// <summary>Sampled state-build ticks, already scaled by the sampling stride.</summary>
+    internal long StateTicks;
+
+    /// <summary>Records the blend/sprite/masked/animated category of one queued draw.</summary>
+    internal void Category(int blend, bool sprite, bool masked, bool animated)
+    {
+        switch (blend) { case 0: Opaque++; break; case 1: Alpha++; break; case 3: Additive++; break; default: OtherBlend++; break; }
+        if (sprite) Sprite++;
+        if (masked) Masked++;
+        if (animated) Anim++;
+    }
+
+    /// <summary>Adds every non-zero tally to the profiler's current frame and clears it.</summary>
+    internal void Flush()
+    {
+        Add(EngineProfile.RtVisited, Visited); Add(EngineProfile.RtMeshes, Meshes);
+        Add(EngineProfile.RtCullFrustum, CullFrustum); Add(EngineProfile.RtCullDist, CullDist);
+        Add(EngineProfile.RtOpaque, Opaque); Add(EngineProfile.RtAlpha, Alpha); Add(EngineProfile.RtAdditive, Additive);
+        Add(EngineProfile.RtOtherBlend, OtherBlend); Add(EngineProfile.RtSprite, Sprite); Add(EngineProfile.RtMasked, Masked);
+        Add(EngineProfile.RtAnim, Anim); Add(EngineProfile.RtBatchable, Batchable);
+        if (StateTicks != 0) EngineProfile.AddTicks(EngineProfile.RtState, StateTicks);
+        this = default;
+    }
+
+    private static void Add(int counter, int amount)
+    {
+        if (amount != 0) EngineProfile.Count(counter, amount);
+    }
+}
+
+/// <summary>Allocation-free texture-layer equality and hashing for the per-draw state statistics.</summary>
+internal static class LayerStats
+{
+    internal static bool Same(ReadOnlySpan<D3D11TextureLayer> a, D3D11TextureLayer[] b)
+    {
+        for (var i = 0; i < a.Length; i++) if (!Same(in a[i], in b[i])) return false;
+        return true;
+    }
+
+    internal static bool Same(in D3D11TextureLayer a, in D3D11TextureLayer b) =>
+        ReferenceEquals(a.Texture, b.Texture) && a.Blend == b.Blend && a.ClampU == b.ClampU && a.ClampV == b.ClampV
+        && a.UseAlpha == b.UseAlpha && a.CoordinateSet == b.CoordinateSet && a.Masked == b.Masked
+        && a.BumpScale.Equals(b.BumpScale) && a.BumpOffset.Equals(b.BumpOffset)
+        && a.UvTransform.Equals(b.UvTransform) && a.BumpMatrix.Equals(b.BumpMatrix);
+
+    internal static int Hash(int seed, in D3D11TextureLayer l)
+    {
+        var h = seed * 31 + (l.Texture is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(l.Texture));
+        h = h * 31 + l.Blend;
+        h = h * 31 + ((l.ClampU ? 1 : 0) | (l.ClampV ? 2 : 0) | (l.UseAlpha ? 4 : 0) | (l.Masked ? 8 : 0));
+        h = h * 31 + l.CoordinateSet;
+        h = h * 31 + l.BumpScale.GetHashCode();
+        h = h * 31 + l.BumpOffset.GetHashCode();
+        if (l.UvTransform.HasValue) h = h * 31 + l.UvTransform.Value.GetHashCode();
+        if (l.BumpMatrix.HasValue) h = h * 31 + l.BumpMatrix.Value.GetHashCode();
+        return h;
+    }
+}
+
+/// <summary>
+/// Env-gated profiler front end. BLITZCS_ENGINE_PROFILE=1 enables; BLITZCS_ENGINE_PROFILE_LOG=path writes there
+/// (no file otherwise: stderr). When disabled the static readonly flag lets the JIT drop every call site.
+/// </summary>
+internal static class EngineProfile
+{
+    internal static readonly bool Enabled = Environment.GetEnvironmentVariable("BLITZCS_ENGINE_PROFILE") == "1";
+
+    internal const int UpdateWorld = 0, UpdateAnimation = 1, UpdateCollision = 2, UpdateScene = 3, RenderWorld = 4,
+        Skinning = 5, Traversal = 6, Submit = 7, Draw2D = 8, Copy = 9, Present = 10, Frame = 11,
+        MipGen = 12, DynUpload = 13, TexUpload = 14, Readback = 15,
+        // Fine phases (engine stats): printed as extra mean/p95/max ms fields; nested inside the phases above.
+        ColBroad = 16, ColNarrow = 17, ColResp = 18, SkinPose = 19, SkinWorld = 20, SkinDeform = 21, SkinUpload = 22,
+        RtTraverse = 23, RtSort = 24, RtLights = 25, RtState = 26;
+    internal static readonly string[] PhaseNames =
+    [
+        "UpdateWorld", "anim", "collision", "sceneUpdate", "RenderWorld", "skinning", "traversal+sort", "submit(incl.gpu-upload)",
+        "2D", "CopyRect", "present", "frame", "mipgen", "dynVB", "texUpload", "readback",
+        "colBroad", "colNarrow", "colResp", "skinPose", "skinWorld", "skinDeform", "skinUpload",
+        "rtTraverse", "rtSort", "rtLights", "rtState"
+    ];
+    internal const int DrawCalls = 0, Tris = 1, BlitDraws = 2, ClearStates = 3, CbMaps = 4, Resolves = 5, ReadbackCount = 6, MipCount = 7, DynCount = 8, TexCount = 9,
+        SkippedBinds = 10, BatchedBlits = 11, SkippedCbMaps = 12;
+    private static readonly string[] BaseCounterNames =
+        ["draws", "tris", "blitDraws", "pipelineResets", "cbMaps", "resolves", "READBACKS", "mips", "dynUploads", "texUploads",
+            "skippedBinds", "blitBatched", "cbMapsSkipped"];
+    /// <summary>First slot of the Engine-assembly counters (EngineStats.CounterNames, in order).</summary>
+    internal const int StatsBase = 13;
+    /// <summary>First slot of the render-side counters (RenderCounterNames, in order).</summary>
+    internal const int RenderBase = StatsBase + 36;
+    internal const int SkinModels = RenderBase, SkinMeshes = RenderBase + 1, SkinVerts = RenderBase + 2, SkinSkipped = RenderBase + 3,
+        SkinClean = RenderBase + 4, SkinBones = RenderBase + 5, SkinUploads = RenderBase + 6,
+        RtVisited = RenderBase + 7, RtMeshes = RenderBase + 8, RtCullFrustum = RenderBase + 9, RtCullDist = RenderBase + 10,
+        RtSurfaces = RenderBase + 11, RtSortKeys = RenderBase + 12, RtUniqueMat = RenderBase + 13, RtOpaque = RenderBase + 14,
+        RtAlpha = RenderBase + 15, RtAdditive = RenderBase + 16, RtOtherBlend = RenderBase + 17, RtSprite = RenderBase + 18,
+        RtMasked = RenderBase + 19, RtAnim = RenderBase + 20, RtBatchable = RenderBase + 21, RtLightCount = RenderBase + 22,
+        // D3D11 object-constant submission (folded from D3D11FrameCounters in EndFrame). apiDraws: device draw calls
+        // issued for meshes ("draws" counts requested mesh draws); instDraws/instObjects: instanced draws and the mesh
+        // draws folded into them; objBufBytes: bytes written to the object constant buffer; cbBinds:
+        // *SetConstantBuffers1 offset binds; drawFlushes: queue flushes (one object-buffer Map each).
+        D3dApiDraws = RenderBase + 23, D3dInstancedDraws = RenderBase + 24, D3dInstancedObjects = RenderBase + 25,
+        D3dObjectBufferBytes = RenderBase + 26, D3dConstantBufferBinds = RenderBase + 27, D3dDrawFlushes = RenderBase + 28,
+        // Instancing diagnostics: first failing criterion of a run end (mesh/texture/sampler/state/other), run-length
+        // histogram (1, 2, 3-4, 5-8, 9+) and draws moved by the additive grouping.
+        D3dBreakMesh = RenderBase + 29, D3dBreakTex = RenderBase + 30, D3dBreakSampler = RenderBase + 31,
+        D3dBreakState = RenderBase + 32, D3dBreakOther = RenderBase + 33, D3dRunLen1 = RenderBase + 34,
+        D3dRunLen2 = RenderBase + 35, D3dRunLen3To4 = RenderBase + 36, D3dRunLen5To8 = RenderBase + 37,
+        D3dRunLen9Plus = RenderBase + 38, D3dReordered = RenderBase + 39;
+    internal static readonly string[] RenderCounterNames =
+    [
+        "skinModels", "skinMeshes", "skinVerts", "skinSkipped", "skinClean", "skinBones", "skinUploads",
+        "rtVisited", "rtMeshes", "rtCullFrustum", "rtCullDist", "rtSurfaces", "rtSortKeys", "rtUniqueMat", "rtOpaque",
+        "rtAlpha", "rtAdditive", "rtOtherBlend", "rtSprite", "rtMasked", "rtAnim", "rtBatchable", "rtLights",
+        "apiDraws", "instDraws", "instObjects", "objBufBytes", "cbBinds", "drawFlushes",
+        "instRunBreakMesh", "instRunBreakTex", "instRunBreakSampler", "instRunBreakState", "instRunBreakOther",
+        "instRunLen1", "instRunLen2", "instRunLen3to4", "instRunLen5to8", "instRunLen9plus", "instReordered"
+    ];
+    internal static readonly string[] CounterNames = [.. BaseCounterNames, .. EngineStats.CounterNames, .. RenderCounterNames];
+
+    /// <summary>Adds to a fine counter; a no-op (no allocation) when profiling is disabled.</summary>
+    internal static void Count(int counter, long amount = 1)
+    {
+        if (!Enabled) return;
+        Get().AddCount(counter, amount);
+    }
+
+    /// <summary>Adds the ticks elapsed since <paramref name="start"/> to a fine phase; no-op when disabled.</summary>
+    internal static void AddSince(int phase, long start)
+    {
+        if (!Enabled) return;
+        Get().AddTicks(phase, Stopwatch.GetTimestamp() - start);
+    }
+
+    /// <summary>Moves the Engine-assembly per-frame stats into the profiler's current frame and clears them.</summary>
+    internal static void FoldEngineStats(FrameProfiler profiler, long[] counts, long[] ticks)
+    {
+        for (var i = 0; i < counts.Length; i++) { if (counts[i] != 0) profiler.AddCount(StatsBase + i, counts[i]); counts[i] = 0; }
+        for (var i = 0; i < ticks.Length; i++) { if (ticks[i] != 0) profiler.AddTicks(ColBroad + i, ticks[i]); ticks[i] = 0; }
+    }
+
+    private static int _worldFrames;
+
+    /// <summary>True on the first world frame and every 600th after it (one-line [scene] census cadence).</summary>
+    internal static bool CensusDue() => _worldFrames++ % 600 == 0;
+
+    /// <summary>Writes a pre-formatted line through the profiler sink.</summary>
+    internal static void Emit(string line)
+    {
+        if (!Enabled) return;
+        Get().Write(line);
+    }
+
+    internal static void AddTicks(int phase, long ticks)
+    {
+        if (!Enabled) return;
+        var p = Get();
+        if (_firstCall == 0) _firstCall = Stopwatch.GetTimestamp() - ticks;
+        p.AddTicks(phase, ticks);
+    }
+
+    private static FrameProfiler? _profiler;
+    private static StreamWriter? _log;
+    private static long _lastAlloc;
+    private static int _g0, _g1, _g2;
+    private static long _frameStart;
+
+    internal static readonly double HitchMs = ParseHitchMs(Environment.GetEnvironmentVariable("BLITZCS_ENGINE_HITCH_MS"));
+    internal static readonly int[] EnginePhases = [UpdateWorld, RenderWorld, Draw2D, Copy, Present];
+
+    /// <summary>Parses BLITZCS_ENGINE_HITCH_MS: positive number of milliseconds, otherwise the 50 ms default.</summary>
+    internal static double ParseHitchMs(string? text) =>
+        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && value > 0 ? value : 50;
+
+    private static long _lastFlipEnd, _firstCall;
+
+    internal static long Now() => Stopwatch.GetTimestamp();
+
+    internal static void Add(int phase, long start)
+    {
+        if (!Enabled) return;
+        var p = Get();
+        if (_firstCall == 0) _firstCall = start;
+        p.AddTicks(phase, Stopwatch.GetTimestamp() - start);
+    }
+
+    private static string HitchExtra(long now)
+    {
+        var gap = _firstCall == 0 || _lastFlipEnd == 0 ? 0 : _firstCall - _lastFlipEnd;
+        return string.Create(CultureInfo.InvariantCulture,
+            $"preFirstCall={gap * 1000.0 / Stopwatch.Frequency:F1}ms calls[{TraceCall.FormatCounts(_hitchCounts)}]");
+    }
+    private static long[] _hitchCounts = new long[TraceCall.Names.Length];
+
+    private static FrameProfiler Get()
+    {
+        if (_profiler is not null) return _profiler;
+        var path = Environment.GetEnvironmentVariable("BLITZCS_ENGINE_PROFILE_LOG");
+        if (!string.IsNullOrEmpty(path)) _log = new StreamWriter(path, append: true) { AutoFlush = true };
+        _profiler = new FrameProfiler(PhaseNames, CounterNames, 120, Stopwatch.Frequency,
+            line => { if (_log is not null) _log.WriteLine(line); else Console.Error.WriteLine(line); },
+            Frame, EnginePhases, HitchMs, () => HitchExtra(0));
+        _lastAlloc = GC.GetAllocatedBytesForCurrentThread();
+        _g0 = GC.CollectionCount(0); _g1 = GC.CollectionCount(1); _g2 = GC.CollectionCount(2);
+        _frameStart = Stopwatch.GetTimestamp();
+        _lastFlipEnd = _frameStart;
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => Flush();
+        return _profiler;
+    }
+
+    /// <summary>Call after Present: folds renderer counters in and closes the frame.</summary>
+    internal static void EndFrame()
+    {
+        if (!Enabled) return;
+        var p = Get();
+        var v = D3D11FrameCounters.Values;
+        p.AddTicks(MipGen, v[D3D11FrameCounters.MipTicks]);
+        p.AddTicks(DynUpload, v[D3D11FrameCounters.DynamicUploadTicks]);
+        p.AddTicks(TexUpload, v[D3D11FrameCounters.TextureUploadTicks]);
+        p.AddTicks(Readback, v[D3D11FrameCounters.ReadbackTicks]);
+        p.AddCount(DrawCalls, v[D3D11FrameCounters.MeshDraws]);
+        p.AddCount(Tris, v[D3D11FrameCounters.Triangles]);
+        p.AddCount(BlitDraws, v[D3D11FrameCounters.BlitDraws]);
+        p.AddCount(ClearStates, v[D3D11FrameCounters.ClearPipelineStates]);
+        p.AddCount(CbMaps, v[D3D11FrameCounters.ConstantBufferMaps]);
+        p.AddCount(Resolves, v[D3D11FrameCounters.Resolves]);
+        p.AddCount(ReadbackCount, v[D3D11FrameCounters.Readbacks]);
+        p.AddCount(MipCount, v[D3D11FrameCounters.MipGenerations]);
+        p.AddCount(DynCount, v[D3D11FrameCounters.DynamicVertexUploads]);
+        p.AddCount(TexCount, v[D3D11FrameCounters.TextureUploads]);
+        p.AddCount(SkippedBinds, v[D3D11FrameCounters.SkippedBinds]);
+        p.AddCount(BatchedBlits, v[D3D11FrameCounters.BatchedBlitOps]);
+        p.AddCount(SkippedCbMaps, v[D3D11FrameCounters.SkippedConstantBufferMaps]);
+        p.AddCount(D3dApiDraws, v[D3D11FrameCounters.ApiDraws]);
+        p.AddCount(D3dInstancedDraws, v[D3D11FrameCounters.InstancedDraws]);
+        p.AddCount(D3dInstancedObjects, v[D3D11FrameCounters.InstancedObjects]);
+        p.AddCount(D3dObjectBufferBytes, v[D3D11FrameCounters.ObjectBufferBytes]);
+        p.AddCount(D3dConstantBufferBinds, v[D3D11FrameCounters.ConstantBufferBinds]);
+        p.AddCount(D3dDrawFlushes, v[D3D11FrameCounters.DrawQueueFlushes]);
+        p.AddCount(D3dBreakMesh, v[D3D11FrameCounters.InstRunBreakMesh]);
+        p.AddCount(D3dBreakTex, v[D3D11FrameCounters.InstRunBreakTex]);
+        p.AddCount(D3dBreakSampler, v[D3D11FrameCounters.InstRunBreakSampler]);
+        p.AddCount(D3dBreakState, v[D3D11FrameCounters.InstRunBreakState]);
+        p.AddCount(D3dBreakOther, v[D3D11FrameCounters.InstRunBreakOther]);
+        p.AddCount(D3dRunLen1, v[D3D11FrameCounters.InstRunLen1]);
+        p.AddCount(D3dRunLen2, v[D3D11FrameCounters.InstRunLen2]);
+        p.AddCount(D3dRunLen3To4, v[D3D11FrameCounters.InstRunLen3To4]);
+        p.AddCount(D3dRunLen5To8, v[D3D11FrameCounters.InstRunLen5To8]);
+        p.AddCount(D3dRunLen9Plus, v[D3D11FrameCounters.InstRunLen9Plus]);
+        p.AddCount(D3dReordered, v[D3D11FrameCounters.ReorderedDraws]);
+        Array.Clear(v);
+        FoldEngineStats(p, EngineStats.Counts, EngineStats.Ticks);
+        var now = Stopwatch.GetTimestamp();
+        p.AddTicks(Frame, now - _frameStart);
+        _frameStart = now;
+        var alloc = GC.GetAllocatedBytesForCurrentThread();
+        int c0 = GC.CollectionCount(0), c1 = GC.CollectionCount(1), c2 = GC.CollectionCount(2);
+        _hitchCounts = EngineTrace.TakeCounts();
+        p.EndFrame(alloc - _lastAlloc, c0 - _g0, c1 - _g1, c2 - _g2);
+        _lastFlipEnd = now;
+        _firstCall = 0;
+        _lastAlloc = GC.GetAllocatedBytesForCurrentThread();
+        _g0 = c0; _g1 = c1; _g2 = c2;
+    }
+
+    internal static void Flush()
+    {
+        if (!Enabled || _profiler is null) return;
+        _profiler.Flush();
+        _log?.Flush();
+    }
+}

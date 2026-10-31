@@ -1,0 +1,11 @@
+{
+  "description": "Managed SDL dummy lifecycle and hybrid-state smoke only; bootstrap extensions have no original-runtime equivalent and are not historical parity fixtures. Requires SDL_VIDEO_DRIVER=dummy.",
+  "fixtures": [
+    {
+      "name": "m20-window-input-lifecycle",
+      "source": "../../samples/LegacyInput/lifecycle.bb",
+      "expected_phase": "run",
+      "expected_stdout": "1\n37,53,0,0\n0,0,0,0,0,0\n0\n1\n37,53,0,0\n0,0,0,0,0,0\n0\n1\n37,53,0,0\n0,0,0,0,0,0\n0\n3\n"
+    }
+  ]
+}

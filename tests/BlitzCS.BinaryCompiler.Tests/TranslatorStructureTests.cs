@@ -53,7 +53,9 @@ public sealed class TranslatorStructureTests
         Assert.Single(art.Imports);
         Assert.NotEqual(0u, TableEntry(art, art.ExitGuestRva));
         Assert.NotEqual(0u, TableEntry(art, art.ImportStubBaseRva));
-        Assert.Equal(0u, TableEntry(art, art.ImportStubBaseRva + 16));                  // beyond the imports: trap
+        Assert.Equal(ImportStubLayout.RuntimeStubCount, art.RuntimeStubs);
+        for (var k = 1u; k <= ImportStubLayout.RuntimeStubCount; k++) Assert.NotEqual(0u, TableEntry(art, art.ImportStubBaseRva + 16 * k));   // the runtime stubs (guest SEH)
+        Assert.Equal(0u, TableEntry(art, art.ImportStubBaseRva + 16 * (1 + (uint)ImportStubLayout.RuntimeStubCount)));   // beyond them: trap
         Assert.Equal(0u, TableEntry(art, PeFixtureBuilder.TextRva + 0x7FF));            // not code: trap
         var export = Assert.Single(art.Exports);
         Assert.Equal("_f", export.Name); Assert.Equal(PeFixtureBuilder.TextRva, export.GuestRva);
@@ -75,7 +77,9 @@ public sealed class TranslatorStructureTests
         {
             var art = Translate(SimpleCode, profile).Artifact;
             var insts = DecodeHost(art);
-            Assert.Equal(Code.Mov_rm32_imm32, insts[0].Ins.Code);                       // trap routine at host offset 0
+            Assert.Equal(Code.Pushfq, insts[0].Ins.Code);                              // miss routine at host offset 0: the foreign (cross-module) dispatch comes first ...
+            Assert.Contains(insts.Take(100), i => i.Ins.Code == Code.Fxsave64_m512byte);  // ... then the miss-handler slow path for code generated at run time ...
+            Assert.Contains(insts.Take(100), i => i.Ins.Code == Code.Mov_rm32_imm32);    // ... and ends in the kind 1 trap
             Assert.Equal(0, insts[0].Offset);
             Assert.True(insts[^1].Offset + insts[^1].Length <= art.CodeSize);
             Assert.Contains(insts, i => i.Offset == art.EnterGuestOffset);
@@ -169,10 +173,7 @@ public sealed class TranslatorStructureTests
         yield return ["int", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.@int(0x2E))];
         yield return ["in", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.@in(al, dx))];
         yield return ["hlt", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.hlt())];
-        yield return ["vaddps", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.vaddps(xmm0, xmm1, xmm2))];
         yield return ["pushfw", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.db(0x66, 0x9C))];
-        yield return ["push ds", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.push(ds))];
-        yield return ["mov ds", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.mov(ds, ax))];
         yield return ["jmp far", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.db(0xEA, 0x34, 0x12, 0, 0, 0x10, 0))];
         yield return ["16-bit addressing", "BC_UNSUPPORTED_INSTRUCTION", (Action<Assembler>)(a => a.mov(ax, __word_ptr[bx + si]))];
     }

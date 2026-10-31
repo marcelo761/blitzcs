@@ -98,6 +98,10 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
         Drain();
         if (image.Relocations.Count == 0) DiscoverImmediateRoots();
 
+        if (relocDataRejected > 0)
+            diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "CFG_RELOC_DATA", $"{relocDataRejected} decode attempt(s) were rejected because a base relocation lies over opcode bytes (relocated address tables inside code)."));
+        if (dataAfterCall > 0)
+            diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "CFG_DATA_AFTER_CALL", $"{dataAfterCall} call(s) are followed directly by bytes that decode as data (address tables or handler data placed after a call that does not return); the fall-through was not translated."));
         return new ControlFlowGraph
         {
             Instructions = insts, Leaders = leaders, FunctionEntries = entries, Undecodable = undecodable,
@@ -164,7 +168,7 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
             diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Info, "CFG_IMMEDIATE_ROOTS", $"The image has no relocation table; {seen.Count - rejectedAsData} code address(es) held as instruction immediates were treated as potential function pointers ({rejectedAsData} more did not look like function starts and were ignored)."));
     }
 
-    private int rejectedAsData;
+    private int rejectedAsData, dataAfterCall;
 
     /// <summary>
     /// True when the bytes right before <paramref name="t"/> are padding (int3, nop) or end with an instruction after which control cannot fall through
@@ -217,6 +221,38 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
         return true;
     }
 
+    /// <summary>Number of instructions inspected by <see cref="LooksLikeDataRun"/>.</summary>
+    internal const int DataRunProbe = 16;
+
+    /// <summary>
+    /// True when the bytes at <paramref name="rva"/> decode, within the first <see cref="DataRunProbe"/> instructions and before any unconditional terminator,
+    /// as something compiled user-mode code does not contain (arpl, bound, in/out, lds/les, push/pop es, the aaa family, an undecodable byte, a run of
+    /// <c>add [eax],al</c>). That is how an address table or a pad of exception-handler data placed right after a call to a function that never returns
+    /// (or after a speculative root) looks to a linear sweep. Real code reaches a ret or a jmp first, or decodes cleanly, and is unaffected.
+    /// </summary>
+    internal bool LooksLikeDataRun(uint rva)
+    {
+        var end = ExecEnd(rva);
+        if (end == 0 || rva >= mapped.Length) return false;
+        var decoder = Iced.Intel.Decoder.Create(32, new ByteArrayCodeReader(mapped, (int)rva, (int)Math.Min(end - rva, 256u)), image.ImageBase + rva);
+        var zeroAdds = 0;
+        for (var n = 0; n < DataRunProbe; n++)
+        {
+            var ins = decoder.Decode();
+            // With a relocation table the base-dependent bytes are exactly the relocated dwords; one that lies over opcode bytes is an address table.
+            if (!ins.IsInvalid && relocSet.Count != 0 && RelocatedOverOpcode(decoder, in ins, (uint)(ins.IP - image.ImageBase))) return true;
+            if (ins.IsInvalid || IsUserModeNonsense(ins.Mnemonic) || ins.Mnemonic is Mnemonic.Lds or Mnemonic.Les or Mnemonic.Int1
+                || (ins.Mnemonic is Mnemonic.Push or Mnemonic.Pop && ins.Op0Kind == OpKind.Register && ins.Op0Register == Register.ES)) return true;
+            zeroAdds = ins.Code == Code.Add_rm8_r8 && ins.Length == 2 && mapped[ins.IP - image.ImageBase] == 0 ? zeroAdds + 1 : 0;
+            if (zeroAdds >= 3) return true;
+            if (ins.FlowControl is FlowControl.Return or FlowControl.UnconditionalBranch or FlowControl.IndirectBranch or FlowControl.Interrupt or FlowControl.Exception) return false;
+            // Clean code that reaches a call before anything data-like is real code (a throw site: arguments, then a call to a function that never returns, then the
+            // handler's address table). Only the bytes after that call are data; the sweep applies this test again there.
+            if (n > 0 && ins.FlowControl is FlowControl.Call or FlowControl.IndirectCall) return false;
+        }
+        return false;
+    }
+
     private void EnqueueRoot(uint rva, string what)
     {
         if (IsExec(rva)) { Enqueue(rva, true); return; }
@@ -261,6 +297,12 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
         while (true)
         {
             if (insts.ContainsKey(rva) || undecodable.ContainsKey(rva)) return;
+            if (speculative && IsExec(rva) && LooksLikeDataRun(rva))
+            {
+                undecodable[rva] = "data in code";
+                rejectedAsData++;
+                return;
+            }
             if (!IsExec(rva))
             {
                 if (!speculative) diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Warning, "CFG_TARGET_NOT_EXECUTABLE", $"Control flow reaches RVA 0x{rva:X}, which is not in an executable section.", rva));
@@ -275,6 +317,14 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
             {
                 undecodable[rva] = "invalid or truncated instruction";
                 diags.Add(new BinaryDiagnostic(DiagnosticSeverity.Warning, "CFG_DECODE_FAILURE", $"Cannot decode an instruction at RVA 0x{rva:X}; the bytes are treated as data.", rva));
+                return;
+            }
+            if (relocSet.Count != 0 && RelocatedOverOpcode(decoder, in ins, rva))
+            {
+                // A fixup can only sit in a displacement or immediate field. Anything else is a relocated pointer table decoded as code,
+                // which makes the code/data decision independent of the load base.
+                undecodable[rva] = "relocated pointer over opcode bytes (data)";
+                relocDataRejected++;
                 return;
             }
             var gi = new GuestInstruction(rva, ins.Length, ins, speculative);
@@ -295,8 +345,11 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
                     leaders.Add(next); rva = next; continue;
                 case FlowControl.Call:
                     AddTarget(ins, true);
+                    // A call that never returns (a throw helper) can be followed directly by data; do not sweep it as code.
+                    if (IsExec(next) && !insts.ContainsKey(next) && LooksLikeDataRun(next)) { dataAfterCall++; return; }
                     leaders.Add(next); rva = next; continue;
                 case FlowControl.IndirectCall:
+                    if (IsExec(next) && !insts.ContainsKey(next) && LooksLikeDataRun(next)) { dataAfterCall++; return; }
                     leaders.Add(next); rva = next; continue;
                 case FlowControl.Return:
                 case FlowControl.Interrupt:
@@ -306,6 +359,28 @@ internal sealed class CfgBuilder(PeImage image, byte[] mapped)
                     rva = next; continue;
             }
         }
+    }
+
+    private int relocDataRejected;
+
+    /// <summary>True when a base relocation overlaps the instruction at <paramref name="rva"/> without lying wholly inside one displacement or immediate field.</summary>
+    private bool RelocatedOverOpcode(Decoder decoder, in Instruction ins, uint rva)
+    {
+        var len = ins.Length;
+        ConstantOffsets? offsets = null;
+        for (var r = rva >= 3 ? rva - 3 : 0; r < rva + (uint)len; r++)
+        {
+            if (!relocSet.Contains(r)) continue;
+            // Location r..r+3 must lie in [rva, rva+len) and inside a single operand field.
+            if (r < rva) return true;
+            var rel = (int)(r - rva);
+            var o = offsets ??= decoder.GetConstantOffsets(in ins);
+            var ok = (o.HasDisplacement && rel >= o.DisplacementOffset && rel + 4 <= o.DisplacementOffset + o.DisplacementSize)
+                || (o.HasImmediate && rel >= o.ImmediateOffset && rel + 4 <= o.ImmediateOffset + o.ImmediateSize)
+                || (o.HasImmediate2 && rel >= o.ImmediateOffset2 && rel + 4 <= o.ImmediateOffset2 + o.ImmediateSize2);
+            if (!ok) return true;
+        }
+        return false;
     }
 
     private void AddTarget(Instruction ins, bool isCall)

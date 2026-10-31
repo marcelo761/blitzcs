@@ -22,6 +22,99 @@ public class ArrayCompilerTests
     [InlineData("Global result=0\nDim a#(0)\nFor a(0)=1 To 2 Step .5\nresult=result+1\nNext", 3)]
     public void TypedInclusiveArraysExecute(string source, int expected) => WithAssembly(source, assembly => Assert.Equal(expected, assembly.GetType("BB")!.GetField("result")!.GetValue(null)));
 
+    [Fact]
+    public void FixedRankArrayAccessAvoidsPerAccessIndexArrayAllocations()
+    {
+        const string source = """
+            Dim one%(0)
+            Dim two%(0,0)
+            Global check1%=0
+            Global check2%=0
+            <?cs module
+            public static class Probe {
+              public static long AllocatedBytes1;
+              public static long AllocatedBytes2;
+              public static int Checksum;
+              public static int Run() {
+                for (int i = 0; i < 32; i++) { BB.work1(); BB.work2(); }
+                System.GC.Collect(); System.GC.WaitForPendingFinalizers(); System.GC.Collect();
+                var before1 = System.GC.GetAllocatedBytesForCurrentThread();
+                BB.work1();
+                AllocatedBytes1 = System.GC.GetAllocatedBytesForCurrentThread() - before1;
+                var before2 = System.GC.GetAllocatedBytesForCurrentThread();
+                BB.work2();
+                AllocatedBytes2 = System.GC.GetAllocatedBytesForCurrentThread() - before2;
+                Checksum = BB.check1 + BB.check2;
+                return 0;
+              }
+            }
+            ?>
+            CS::Probe.Run()
+            Function work1()
+              For i=1 To 100000
+                one(0)=one(0)+1
+              Next
+              check1=one(0)
+            End Function
+            Function work2()
+              For i=1 To 100000
+                two(0,0)=two(0,0)+1
+              Next
+              check2=two(0,0)
+            End Function
+            """;
+
+        WithReleaseAssembly(source, assembly =>
+        {
+            var probe = assembly.GetType("Probe")!;
+            Assert.Equal(0L, probe.GetField("AllocatedBytes1")!.GetValue(null));
+            Assert.Equal(0L, probe.GetField("AllocatedBytes2")!.GetValue(null));
+            Assert.Equal(6_600_000, probe.GetField("Checksum")!.GetValue(null));
+        });
+    }
+
+    [Fact]
+    public void FixedRankArrayAccessKeepsIndexEvaluationOrderAndSingleEvaluation()
+    {
+        const string source = """
+            Global calls%=0
+            Global result%=0
+            Dim one%(1)
+            Dim two%(1,1)
+            one(NextIndex(1))=42
+            two(NextIndex(0),NextIndex(1))=7
+            result=calls*1000+one(1)*10+two(0,1)
+            Function NextIndex%(value%)
+              calls=calls*10+value+1
+              Return value
+            End Function
+            """;
+
+        WithAssembly(source, assembly => Assert.Equal(212_427, assembly.GetType("BB")!.GetField("result")!.GetValue(null)));
+    }
+
+    [Theory]
+    [InlineData("Dim a(1)\nPrint a(2)", "index 2 on axis 1 is outside 0..1.")]
+    [InlineData("Dim a(1,1)\nPrint a(0,2)", "index 2 on axis 2 is outside 0..1.")]
+    public void FixedRankBoundsFailuresKeepAxisDiagnosticAndBasicLocation(string source, string diagnostic)
+    {
+        WithAssembly(source, _ => { }, "rank-bounds.bb", error =>
+        {
+            Assert.Contains(diagnostic, error.Message);
+            Assert.Contains("rank-bounds.bb(2,", error.Message);
+        });
+    }
+
+    [Fact]
+    public void GeneratedArrayAccessUsesFixedArityOverloadsAndKeepsHigherRankFallback()
+    {
+        var code = BasicCompiler.Compile("Dim one(0)\nDim two(0,0)\nDim three(0,0,0)\nPrint one(0)\nPrint two(0,0)\nPrint three(0,0,0)", "array-overloads.bb");
+
+        Assert.Contains("__BlitzArrays.a0.Element(0, \"array-overloads.bb(", code);
+        Assert.Contains("__BlitzArrays.a1.Element(0, 0, \"array-overloads.bb(", code);
+        Assert.Contains("__BlitzArrays.a2.Element([0, 0, 0], \"array-overloads.bb(", code);
+    }
+
     [Theory]
     [InlineData("3", "i And 3", "0")]
     [InlineData("3,3", "i And 3,i And 3", "0,0")]
@@ -116,6 +209,26 @@ public class ArrayCompilerTests
             var assembly = context.LoadFromStream(stream);
             if (assertError is null) { assembly.EntryPoint!.Invoke(null, null); assert(assembly); }
             else { var error = Assert.Throws<System.Reflection.TargetInvocationException>(() => assembly.EntryPoint!.Invoke(null, null)); assertError(error.InnerException!); }
+        }
+        finally { context.Unload(); }
+    }
+
+    private static void WithReleaseAssembly(string source, Action<System.Reflection.Assembly> assert)
+    {
+        var code = BasicCompiler.Compile(source, "array-allocation.bb");
+        var refs = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator).Select(p => MetadataReference.CreateFromFile(p));
+        var compilation = CSharpCompilation.Create(Guid.NewGuid().ToString("N"), [CSharpSyntaxTree.ParseText(code)], refs,
+            new CSharpCompilationOptions(OutputKind.ConsoleApplication, optimizationLevel: OptimizationLevel.Release, checkOverflow: false));
+        using var stream = new MemoryStream();
+        var result = compilation.Emit(stream);
+        Assert.True(result.Success, string.Join("\n", result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)) + "\n" + code);
+        stream.Position = 0;
+        var context = new AssemblyLoadContext(Guid.NewGuid().ToString("N"), true);
+        try
+        {
+            var assembly = context.LoadFromStream(stream);
+            assembly.EntryPoint!.Invoke(null, null);
+            assert(assembly);
         }
         finally { context.Unload(); }
     }

@@ -1,8 +1,59 @@
-# Structured exception handling: feasibility study
+# Structured exception handling
 
-Status: analysis plus measured evidence (see "Evidence" and "Decision" below). Nothing here is implemented. `RtlUnwind` and `RaiseException`
-(kernel32) are imported by ogg, vorbis, vorbisFile and eax (MSVC C++/SEH runtime) and by every Blitz3D SDK image; they stay unresolved, so a guest
-reaching them faults naming the API. Decision: not needed now (no observed path requires it); the staged design stays on the shelf with explicit triggers.
+Status: **implemented for software exceptions** (frame-based x86 SEH: `RaiseException` and `RtlUnwind` over the `FS:[0]` chain, inside one guest call); see
+"Implementation" for the exact scope. The first trigger of the earlier no-go decision fired (blitzcc.exe compiling a program with an error, "Evidence: blitzcc.exe
+compile-error path"), so the decision changed to go. Hardware faults and the cases listed under "Not supported" stay named faults. The sections from "How x86 SEH works"
+to "Decision" are the original feasibility study, kept for the evidence; where they say "not implemented", "Implementation" supersedes them.
+
+## Implementation
+
+**Design: a continuation-passing dispatcher, not nested host calls.** On Windows the handlers run on the same stack as the code that raised, below the dispatcher's own
+frames, and an MSVC `catch` never returns to the dispatcher: `__CxxFrameHandler3` calls `RtlUnwind`, runs the catch funclet and then `_JumpToContinuation` loads `esp`/`ebp`
+and jumps into the function that caught. A dispatcher that called each handler through a nested guest call (`EnterGuest` from managed code) would leave managed and
+native frames behind that such a jump cannot unwind. So the managed `RaiseException` never calls a handler itself: it *redirects* the import stub into the handler, with a
+return address that is a runtime stub of the module; when the handler returns there, the managed side runs the next step. Everything the dispatcher keeps lives in a
+block on the guest stack below the raising call, as on Windows; a handler that never returns (the `catch` case) abandons it exactly like Windows abandons its frames, and the
+guest just runs on in the same guest call (same call context in R14, same native RSP, same TEB). Nothing is left on the native stack.
+
+* **Import stub contract** (`ImportStubLayout` in `Contracts.cs`, artifact format 6): every import stub stores the guest's EBX, EBP, ESI and EDI at the call into free
+  slots of the per-call context (offsets 20, 36, 52, 92); the two runtime stubs also store EAX (76). An extended return whose flags contain `RedirectFlag` (4) does not
+  return to the caller: EAX of the result is the guest address of a register image laid out like the integer part of an x86 `CONTEXT` (from `Edi` at +0x9C), the stub
+  loads all eight general registers from it and continues at its `Eip` through the normal dispatch (an untranslated target traps by name). Same code for linux-sysv and
+  windows-x64 (the capture precedes the ABI-specific part, the redirect is in the shared tail). Older artifacts are rejected with "re-translate" (format and compiler
+  version bumped, so cache entries are regenerated).
+* **Runtime stubs**: every translated artifact carries two more import-style stubs after the dynamic pool (`TranslationArtifact.RuntimeStubs`): 0 = the handler-return
+  continuation, 1 = the handler of the dispatcher's own registration records. Hand-built artifacts without them get a named fault if they call the SEH imports.
+* **`RaiseException(code, flags, count, args)`** (`GuestStructuredExceptions`, bound by the Win32 component as `KERNEL32!RaiseException`): builds `EXCEPTION_RECORD`
+  (flags masked to `EH_NONCONTINUABLE`, `count` clamped to 15, no parameters for a NULL array, `ExceptionAddress` = the return address) and a `CONTEXT` (`CONTEXT_CONTROL |
+  CONTEXT_INTEGER`: Eip = return address, Esp = above the four stdcall arguments, EBX/EBP/ESI/EDI as captured, EAX/ECX/EDX 0; segment registers, EFlags and FP state are
+  not captured and read 0), then walks `FS:[0]`. For each record it installs its own extended record `{Next = FS:[0], Handler = runtime stub 1, tag, record being
+  dispatched}` (the record MSVC's `_UnwindNestedFrames` relinks and `_JumpToContinuation` unlinks) and enters `Handler(record, frame, context, dispatcherContext)`.
+  Dispositions as in `RtlDispatchException`: ContinueExecution resumes from the (possibly edited) CONTEXT (all eight registers and Eip/Esp), ContinueSearch goes to `Next`,
+  NestedException sets `EXCEPTION_NESTED_CALL` until the nested frame has been passed. A handler may be cdecl (MSVC's are) or stdcall.
+* **`RtlUnwind(targetFrame, targetIp, record, returnValue)`**: a NULL record becomes `STATUS_UNWIND`; the record's flags get `EH_UNWINDING` in place; every record from
+  `FS:[0]` up to the target frame is called with it (inside the dispatcher's unwind record) and unlinked; then control returns to the caller with EAX = `returnValue` and the
+  callee-saved registers as at the call (x86 `RtlUnwind` does not jump to `targetIp`). `targetFrame = 0xFFFFFFFF` unwinds the whole chain.
+* **Guest stack identity and nesting**: each guest call records its stack range `[stack limit, its frame)`; a registration record outside it is never called. A raise inside
+  a handler gets its own block below (nested exceptions work as on Windows). Cross-module code running in one guest call shares the TEB and the dispatch (the continuation
+  stub belongs to the module whose guest call is running; foreign dispatch reaches it).
+
+**Not supported (named faults, `GuestSehException` unless stated):** a record above the frame of the innermost guest call, i.e. an exception that would cross a host
+(managed) frame between two guest calls; misaligned or out-of-range records; an unhandled exception (`GuestUnhandledException`: code, address, parameters; the
+filter set with `SetUnhandledExceptionFilter` is not called, Windows would end the process); ContinueExecution for a non-continuable exception (Windows raises
+`STATUS_NONCONTINUABLE_EXCEPTION`); an invalid disposition; a collided unwind; `RtlUnwind` with a NULL target frame (exit unwind), a target below the next record, or a
+target not on the chain; a handler that returns with `FS:[0]` not pointing at the dispatcher's record or with a stack that is neither the cdecl nor the stdcall shape;
+the guest stack reserve exhausted (`GuestStackException`). SafeSEH handler tables and SEHOP chain validation are not checked. Hardware exceptions (access violation, divide
+error, `int 3`, stack overflow) are not turned into guest exceptions (class 2 below, unchanged). Self-modifying code: `VirtualProtect` making translated code writable,
+including code translated at run time, is refused by name (`Win32SelfModifyingCodeException`); a store into an instruction byte of code translated at run time is the named
+trap `GuestSelfModifyingCodeException` (kind 6), not a guest exception; stores to data on those pages are performed (docs/binary-dynamic-code.md). The write guard is a vectored
+exception handler on windows-x64 that only claims access violations on those pages and its own single-step traps; every other hardware exception passes through unchanged.
+
+**Tests.** `SehDifferentialTests` (`tools/x86_oracle/lib/seh.c`): raises through a hand-built chain with MSVC-style catch (search, `RtlUnwind` with EH_UNWINDING calls of
+inner cleanup frames, `_UnwindNestedFrames` relink, `_JumpToContinuation`), a raise inside a handler (nested), cdecl and stdcall handlers, ContinueExecution with live
+callee-saved values, `RtlUnwind` without a record, parameter clamping; 2,276 vectors per profile. The ELF oracle runs it natively with a reference model of the documented
+algorithm (`drivers/seh.c`); the PE32 oracle runs it with the real kernel32, and under Wine 11 both transcripts were byte-identical. The translated guest matches on linux-x64
+and on windows-x64 (Wine, against the PE32 oracle). Named faults: unhandled, non-continuable, crossing a host frame. Real code: `BlitzccDifferentialTests` (blitzcc compile
+errors, exact native stdout and exit code) and the corpus differential (`docs/blitz3d-reference.md`).
 
 ## How x86 SEH works on Windows
 
@@ -199,7 +250,9 @@ dotnet /tmp/bcsurvey/BcSurvey.dll seh --out /tmp/seh-sdk.md "Blitz3D.exe=$SDK/Bl
 dotnet /tmp/bcsurvey/BcSurvey.dll dump $G/ogg.dll 56E0 22
 ```
 
-## Decision
+## Decision (superseded)
+
+Superseded by "Implementation": trigger (1) below fired with blitzcc's compile-error path. The original text:
 
 **No-go for implementing exception machinery now.** The evidence, in order of weight:
 
@@ -266,3 +319,17 @@ Why class 2 cannot be isolated in-process today, precisely:
 
 Decision for class 2: a "fault becomes a named `GuestException`" filter (audit F-14) is a candidate hardening step, independent of guest SEH, to be spiked on Windows and Linux before
 anyone relies on it. Guest SEH for hardware faults is not planned.
+
+## Evidence: blitzcc.exe compile-error path (measured)
+
+Sources: `help/commands/2d_examples/StartNetGame.bb` and `JoyUDir.bb` of the Blitz3D V1.118 SDK, `blitzcc -c`. Native (Wine, dedicated prefix) prints the banner, `Parsing...` (and `Generating...` for the first),
+then `"C:\...\StartNetGame.bb":1:1:1:1:Function 'startnetgame' not found` / `"C:\...\JoyUDir.bb":2:1:2:1:Expecting end-of-file`, exit 255, no file written.
+
+Under BcRun both runs now stop at the first C++ `throw`: `The guest called unbound import KERNEL32.dll!RaiseException` (`RtlUnwind` is also unbound). The throw is raised deep in the parser/semantic
+phase and the message is produced by the catch in blitzcc's `main`, so the evidence shows a throw crossing guest frames: the minimal truthful mechanism is the dispatcher described above
+(`RaiseException` building `EXCEPTION_RECORD`/`CONTEXT`, walking the `FS:[0]` chain, guest `__CxxFrameHandler3` calling `RtlUnwind`), not a named terminal fault. This is now implemented
+("Implementation"): both sources print exactly the native diagnostic and exit status under BcRun.
+
+Separate defect found and fixed on the way: for JoyUDir the run did not even reach the throw. The call that precedes the throw helper at the end of a parser function is followed by clean argument set-up,
+`call <throw helper>`, and then the handler address table; the data-after-call probe classified the whole run (which contains the relocated table dwords) as data and dropped the code before the call
+(`GuestTrapException: Guest control flow reached untranslated code`). The probe now accepts clean code that reaches a call and re-applies the test after that call.

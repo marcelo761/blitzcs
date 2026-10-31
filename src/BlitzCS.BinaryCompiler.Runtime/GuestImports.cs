@@ -54,6 +54,12 @@ public interface IGuestDataImportResolver
     GuestDataImport? ResolveData(string dll, string? name, ushort? ordinal);
 }
 
+/// <summary>Optional extension of <see cref="IGuestImportResolver"/>: notified when the guest process begins exiting (<see cref="GuestModuleSet.DisposeAtProcessExit"/>) so host background threads and blocking waits stop before modules detach.</summary>
+public interface IGuestProcessExitResolver
+{
+    void OnProcessExiting();
+}
+
 /// <summary>Float/pointer value helpers (guest values travel as 32-bit words).</summary>
 public static class GuestValue
 {

@@ -43,6 +43,97 @@ public sealed class RuntimeLoaderTests
         Maps(address, address + 1).FirstOrDefault(m => address >= m.Start && address < m.End).Perms ?? "unmapped";
 
     [Fact]
+    public void MemoryLookup_RechecksPermissionsAfterWarmingRegion()
+    {
+        var g = FakeGuest.Create();
+        using var m = Load(g);
+        using var buffer = m.Memory.Allocate(4096);
+        buffer.Write(0, BitConverter.GetBytes(0x12345678u));
+
+        Assert.Equal(0x12345678u, m.Memory.ReadUInt32(buffer.Address)); // warm the allocation lookup
+        Assert.True(m.Memory.TryProtect(buffer.Address, 4096, MemoryProtection.Read, 7, out var refusal), refusal);
+        Assert.Equal(0x12345678u, m.Memory.ReadUInt32(buffer.Address));
+        Assert.Throws<GuestMemoryException>(() => m.Memory.WriteUInt32(buffer.Address, 1));
+
+        Assert.True(m.Memory.TryProtect(buffer.Address, 4096, MemoryProtection.None, 9, out refusal), refusal);
+        Assert.Throws<GuestMemoryException>(() => m.Memory.ReadUInt32(buffer.Address));
+        Assert.Throws<GuestMemoryException>(() => m.Memory.WriteUInt32(buffer.Address, 2));
+
+        Assert.True(m.Memory.TryProtect(buffer.Address, 4096, MemoryProtection.ReadWrite, 8, out refusal), refusal);
+        m.Memory.WriteUInt32(buffer.Address, 0x87654321u);
+        Assert.Equal(0x87654321u, m.Memory.ReadUInt32(buffer.Address));
+    }
+
+    [Fact]
+    public void MemoryLookup_RecoversWhenRegionSnapshotShiftsAndSelectedAllocationIsFreed()
+    {
+        var g = FakeGuest.Create();
+        using var m = Load(g);
+        using var earlier = m.Memory.Allocate(4096);
+        var selected = m.Memory.Allocate(4096);
+        selected.Write(0, BitConverter.GetBytes(0xABCDEF01u));
+        Assert.Equal(0xABCDEF01u, m.Memory.ReadUInt32(selected.Address)); // warm a late own region
+
+        earlier.Dispose(); // shifts the selected region's index in the immutable snapshot
+        Assert.Equal(0xABCDEF01u, m.Memory.ReadUInt32(selected.Address));
+        var retiredAddress = selected.Address;
+        selected.Dispose();
+        Assert.Throws<GuestMemoryException>(() => m.Memory.ReadUInt32(retiredAddress));
+
+        using var replacement = m.Memory.Allocate(4096);
+        replacement.Write(0, BitConverter.GetBytes(0x10203040u));
+        Assert.Equal(0x10203040u, m.Memory.ReadUInt32(replacement.Address));
+    }
+
+    [Fact]
+    public void MemoryLookup_ConcurrentReadsAndWritesAcrossDistinctBuffersRemainIsolated()
+    {
+        var g = FakeGuest.Create();
+        using var m = Load(g);
+        using var buffers = new BufferSet(Enumerable.Range(0, 8).Select(_ => m.Memory.Allocate(4096)).ToArray());
+        Parallel.For(0, buffers.Items.Length, i =>
+        {
+            var buffer = buffers.Items[i];
+            for (uint n = 0; n < 1000; n++) m.Memory.WriteUInt32(buffer.Address, (uint)(i * 1000) + n);
+            Assert.Equal((uint)(i * 1000 + 999), m.Memory.ReadUInt32(buffer.Address));
+        });
+    }
+
+    [Fact]
+    public void MemoryLookup_RangesNeverJoinAcrossARegionGap()
+    {
+        var g = FakeGuest.Create();
+        using var m = Load(g);
+        const uint start = 0xE0000000;
+        m.Memory.Add(new GuestRegion(start, start + 16, null));
+        m.Memory.Add(new GuestRegion(start + 32, start + 48, null));
+
+        Assert.True(m.Memory.IsMapped(start, 4));
+        Assert.True(m.Memory.IsMapped(start + 32, 4)); // warm the later sorted region
+        Assert.False(m.Memory.IsMapped(start + 16, 4));
+        Assert.False(m.Memory.IsMapped(start + 12, 24)); // crosses the gap and reaches the second region
+    }
+
+    [Fact]
+    public void MemoryLookup_ZeroLengthBoundaryRetainsInsertionOrderProtectionSemantics()
+    {
+        var g = FakeGuest.Create();
+        using var m = Load(g);
+        const uint start = 0xE0000000;
+        m.Memory.Add(new GuestRegion(start, start + 100, null) { PageReadable = [false] });
+        m.Memory.Add(new GuestRegion(start + 100, start + 200, null) { PageReadable = [true] });
+
+        Assert.True(m.Memory.IsMapped(start + 104, 4)); // warm the later region
+        Assert.False(m.Memory.IsMapped(start + 100, 0)); // boundary belongs to the first insertion for a zero-length query
+    }
+
+    private sealed class BufferSet(GuestBuffer[] items) : IDisposable
+    {
+        public GuestBuffer[] Items { get; } = items;
+        public void Dispose() { foreach (var item in Items) item.Dispose(); }
+    }
+
+    [Fact]
     public void Load_MapsImageWithSectionProtectionsAndNeverRwx()
     {
         var g = FakeGuest.Create();

@@ -13,5 +13,6 @@
     <!-- Loaded by name only for catalog "unpack": true; built and copied beside the compiler, never referenced by it. -->
     <ProjectReference Include="../BlitzCS.BinaryCompiler.Unpack/BlitzCS.BinaryCompiler.Unpack.csproj" ReferenceOutputAssembly="false" OutputItemType="Content" Pack="false" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <InternalsVisibleTo Include="BlitzCS.CLI.Tests" />
   </ItemGroup>
 </Project>

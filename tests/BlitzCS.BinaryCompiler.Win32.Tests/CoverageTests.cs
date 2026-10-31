@@ -16,7 +16,7 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         Assert.Equal(apis.Count, apis.Select(a => a.Dll.ToLowerInvariant() + "!" + a.Name).Distinct().Count());
         foreach (var a in apis)
         {
-            Assert.InRange(a.ArgCount, 0, 9);
+            Assert.InRange(a.ArgCount, 0, BlitzCS.BinaryCompiler.Win32.HostBridge.HostInvoke.MaxArguments);   // CreateFontA (14) through the host bridge on a Windows host
             Assert.False(string.IsNullOrEmpty(a.Service));
             if (a.Dll.Equals("MSVCRT.dll", StringComparison.OrdinalIgnoreCase)) Assert.Equal(Win32Convention.Cdecl, a.Convention);
             else Assert.Equal(Win32Convention.Stdcall, a.Convention);
@@ -32,8 +32,11 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
         var cov = Win32ImportResolver.Coverage;
         Assert.Contains(cov.Priority, p => p is { Dll: "kernel32.dll", Name: "HeapAlloc", Implemented: true });
         var missing = cov.Missing.Select(m => m.Dll + "!" + m.Name).ToHashSet();
-        Assert.Contains("kernel32.dll!RtlUnwind", missing);
-        Assert.Contains("kernel32.dll!RaiseException", missing);
+        // window APIs: bridged to the host's user32 on a Windows host (the default composition there), absent elsewhere
+        if (OperatingSystem.IsWindows()) Assert.DoesNotContain("user32.dll!ShowWindow", missing);
+        else Assert.Contains("user32.dll!ShowWindow", missing);
+        Assert.Contains(cov.Priority, p => p is { Dll: "kernel32.dll", Name: "RtlUnwind", Implemented: true, Service: "Kernel32.Process" });       // guest SEH (docs/binary-seh.md)
+        Assert.Contains(cov.Priority, p => p is { Dll: "kernel32.dll", Name: "RaiseException", Implemented: true, Service: "Kernel32.Process" });
         Assert.DoesNotContain("ole32.dll!CoCreateInstance", missing);
         Assert.DoesNotContain("wsock32.dll!#11", missing);
         Assert.DoesNotContain(missing, m => m.StartsWith("kernel32.dll!Heap"));
@@ -42,11 +45,11 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
     [Fact]
     public void ResolverBindsOnlyWhatIsImplemented()
     {
-        using var r = new Win32ImportResolver();
+        using var r = new Win32ImportResolver(new Win32Options { HostWindowing = HostWindowingKind.None });   // the sandbox user32 subset (the host bridge: HostWindowBridgeTests)
         Assert.NotNull(r.Resolve("kernel32.dll", "HeapAlloc", null));
         Assert.NotNull(r.Resolve("KERNEL32", "GetVersion", null)); // dll name rules: case-insensitive, extension optional
         Assert.Null(r.Resolve("kernel32.dll", "heapalloc", null)); // function names are case-sensitive
-        Assert.Null(r.Resolve("kernel32.dll", "RtlUnwind", null));
+        Assert.Null(r.Resolve("kernel32.dll", "CreateRemoteThread", null));
         Assert.NotNull(r.Resolve("user32.dll", "GetDesktopWindow", null));
         Assert.Null(r.Resolve("user32.dll", "ShowWindow", null));
         Assert.Null(r.Resolve("msvcrt.dll", "_not_a_real_crt_function", null));
@@ -67,7 +70,7 @@ public sealed class CoverageTests(Xunit.Abstractions.ITestOutputHelper output)
     public void DirectCallValidatesNameAndArgumentCount()
     {
         using var w = new World();
-        Assert.Throws<KeyNotFoundException>(() => w.Kernel("RtlUnwind"));
+        Assert.Throws<KeyNotFoundException>(() => w.Kernel("CreateRemoteThread"));
         Assert.Throws<ArgumentException>(() => w.Kernel("HeapAlloc", 1, 2));
         using var other = new World();
         Assert.NotEqual(0u, w.Kernel("GetProcessHeap"));

@@ -1,3 +1,4 @@
+using BlitzCS.BinaryCompiler.Runtime;
 namespace BlitzCS.BinaryCompiler.Win32;
 
 /// <summary>
@@ -45,6 +46,7 @@ internal sealed class GuestHeap : IDisposable
     private Chunk AddChunk(int size, bool dedicated, bool first = false)
     {
         var allocation = memory.Allocate(size);
+        if ((Flags & HeapService.CreateEnableExecute) != 0) memory.SetGuestExecutable(allocation.Address, (uint)allocation.Length, true);   // HEAP_CREATE_ENABLE_EXECUTE
         var chunk = new Chunk(allocation, dedicated);
         if (!dedicated) chunk.Free.Add((first ? allocation.Address + Header : allocation.Address, (uint)allocation.Length - (first ? Header : 0u)));
         chunks.Add(chunk);
@@ -288,7 +290,7 @@ public sealed class HeapService : Win32Service
     protected override void Define()
     {
         const string K = "KERNEL32.dll";
-        Std(K, "GetProcessHeap", 0, c => c.Ctx.Heaps.Process(c.Mem).Handle);
+        Std(K, "GetProcessHeap", 0, c => { var h = c.Ctx.Heaps.Process(c.Mem).Handle; GuestModule.Current?.SetProcessHeap(h); return h; });
         Std(K, "HeapCreate", 3, c =>
         {
             if ((c[0] & ~(NoSerialize | GenerateExceptions | CreateEnableExecute)) != 0) return c.Ctx.Fail(Win32Error.InvalidParameter);

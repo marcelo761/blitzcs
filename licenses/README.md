@@ -7,6 +7,8 @@ These files preserve third-party terms; they are excluded from the original-proj
 | `blitz3d-zlib.txt` | `blitz-research/blitz3d`, commit `6beb288cb5962393684a59a4a44ac11524894939`, `LICENSE.TXT` |
 | `SDL3-zlib.txt` | Installed SDL3 3.4.18 package, `/usr/share/licenses/SDL3/LICENSE.txt`; upstream https://github.com/libsdl-org/SDL |
 | `libsndfile-COPYING.txt` | Installed libsndfile 1.2.2 package, `/usr/share/licenses/libsndfile/COPYING`; LGPL 2.1 |
+| `libsndfile-ALAC-LICENSE.txt` | https://raw.githubusercontent.com/libsndfile/libsndfile/1.2.2/src/ALAC/LICENSE; Apache-2.0, bundled with libsndfile 1.2.2 source |
+| `opus-COPYING.txt` | https://raw.githubusercontent.com/xiph/opus/v1.4/COPYING; Opus 1.4 license, version identified in official libsndfile Windows DLL source paths |
 | `LGPL-3.0.txt` | https://www.gnu.org/licenses/lgpl-3.0.txt |
 | `GPL-3.0.txt` | https://raw.githubusercontent.com/spdx/license-list-data/main/text/GPL-3.0-only.txt |
 | `CC0-1.0.txt` | https://raw.githubusercontent.com/spdx/license-list-data/main/text/CC0-1.0.txt |

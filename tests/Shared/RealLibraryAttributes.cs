@@ -46,6 +46,12 @@ public static class RealLibraries
                 try { if (File.Exists(System.IO.Path.Combine(dir, n))) return null; } catch (ArgumentException) { }
         return $"'{tool}' is not on PATH";
     }
+
+    /// <summary>Null when the host CPU executes AVX2 and BMI1 (the VEX oracle and the translated VEX code run natively), else a skip reason.</summary>
+    public static string? Avx2SkipReason() =>
+        System.Runtime.Intrinsics.X86.Avx2.IsSupported && System.Runtime.Intrinsics.X86.Bmi1.IsSupported
+            ? null
+            : "host CPU lacks AVX2/BMI1: the vexops oracle and the translated VEX code cannot run here";
 }
 
 /// <summary>
@@ -86,4 +92,21 @@ public sealed class RequiresToolFactAttribute : FactAttribute
 public sealed class RequiresWindowsFactAttribute : FactAttribute
 {
     public RequiresWindowsFactAttribute(string reason = "needs a Windows host (Windows or Wine) with the system winmm.dll") { if (!OperatingSystem.IsWindows()) Skip = reason + "; this host is not Windows"; }
+}
+
+/// <summary>
+/// [Fact] for tests that need the extracted Blitz3D SDK: <c>BLITZCS_BLITZ3D_DIR</c> names the directory that holds <c>bin/blitzcc.exe</c> (the SDK root, extracted from the
+/// distribution zip into a fresh directory; nothing is copied into the repository). SKIPPED with the reason when it is not there.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class Blitz3DSdkFactAttribute : FactAttribute
+{
+    public const string Variable = "BLITZCS_BLITZ3D_DIR";
+    public static string? Dir => Environment.GetEnvironmentVariable(Variable) is { Length: > 0 } d ? d : null;
+
+    public Blitz3DSdkFactAttribute()
+    {
+        if (Dir is not { } dir) Skip = $"{Variable} is not set (point it at the extracted Blitz3D SDK root, the directory that contains bin/blitzcc.exe)";
+        else if (!File.Exists(System.IO.Path.Combine(dir, "bin", "blitzcc.exe"))) Skip = $"{Variable}='{dir}' has no bin/blitzcc.exe";
+    }
 }

@@ -28,7 +28,9 @@ public sealed class GuestModuleSet : IDisposable
     private readonly List<Entry> entries = [];
     private readonly List<BridgeCounter> counters = [];
     private int loadCounter;
+    private readonly object gate = new();   // serialises Add/LoadAll/Unload: modules can be added while guest code of already loaded modules runs
     private bool disposed;
+    private readonly GuestProcessEnvironment environment = new(ownedBySet: true);   // module registry, PEB and per-thread TEBs shared by every module of the set
 
     public GuestModuleSet(IGuestImportResolver? hostImports = null, ModuleLinkOptions? options = null)
     {
@@ -58,6 +60,11 @@ public sealed class GuestModuleSet : IDisposable
     /// <summary>Registers a module (artifact and the matching, possibly rebased, image). Nothing is loaded until <see cref="LoadAll"/>.</summary>
     public GuestModuleSet Add(string name, TranslationArtifact artifact, PeImage image, ExportConventions? conventions = null, GuestModuleOptions? moduleOptions = null)
     {
+        lock (gate) return AddCore(name, artifact, image, conventions, moduleOptions);
+    }
+
+    private GuestModuleSet AddCore(string name, TranslationArtifact artifact, PeImage image, ExportConventions? conventions, GuestModuleOptions? moduleOptions)
+    {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(artifact);
@@ -66,6 +73,7 @@ public sealed class GuestModuleSet : IDisposable
         if (entries.Any(e => e.Key == key)) throw new ArgumentException($"A module named '{name}' is already in the set.", nameof(name));
         if (conventions?.Default is { } d && d != GuestCallingConvention.Cdecl)
             throw new ArgumentException("ExportConventions.Default accepts only Cdecl; declare stdcall exports individually with their argument count.", nameof(conventions));
+        environment.ConfigureStableReads(artifact.SourceSha256);
         entries.Add(new Entry { Key = key, DisplayName = name, Artifact = artifact, Image = image, Conventions = conventions ?? new ExportConventions(), Options = moduleOptions ?? new GuestModuleOptions() });
         return this;
     }
@@ -86,7 +94,9 @@ public sealed class GuestModuleSet : IDisposable
     public IReadOnlyList<GuestModule> LoadedModules => [.. entries.Where(e => e.Module is not null).OrderBy(e => e.LoadOrder).Select(e => e.Module!)];
 
     /// <summary>Loads every registered, not yet loaded module in dependency order. On failure everything loaded by this call is disposed again (reverse order) and the error is rethrown.</summary>
-    public void LoadAll()
+    public void LoadAll() { lock (gate) LoadAllCore(); }
+
+    private void LoadAllCore()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         var pending = entries.Where(e => e.Module is null).ToList();
@@ -98,7 +108,7 @@ public sealed class GuestModuleSet : IDisposable
             {
                 var resolver = new SiblingResolver(this, entry);
                 entry.Host ??= hostFactory?.Invoke(entry.DisplayName);
-                entry.Module = GuestModule.Load(entry.Artifact, entry.Image, new ChainedGuestImportResolver(entry.Host ?? host, resolver), entry.Options);
+                entry.Module = GuestModule.Load(entry.Artifact, entry.Image, new ChainedGuestImportResolver(entry.Host ?? host, resolver), entry.Options, environment, entry.DisplayName);
                 entry.Dependencies = resolver.Dependencies.ToList();
                 foreach (var dep in entry.Dependencies) dep.Module!.AddDependent();
                 foreach (var other in entries.Where(o => o != entry && o.Module is not null))   // one process, one address space: managed accesses see every module's regions
@@ -118,12 +128,34 @@ public sealed class GuestModuleSet : IDisposable
     }
 
     /// <summary>Disposes one module. Fails with <see cref="InvalidOperationException"/> while another loaded module is still linked to it.</summary>
-    public void Unload(string name)
+    public void Unload(string name) { lock (gate) UnloadCore(name); }
+
+    /// <summary>True when a module registered under <paramref name="name"/> exists in the set (loaded or not).</summary>
+    public bool Contains(string name) { lock (gate) return entries.Any(x => x.Key == NormalizeName(name)); }
+
+    /// <summary>Removes a module that was added but failed to load (or was never loaded), disposing the host resolver created for it. Loaded modules are untouched.</summary>
+    public void Discard(string name)
+    {
+        lock (gate)
+            foreach (var e in entries.Where(x => x.Key == NormalizeName(name) && x.Module is null).ToList())
+            {
+                entries.Remove(e);
+                (e.Host as IDisposable)?.Dispose();
+            }
+    }
+
+    private void UnloadCore(string name)
     {
         var e = entries.FirstOrDefault(x => x.Key == NormalizeName(name)) ?? throw new KeyNotFoundException($"No module named '{name}' in the set.");
         if (e.Module is null) throw new InvalidOperationException($"Module '{name}' is not loaded.");
         var users = entries.Where(x => x.Module is not null && x.Dependencies.Contains(e)).Select(x => x.DisplayName).ToList();
         if (users.Count > 0) throw new InvalidOperationException($"Module '{name}' cannot be unloaded: {string.Join(", ", users)} still import(s) from it. Unload the dependents first.");
+        if (e.Module.IsProcessAnchor && entries.Count(x => x.Module is not null) > 1)
+            throw new InvalidOperationException($"Module '{name}' cannot be unloaded: the process-wide Win32 state (heaps, virtual memory, handles) of the other loaded modules lives in its address space. Unload the other modules first.");
+        // Translated code of any module can jump into this one without going through its call accounting, so a thread that is executing guest code anywhere in the process may
+        // be inside it. The module is only unloaded while no OTHER thread runs guest code; the calling thread (FreeLibrary is a guest call itself) is excluded.
+        var busy = environment.OtherActiveThreads();
+        if (busy > 0) throw new InvalidOperationException($"Module '{name}' cannot be unloaded: {busy} other guest thread(s) are executing guest code in this process and may be running inside it (code of one module can jump into another without call accounting). Retry when they are idle.");
         Release(e);
         (e.Host as IDisposable)?.Dispose();
         entries.Remove(e);
@@ -146,6 +178,7 @@ public sealed class GuestModuleSet : IDisposable
                 catch (Exception error) { (errors ??= []).Add(error); }
             }
         entries.Clear();
+        environment.Dispose();
         if (errors is not null) throw new AggregateException("One or more modules failed to dispose.", errors);
     }
 
@@ -154,10 +187,22 @@ public sealed class GuestModuleSet : IDisposable
     /// running after <paramref name="graceMilliseconds"/> (and so every module it keeps alive) is left to the operating system instead of blocking the exit. Neither its DllMain detach
     /// nor its host environment (which would unmap memory under the running thread) is touched.
     /// </summary>
-    internal void DisposeAtProcessExit(int graceMilliseconds)
+    public void DisposeAtProcessExit(int graceMilliseconds)
     {
         if (disposed) return;
         disposed = true;
+        foreach (var e in entries)
+            if (e.Host is IGuestProcessExitResolver exit)
+            {
+                try { exit.OnProcessExiting(); }
+                catch (Exception error) when (error is GuestException or InvalidOperationException or ObjectDisposedException) { }
+            }
+        if (host is IGuestProcessExitResolver hostExit)
+        {
+            try { hostExit.OnProcessExiting(); }
+            catch (Exception error) when (error is GuestException or InvalidOperationException or ObjectDisposedException) { }
+        }
+        environment.WaitOtherThreadsIdle(graceMilliseconds);
         var abandoned = new HashSet<Entry>();
         foreach (var e in entries.Where(x => x.Module is not null).OrderByDescending(x => x.LoadOrder).ToList())
         {
@@ -175,6 +220,7 @@ public sealed class GuestModuleSet : IDisposable
                 catch (Exception error) when (error is GuestException or InvalidOperationException or ObjectDisposedException) { }
             }
         entries.Clear();
+        if (abandoned.Count == 0) environment.Dispose();
     }
 
     private bool TryRelease(Entry e, GuestModule module, int graceMilliseconds)

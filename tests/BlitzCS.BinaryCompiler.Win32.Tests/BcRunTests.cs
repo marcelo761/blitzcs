@@ -1,0 +1,235 @@
+using System.Text;
+using BlitzCS.BcRun;
+using BlitzCS.BinaryCompiler.Tests.Support;
+using BlitzCS.Testing;
+using Xunit;
+
+namespace BlitzCS.BinaryCompiler.Win32.Tests;
+
+/// <summary>BcRun: a hand-assembled PE32 EXE runs as a guest process (entry path, ExitProcess exit code, return from the entry, stdio, command line).</summary>
+[Collection("GuestRuntime")]
+public sealed class BcRunTests : IDisposable
+{
+    private readonly string dir = Directory.CreateTempSubdirectory("bcrun-").FullName;
+    public void Dispose() => Directory.Delete(dir, true);
+
+    private static void P32(List<byte> c, uint v) => c.AddRange(BitConverter.GetBytes(v));
+
+    /// <summary>
+    /// start: call GetCommandLineA; mov esi,eax; push -11; call GetStdHandle; mov ebx,eax; push 0; push &amp;written; push 5; push esi; push ebx; call WriteFile;
+    /// push 7; call ExitProcess. Writes the first five characters of the command line to stdout and ends the process with code 7.
+    /// </summary>
+    private string WriteCommandLineExe(uint exitCode = 7)
+    {
+        var b = new PeFixtureBuilder().AsExecutable();
+        var iatCmd = b.Import("KERNEL32.dll", "GetCommandLineA");
+        var iatStd = b.Import("KERNEL32.dll", "GetStdHandle");
+        var iatWrite = b.Import("KERNEL32.dll", "WriteFile");
+        var iatExit = b.Import("KERNEL32.dll", "ExitProcess");
+        var baseVa = PeFixtureBuilder.ImageBase;
+        var code = new List<byte>();
+        void Call(uint iat) { code.AddRange([0xFF, 0x15]); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, baseVa + iat); }
+        void PushWritten() { code.Add(0x68); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, baseVa + PeFixtureBuilder.DataRva + 0x10); }
+        Call(iatCmd);
+        code.AddRange([0x89, 0xC6]);              // mov esi, eax
+        code.AddRange([0x6A, 0xF5]);              // push -11 (STD_OUTPUT_HANDLE)
+        Call(iatStd);
+        code.AddRange([0x89, 0xC3]);              // mov ebx, eax
+        code.AddRange([0x6A, 0x00]); PushWritten(); code.AddRange([0x6A, 0x05, 0x56, 0x53]); // push 0; push &written; push 5; push esi; push ebx
+        Call(iatWrite);
+        code.Add(0x68); P32(code, exitCode);     // push exitCode
+        Call(iatExit);
+        code.Add(0xCC);
+        var path = Path.Combine(dir, "cmd.exe");
+        File.WriteAllBytes(path, b.WithCode([.. code]).EntryPoint(0).Build());
+        return path;
+    }
+
+    private static (BcRunResult Result, string Stdout) Run(string exe, params string[] args)
+    {
+        var stdout = new MemoryStream();
+        var r = BcRunner.Run(new BcRunOptions { ExePath = exe, Args = args, Stdout = stdout, Stderr = new MemoryStream(), Stdin = new MemoryStream() });
+        return (r, Encoding.Latin1.GetString(stdout.ToArray()));
+    }
+
+    [Fact]
+    public void ExitProcessCodeAndStdoutAreCaptured()
+    {
+        var (r, text) = Run(WriteCommandLineExe(7), "a b");
+        Assert.Null(r.Failure);
+        Assert.True(r.CalledExit);
+        Assert.Equal(7u, r.ExitCode);
+        Assert.Equal("\"C:\\c", text); // the command line is the quoted C:\cmd.exe path
+    }
+
+    [Fact]
+    public void EntryPointReturningYieldsEaxAsExitCode()
+    {
+        var b = new PeFixtureBuilder().AsExecutable().WithCode([0xB8, 0x09, 0x00, 0x00, 0x00, 0xC3]).EntryPoint(0); // mov eax,9; ret
+        var path = Path.Combine(dir, "ret.exe");
+        File.WriteAllBytes(path, b.Build());
+        var (r, _) = Run(path);
+        Assert.Null(r.Failure);
+        Assert.False(r.CalledExit);
+        Assert.Equal(9u, r.ExitCode);
+    }
+
+    [Fact]
+    public void DllsAreRefused()
+    {
+        var path = Path.Combine(dir, "x.dll");
+        File.WriteAllBytes(path, new PeFixtureBuilder().WithCode([0xB8, 1, 0, 0, 0, 0xC2, 0x0C, 0]).EntryPoint(0).Build());
+        var (r, _) = Run(path);
+        Assert.NotNull(r.Failure);
+        Assert.Contains("DLL", r.Failure);
+    }
+
+    [Fact]
+    public void CommandLineQuotingFollowsCommandLineToArgvW()
+    {
+        Assert.Equal("\"C:\\p.exe\" a \"b c\" \"d\\\"e\" \"\"", BcRunner.BuildCommandLine("C:\\p.exe", ["a", "b c", "d\"e", ""]));
+        Assert.Equal("\"C:\\p.exe\" \"x y\\\\\"", BcRunner.BuildCommandLine("C:\\p.exe", ["x y\\"]));
+    }
+
+    [Fact]
+    public void UnknownTargetIsReportedNotThrown()
+    {
+        var r = BcRunner.Run(new BcRunOptions { ExePath = WriteCommandLineExe(), TargetOs = "plan9" });
+        Assert.Contains("Unknown target", r.Failure);
+    }
+
+    /// <summary>Observed with the original blitzcc.exe (SDK 1.118) when run with blitzpath=C:\ and guest DLL loading disabled: the program starts, parses, tries to load bin/linker.dll and exits with -1.</summary>
+    [Blitz3DSdkFact]
+    public void OriginalBlitzccStartsRunsItsMainAndExits()
+    {
+        var sdk = Blitz3DSdkFactAttribute.Dir!;
+        var stdout = new MemoryStream();
+        var r = BcRunner.Run(new BcRunOptions
+        {
+            ExePath = Path.Combine(sdk, "bin", "blitzcc.exe"), SandboxRoot = sdk, AllowTranslationErrors = true, GuestDlls = false,
+            Environment = new Dictionary<string, string> { ["blitzpath"] = "C:\\" },
+            Stdout = stdout, Stderr = new MemoryStream(), Stdin = new MemoryStream(),
+        });
+        Assert.Null(r.Failure);
+        Assert.True(r.CalledExit);
+        Assert.Equal(0xFFFFFFFFu, r.ExitCode);
+        Assert.StartsWith("Unable to open linker.dll", Encoding.Latin1.GetString(stdout.ToArray()));
+    }
+
+    [Blitz3DSdkFact]
+    public void OriginalBlitzccWithoutBlitzpathSaysSo()
+    {
+        var sdk = Blitz3DSdkFactAttribute.Dir!;
+        var stdout = new MemoryStream();
+        var r = BcRunner.Run(new BcRunOptions
+        {
+            ExePath = Path.Combine(sdk, "bin", "blitzcc.exe"), SandboxRoot = sdk, AllowTranslationErrors = true,
+            Stdout = stdout, Stderr = new MemoryStream(), Stdin = new MemoryStream(),
+        });
+        Assert.Equal(0xFFFFFFFFu, r.ExitCode);
+        Assert.StartsWith("Can't find blitzpath environment variable", Encoding.Latin1.GetString(stdout.ToArray()));
+    }
+
+    /// <summary>
+    /// With guest DLL loading, blitzcc loads bin/linker.dll and bin/runtime.dll, resolves linkerGetLinker/runtimeGetRuntime through GetProcAddress and then calls virtual methods of the
+    /// returned C++ objects: the vtables point into the DLLs (cross-module dispatch, docs/binary-multimodule.md section 3). `-v` asks all three objects for their version, `-h` prints the usage text.
+    /// </summary>
+    [Blitz3DSdkFact]
+    public void OriginalBlitzccCallsTheVirtualMethodsOfItsDlls()
+    {
+        var sdk = Blitz3DSdkFactAttribute.Dir!;
+        string Run(string arg, out uint exit)
+        {
+            var stdout = new MemoryStream();
+            var r = BcRunner.Run(new BcRunOptions
+            {
+                ExePath = Path.Combine(sdk, "bin", "blitzcc.exe"), SandboxRoot = sdk, AllowTranslationErrors = true, Args = [arg],
+                Environment = new Dictionary<string, string> { ["blitzpath"] = "C:\\" },
+                Stdout = stdout, Stderr = new MemoryStream(), Stdin = new MemoryStream(),
+            });
+            Assert.Null(r.Failure);
+            exit = r.ExitCode;
+            return System.Text.Encoding.ASCII.GetString(stdout.ToArray());
+        }
+        var version = Run("-v", out var code);
+        Assert.Equal(0u, code);
+        Assert.Contains("Compiler version:11.18", version); Assert.Contains("Runtime version:11.18", version); Assert.Contains("Linker version:11.18", version);   // runtime.dll and linker.dll answered
+        var usage = Run("-h", out code);
+        Assert.Equal(0u, code);
+        Assert.StartsWith("Usage: blitzcc [-h|-q|+q|-c|-d|-k|+k|-v|-o exefile] [sourcefile.bb]", usage);
+    }
+
+    /// <summary>
+    /// When a loaded guest DLL (such as Blitz3D's SoLoud runtime with BLITZCS_AUDIO=virtual) starts a background thread blocked in WaitForSingleObject(INFINITE) and a multimedia timer,
+    /// and the main executable then faults while holding a CRITICAL_SECTION, BcRunner.Run must abort the background waits, release held critical sections and return promptly instead of hanging on module teardown.
+    /// </summary>
+    [Fact]
+    public void TrappingExecutableWithBackgroundAudioAndEventThreadsDisposesPromptly()
+    {
+        var b = new PeFixtureBuilder().AsExecutable();
+        var iatInitCs = b.Import("KERNEL32.dll", "InitializeCriticalSection");
+        var iatEnterCs = b.Import("KERNEL32.dll", "EnterCriticalSection");
+        var iatLeaveCs = b.Import("KERNEL32.dll", "LeaveCriticalSection");
+        var iatCreateEvent = b.Import("KERNEL32.dll", "CreateEventA");
+        var iatWait = b.Import("KERNEL32.dll", "WaitForSingleObject");
+        var iatCreateThread = b.Import("KERNEL32.dll", "CreateThread");
+        var iatSleep = b.Import("KERNEL32.dll", "Sleep");
+        var iatTimeSetEvent = b.Import("WINMM.dll", "timeSetEvent");
+        var baseVa = PeFixtureBuilder.ImageBase;
+        var csVa = baseVa + PeFixtureBuilder.DataRva + 0x20;
+        var eventVa = baseVa + PeFixtureBuilder.DataRva + 0x40;
+        var readyVa = baseVa + PeFixtureBuilder.DataRva + 0x44;
+        var code = new List<byte>();
+        void Call(uint iat) { code.AddRange([0xFF, 0x15]); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, baseVa + iat); }
+        void PushVa(uint va) { code.Add(0x68); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, va); }
+
+        // Entry @ 0x00:
+        // InitializeCriticalSection(&cs);
+        PushVa(csVa); Call(iatInitCs);
+        // hEvent = CreateEventA(0, 0, 0, 0);
+        code.AddRange([0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00]); Call(iatCreateEvent);
+        code.Add(0xA3); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, eventVa); // mov [eventVa], eax
+        // timeSetEvent(5, 1, timerProc, 0, 1 /* TIME_PERIODIC */);
+        code.AddRange([0x6A, 0x01, 0x6A, 0x00]);
+        PushVa(baseVa + PeFixtureBuilder.TextRva + 0xC0);
+        code.AddRange([0x6A, 0x01, 0x6A, 0x05]); Call(iatTimeSetEvent);
+        // CreateThread(0, 0, workerProc, 0, 0, 0);
+        code.AddRange([0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00]);
+        PushVa(baseVa + PeFixtureBuilder.TextRva + 0x80);
+        code.AddRange([0x6A, 0x00, 0x6A, 0x00]); Call(iatCreateThread);
+        // Sleep(20) so the worker thread enters WaitForSingleObject(hEvent, INFINITE)
+        code.AddRange([0x6A, 0x14]); Call(iatSleep);
+        // EnterCriticalSection(&cs) and then trap (0xFA = cli, unsupported instruction -> GuestTrapException) while holding the critical section
+        PushVa(csVa); Call(iatEnterCs);
+        code.Add(0xFA);
+
+        while (code.Count < 0x80) code.Add(0x90);
+        // workerProc @ 0x80 (stdcall 1 arg):
+        // EnterCriticalSection(&cs); LeaveCriticalSection(&cs); WaitForSingleObject([eventVa], INFINITE); EnterCriticalSection(&cs); LeaveCriticalSection(&cs); ret 4
+        PushVa(csVa); Call(iatEnterCs);
+        PushVa(csVa); Call(iatLeaveCs);
+        code.AddRange([0x6A, 0xFF]); // push -1 (INFINITE)
+        code.AddRange([0xFF, 0x35]); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, eventVa); // push [eventVa]
+        Call(iatWait);
+        PushVa(csVa); Call(iatEnterCs);
+        PushVa(csVa); Call(iatLeaveCs);
+        code.AddRange([0xC2, 0x04, 0x00]);
+
+        while (code.Count < 0xC0) code.Add(0x90);
+        // timerProc @ 0xC0 (stdcall 5 args): inc dword [readyVa]; ret 20
+        code.AddRange([0xFF, 0x05]); b.Relocate(PeFixtureBuilder.TextRva + (uint)code.Count); P32(code, readyVa);
+        code.AddRange([0xC2, 0x14, 0x00]);
+
+        var exe = Path.Combine(dir, "trap-bg.exe");
+        File.WriteAllBytes(exe, b.WithCode([.. code]).EntryPoint(0).Build());
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var r = BcRunner.Run(new BcRunOptions
+        {
+            ExePath = exe, AllowTranslationErrors = true,
+            Stdout = new MemoryStream(), Stderr = new MemoryStream(), Stdin = new MemoryStream(),
+        });
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), $"BcRunner.Run took {sw.Elapsed.TotalSeconds:F1}s on teardown.");
+        Assert.NotNull(r.Failure);
+        Assert.Contains("GuestTrapException", r.Failure);
+    }
+}

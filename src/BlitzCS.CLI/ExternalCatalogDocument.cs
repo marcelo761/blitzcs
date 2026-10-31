@@ -53,13 +53,31 @@ internal static class ExternalCatalogDocument
             if (root["profiles"] is { } profiles)
                 foreach (var profile in Array(profiles, "profiles"))
                     Visit(FullPath(profile, "profiles", directory), fallback);
-            foreach (var key in new[] { "binaryProfile", "binaryTarget" })
+            foreach (var key in new[] { "binaryProfile", "binaryTarget", "blitz3dRuntime" })
             {
                 if (root[key] is not { } value) continue;
-                if (result[key] is { } prior && !JsonNode.DeepEquals(prior, value))
+                // The runtime image path is relative to the catalog that declares it.
+                var effective = key == "blitz3dRuntime" && value is JsonValue runtime && runtime.TryGetValue<string>(out var runtimePath)
+                    && !string.IsNullOrWhiteSpace(runtimePath)
+                    ? JsonValue.Create(Path.GetFullPath(runtimePath, directory))
+                    : value.DeepClone();
+                if (result[key] is { } prior && !JsonNode.DeepEquals(prior, effective))
                     throw new ArgumentException($"External catalogs disagree about '{key}'.");
-                result[key] = value.DeepClone();
+                result[key] = effective;
             }
+            if (root["userlibs"] is JsonArray userlibs)
+            {
+                // Each .decls file and its DLL fallback directory stay relative to the declaring catalog.
+                var target = result["userlibs"] as JsonArray ?? (JsonArray)(result["userlibs"] = new JsonArray());
+                foreach (var entry in userlibs)
+                {
+                    if (entry is not JsonValue value || !value.TryGetValue<string>(out var declsPath) || string.IsNullOrWhiteSpace(declsPath))
+                        throw new ArgumentException("External catalog 'userlibs' entries must be non-empty .decls file path strings.");
+                    target.Add(new JsonObject { ["path"] = Path.GetFullPath(declsPath, directory), ["catalogDirectory"] = directory });
+                }
+            }
+            else if (root["userlibs"] is not null)
+                throw new ArgumentException("External catalog 'userlibs' must be an array of .decls file paths.");
             if (root["nativeLibraries"] is { } natives)
                 foreach (var library in Array(natives, "nativeLibraries")) native.Add(FullPath(library, "nativeLibraries", directory));
             if (root["binaryLibraries"] is { } binaries)

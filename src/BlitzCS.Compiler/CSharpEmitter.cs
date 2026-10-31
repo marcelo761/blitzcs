@@ -28,7 +28,38 @@ internal static class CSharpEmitter
                 foreach (var field in type.Fields) output.AppendLine($"internal {Primitive.CSharp(field.Value)} @{field.Key} = {Primitive.Default(field.Value)};");
                 output.AppendLine("internal override void ClearFields() {");
                 foreach (var field in type.Fields) output.AppendLine($"@{field.Key} = {(field.Value.IsVector ? "null" : Primitive.Default(field.Value))};");
-                output.AppendLine("} }");
+                output.AppendLine("}");
+                if (type.Fields.Count > 0 && type.Fields.Values.All(f => !f.IsVector && (f == ValueType.Integer || f == ValueType.Float)))
+                {
+                    output.AppendLine("internal override byte[] __PackFields() {");
+                    output.AppendLine($"    var __b = new byte[{type.Fields.Count * 4}];");
+                    var idx = 0;
+                    foreach (var field in type.Fields)
+                    {
+                        var offset = idx * 4;
+                        if (field.Value == ValueType.Float)
+                            output.AppendLine($"    System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(new System.Span<byte>(__b, {offset}, 4), @{field.Key});");
+                        else
+                            output.AppendLine($"    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(new System.Span<byte>(__b, {offset}, 4), @{field.Key});");
+                        idx++;
+                    }
+                    output.AppendLine("    return __b;");
+                    output.AppendLine("}");
+                    output.AppendLine("internal override void __UnpackFields(byte[] __b) {");
+                    output.AppendLine($"    if (__b is null || __b.Length < {type.Fields.Count * 4}) return;");
+                    idx = 0;
+                    foreach (var field in type.Fields)
+                    {
+                        var offset = idx * 4;
+                        if (field.Value == ValueType.Float)
+                            output.AppendLine($"    @{field.Key} = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(new System.ReadOnlySpan<byte>(__b, {offset}, 4));");
+                        else
+                            output.AppendLine($"    @{field.Key} = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(new System.ReadOnlySpan<byte>(__b, {offset}, 4));");
+                        idx++;
+                    }
+                    output.AppendLine("}");
+                }
+                output.AppendLine("}");
             }
             output.AppendLine("internal static class __BlitzObjects {");
             foreach (var type in program.ObjectTypes) output.AppendLine($"internal static readonly __BlitzObjectList<__BlitzObject_{type.Name}> @{type.Name} = new();");
@@ -175,6 +206,8 @@ internal static class CSharpEmitter
         IrArrayAccess access => access.Type == ValueType.String ? $"({EmitArrayAccess(access)} ?? \"\")" : EmitArrayAccess(access),
         IrVariable variable => variable.Type == ValueType.String ? $"({variable.Storage} ?? \"\")" : variable.Storage,
         IrCall call => EmitCall(call),
+        IrFieldImage { Value: null } => "default(global::System.Span<byte>)",
+        IrFieldImage image => $"global::__BlitzFieldImage.Lend({EmitExpression(image.Value)}, {(image.Direction == ExternalValueType.PointerIn ? 0 : image.Direction == ExternalValueType.PointerOut ? 1 : 2)}, {Quote(image.Location)})",
         IrUnary { Operator: TokenKind.Abs } unary => $"global::BB.__BlitzAbs({EmitExpression(unary.Operand)})",
         IrUnary { Operator: TokenKind.Sgn } unary => $"global::BB.__BlitzSgn({EmitExpression(unary.Operand)})",
         IrUnary unary => $"unchecked(({Operator(unary.Operator)}{EmitExpression(unary.Operand)}))",
@@ -207,19 +240,37 @@ internal static class CSharpEmitter
         "last" => $"{ObjectList(operation.Type)}.Last()",
         "after" => $"{ObjectList(operation.Type)}.Following(global::__BlitzObject.RequireReference({EmitExpression(operation.Value!)}, {Quote(operation.Location)}))",
         "before" => $"{ObjectList(operation.Type)}.Preceding(global::__BlitzObject.RequireReference({EmitExpression(operation.Value!)}, {Quote(operation.Location)}))",
+        "marshal" => $"global::__BlitzObject.Marshal({EmitExpression(operation.Value!)}, {Quote(operation.Location)})",
         _ => throw new InvalidOperationException("Unknown object operation.")
     };
 
     private static string EmitVectorAccess(IrVectorAccess access) =>
         $"{EmitExpression(access.Owner)}.Element({EmitExpression(access.Index)}, {Quote(access.Location)})";
 
-    private static string EmitArrayAccess(IrArrayAccess access) =>
-        $"{access.Storage}.Element([{string.Join(", ", access.Indices.Select(EmitExpression))}], {Quote(access.Location)})";
+    private static string EmitArrayAccess(IrArrayAccess access)
+    {
+        var indices = string.Join(", ", access.Indices.Select(EmitExpression));
+        return access.Indices.Count switch
+        {
+            1 or 2 => $"{access.Storage}.Element({indices}, {Quote(access.Location)})",
+            _ => $"{access.Storage}.Element([{indices}], {Quote(access.Location)})"
+        };
+    }
 
     private static string EmitCall(IrCall call)
     {
         var target = call.IsCSharp ? $"global::{call.Name}" : $"global::BB.@{call.Name}";
-        var invocation = $"{target}({string.Join(", ", call.Arguments.Select(EmitExpression))})";
+        var arguments = call.Arguments.Select(EmitExpression).ToArray();
+        // Field images are refreshed after the last argument is evaluated, as the original passes live
+        // field memory, and written back after the call returns. Void calls occur only as statements.
+        var images = call.Arguments.Count(argument => argument is IrFieldImage { Value: not null });
+        if (images > 0)
+            arguments[^1] = $"global::__BlitzFieldImage.Seal({arguments[^1]}, {images})";
+        var invocation = $"{target}({string.Join(", ", arguments)})";
+        if (images > 0)
+            invocation = call.Type == ValueType.Void
+                ? $"{invocation}; global::__BlitzFieldImage.Return({images})"
+                : $"global::__BlitzFieldImage.Return({invocation}, {images})";
         if (call.Type == ValueType.String) return $"({invocation} ?? \"\")";
         return call.IsCSharp && call.Type == ValueType.Integer ? $"global::BB.__BlitzInteger({invocation})" : invocation;
     }

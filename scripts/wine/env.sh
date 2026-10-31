@@ -30,7 +30,8 @@ export DOTNET_gcServer=0 DOTNET_TieredPGO=0
 export BLITZCS_WINE_WORK="${BLITZCS_WINE_WORK:-/tmp/blitzcs-w-$(id -u)}"
 _d="${BLITZCS_WINE_DISPLAY:-:97}"
 if [ -z "${BLITZCS_WINE_NO_XVFB:-}" ]; then
-  if ! [ -e "/tmp/.X11-unix/X${_d#:}" ]; then
+  if ! pgrep -f "Xvfb $_d(\$| )" >/dev/null 2>&1; then
+    rm -f "/tmp/.X11-unix/X${_d#:}" "/tmp/.X${_d#:}-lock" 2>/dev/null || true
     _xv=$(command -v Xvfb || true); [ -z "$_xv" ] && [ -x "$HOME/.local/bin/Xvfb" ] && _xv="$HOME/.local/bin/Xvfb"
     if [ -n "$_xv" ]; then ("$_xv" "$_d" -screen 0 800x600x24 >/dev/null 2>&1 &) ; sleep 1; else echo "wine/env.sh: Xvfb not found (wineboot may still work headless)" >&2; fi
   fi
@@ -41,6 +42,15 @@ if [ ! -e "$WINEPREFIX/system.reg" ]; then
   echo "wine/env.sh: creating prefix $WINEPREFIX (first use)" >&2
   wineboot -i >/dev/null 2>&1 || wineboot -u >/dev/null 2>&1 || true
   wineserver -w 2>/dev/null || true
+fi
+# Opt-in (default unchanged): BLITZCS_WINE_GRAPHICS=1 copies the Wine build's vkd3d DLLs into the prefix when they are missing. Wine's ddraw loads wined3d, which imports
+# libvkd3d-1.dll, and wineboot does not install it: without it LoadLibrary("ddraw.dll") fails in a 64-bit process (the host bridge of docs/binary-user32-bridge.md) and in a 32-bit one.
+if [ -n "${BLITZCS_WINE_GRAPHICS:-}" ]; then
+  for _arch in x86_64-windows:system32 i386-windows:syswow64; do
+    _src="$BLITZCS_WINE_ROOT/lib/vkd3d/${_arch%%:*}"; _dst="$WINEPREFIX/drive_c/windows/${_arch##*:}"
+    [ -d "$_src" ] && [ -d "$_dst" ] && for _f in "$_src"/libvkd3d*.dll; do [ -e "$_dst/$(basename "$_f")" ] || cp "$_f" "$_dst/"; done
+  done
+  unset _arch _src _dst _f
 fi
 # Opt-in (default unchanged): BLITZCS_WINE_AUDIO_DRIVER=pulse selects winepulse.drv, which honours PULSE_SINK. Proton-CachyOS otherwise loads
 # winepipewire.drv, which ignores PULSE_SINK (see docs/wine-audio-routing.md).

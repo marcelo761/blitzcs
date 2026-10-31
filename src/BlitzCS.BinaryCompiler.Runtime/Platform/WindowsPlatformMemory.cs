@@ -15,6 +15,7 @@ internal sealed class WindowsPlatformMemory : IPlatformMemory
     private const uint PAGE_NOACCESS = 0x01, PAGE_READONLY = 0x02, PAGE_READWRITE = 0x04, PAGE_EXECUTE_READ = 0x20;
     private const ulong Granularity = 0x10000;
     private readonly object gate = new();
+    private ulong nextLowHint = ArenaStart;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MemoryBasicInformation
@@ -66,6 +67,17 @@ internal sealed class WindowsPlatformMemory : IPlatformMemory
         var span = ((ulong)length + Granularity - 1) / Granularity * Granularity;
         lock (gate)
         {
+            // Try the next/recently freed slot without walking every existing region.
+            // A fixed reservation cannot overwrite another mapping; a stale hint uses the full scan below.
+            if (nextLowHint + span <= ArenaEnd)
+            {
+                var hinted = MapFixed((nint)nextLowHint, length, out _);
+                if (hinted != 0)
+                {
+                    nextLowHint = (ulong)hinted + span;
+                    return hinted;
+                }
+            }
             var cursor = ArenaStart;
             var lastError = 487;
             while (cursor + span <= ArenaEnd)
@@ -79,7 +91,11 @@ internal sealed class WindowsPlatformMemory : IPlatformMemory
                     if (candidate + span <= regionEnd && candidate + span <= ArenaEnd)
                     {
                         var r = VirtualAlloc((nint)candidate, length, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-                        if (r != 0) return r;
+                        if (r != 0)
+                        {
+                            nextLowHint = (ulong)r + span;
+                            return r;
+                        }
                         lastError = Marshal.GetLastPInvokeError(); // raced with another allocator: keep scanning past it
                     }
                 }
@@ -110,7 +126,10 @@ internal sealed class WindowsPlatformMemory : IPlatformMemory
 
     public void Free(nint address, nuint length)
     {
-        if (address != 0) VirtualFree(address, 0, MEM_RELEASE);
+        if (address == 0) return;
+        lock (gate)
+            if (VirtualFree(address, 0, MEM_RELEASE) && (ulong)address >= ArenaStart && (ulong)address < ArenaEnd)
+                nextLowHint = (ulong)address;
     }
 
     public IReadOnlyList<MappedRange> QueryRanges(ulong start, ulong end)

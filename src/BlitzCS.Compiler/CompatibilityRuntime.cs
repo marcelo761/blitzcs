@@ -4,12 +4,12 @@ namespace BlitzCS.Compiler;
 internal static class CompatibilityRuntime
 {
     internal const string Source = """
-    internal static int __BlitzAbs(int value) => value >= 0 ? value : unchecked(-value);
-    internal static float __BlitzAbs(float value) => System.MathF.Abs(value);
-    internal static int __BlitzSgn(int value) => value > 0 ? 1 : value < 0 ? -1 : 0;
-    internal static float __BlitzSgn(float value) => value > 0 ? 1f : value < 0 ? -1f : 0f;
-    internal static int __BlitzInteger(int value) => value;
-    internal static int __BlitzInteger(float value)
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)] internal static int __BlitzAbs(int value) => value >= 0 ? value : unchecked(-value);
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)] internal static float __BlitzAbs(float value) => System.MathF.Abs(value);
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)] internal static int __BlitzSgn(int value) => value > 0 ? 1 : value < 0 ? -1 : 0;
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)] internal static float __BlitzSgn(float value) => value > 0 ? 1f : value < 0 ? -1f : 0f;
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)] internal static int __BlitzInteger(int value) => value;
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)] internal static int __BlitzInteger(float value)
     {
         var rounded = System.MathF.Round(value, System.MidpointRounding.ToEven);
         // x87's indefinite integer for NaN, infinity and out-of-range conversion.

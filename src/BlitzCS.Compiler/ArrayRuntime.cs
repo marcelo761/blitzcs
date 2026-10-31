@@ -30,6 +30,27 @@ internal sealed class __BlitzArray<T>
         catch (System.OutOfMemoryException) { throw Error(location, "insufficient memory for these dimensions."); }
         lengths = sizes;
     }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private System.InvalidOperationException Fail(string location, int axis, int index) =>
+        data is null ? Error(location, "array has not been dimensioned.")
+        : Error(location, $"index {index} on axis {axis + 1} is outside 0..{lengths[axis] - 1}.");
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    internal ref T Element(int index, string location)
+    {
+        var d = data;
+        if (d is null || (uint)index >= (uint)lengths[0]) throw Fail(location, 0, index);
+        return ref d[index];
+    }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    internal ref T Element(int index0, int index1, string location)
+    {
+        var d = data;
+        if (d is null) throw Fail(location, 0, index0);
+        var l = lengths;
+        if ((uint)index0 >= (uint)l[0]) throw Fail(location, 0, index0);
+        if ((uint)index1 >= (uint)l[1]) throw Fail(location, 1, index1);
+        return ref d[index0 + index1 * l[0]];
+    }
     internal ref T Element(scoped System.ReadOnlySpan<int> indices, string location)
     {
         if (data is null) throw Error(location, "array has not been dimensioned.");

@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "recorded_date": "2026-10-28",
+  "application": "SCP - Containment Breach v1.3.11",
+  "status": "Cost baseline; successor strategy pending; no deprecation performed",
+  "reported_comparison": {
+    "native_x86_fps": 226,
+    "bre_x64_fps": 55,
+    "provenance": "Native x86 HUD screenshot supplied by the user; prior BRE x64 FPS reported by the user. Not an automated paired benchmark.",
+    "comparability": "User reported the same room, camera position and scenario. Exact executable hashes, matched settings and repeated timing samples were not captured for this pair. The x86 screenshot retained an incorrect Runtime x64 window caption.",
+    "derived": {
+      "native_x86_ms_per_frame": 4.424778761061947,
+      "bre_x64_ms_per_frame": 18.181818181818183,
+      "additional_ms_per_frame": 13.757039420756236,
+      "frame_time_ratio": 4.109090909090909,
+      "frame_time_overhead_percent": 310.90909090909093,
+      "fps_reduction_percent": 75.66371681415929
+    }
+  },
+  "instrumented_bre_profile": {
+    "source_capture_sha256": "7c75517cd12ec93e18184c6f64aafbb2f15e8451c71ea537ee8def45e1655836",
+    "source_runtime_pe_sha256": "ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d",
+    "selection": "First 112 retained windows of the command capture, active gameplay; later pause/menu windows excluded.",
+    "start_utc": "2026-10-28T12:25:09.1360424+00:00",
+    "end_utc": "2026-10-28T12:27:02.3314599+00:00",
+    "window_count": 112,
+    "frames": 5351,
+    "elapsed_ms": 113196.9398,
+    "mean_fps": 47.271595941147524,
+    "mean_ms_per_frame": 21.15435242010839,
+    "frame_owner_allocated_bytes": 9800542712,
+    "process_gen0_collection_deltas": 1560,
+    "selected_commands": {
+      "RenderWorld": {
+        "calls": 10702,
+        "inclusive_ms": 20680.005300000008
+      },
+      "EntityDistance": {
+        "calls": 1641009,
+        "inclusive_ms": 14039.503300000006
+      },
+      "EntityX": {
+        "calls": 2037272,
+        "inclusive_ms": 8920.753300000002
+      },
+      "HideEntity": {
+        "calls": 1673334,
+        "inclusive_ms": 7621.4056999999975
+      },
+      "SetAnimTime": {
+        "calls": 21404,
+        "inclusive_ms": 6866.256400000003
+      },
+      "FileType": {
+        "calls": 10706,
+        "inclusive_ms": 6175.228200000001
+      },
+      "EntityZ": {
+        "calls": 1426864,
+        "inclusive_ms": 6090.1783
+      },
+      "EntityY": {
+        "calls": 990916,
+        "inclusive_ms": 4270.1772999999985
+      },
+      "EntityVisible": {
+        "calls": 15396,
+        "inclusive_ms": 4200.357299999999
+      },
+      "UpdateWorld": {
+        "calls": 5351,
+        "inclusive_ms": 2992.5872000000004
+      }
+    },
+    "limitations": [
+      "Command times are inclusive and include instrumentation cost; they are not pure translation overhead.",
+      "Allocation deltas include profiler overhead; GC counts do not measure GC pause time.",
+      "No equivalently instrumented native x86 profile was collected.",
+      "Only curated aggregates are included here; the full capture is not bundled."
+    ]
+  },
+  "loading_observation": {
+    "progress_percent": 45,
+    "duration_ms": null,
+    "provenance": "User reports and a later x64 smoke observed prolonged loading. No controlled paired startup measurement was completed."
+  }
+}

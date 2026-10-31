@@ -11,18 +11,85 @@ internal abstract class __BlitzObject
     internal int HandleId;
     internal __BlitzObjectNode Position;
     internal abstract void ClearFields();
+    internal virtual byte[] __PackFields() => System.Array.Empty<byte>();
+    internal virtual void __UnpackFields(byte[] bytes) { }
+    private static int __nextMarshalId;
+    private static readonly object __marshalGate = new();
+    internal static int Marshal(__BlitzObject value, string location)
+    {
+        if (value is null) return 0;
+        Require(value, location);
+        System.Collections.Concurrent.ConcurrentDictionary<int, (byte[] Bytes, System.Action<byte[]> WriteBack)> table;
+        lock (__marshalGate)
+        {
+            if (System.AppContext.GetData("__BlitzCS.ObjectBuffers") is not System.Collections.Concurrent.ConcurrentDictionary<int, (byte[] Bytes, System.Action<byte[]> WriteBack)> existing)
+            {
+                existing = new();
+                System.AppContext.SetData("__BlitzCS.ObjectBuffers", existing);
+            }
+            table = existing;
+        }
+        var id = System.Threading.Interlocked.Decrement(ref __nextMarshalId);
+        if (id >= 0) id = -1;
+        table[id] = (value.__PackFields(), value.__UnpackFields);
+        return id;
+    }
     internal static T RequireReference<T>(T value, string location) where T : __BlitzObject
     {
         if (value is null) throw new System.InvalidOperationException(location + ": Object does not exist.");
         return value;
     }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal static T Require<T>(T value, string location) where T : __BlitzObject
     {
-        if (value is null || !value.Alive) throw new System.InvalidOperationException(location + ": Object does not exist.");
+        if (value is null || !value.Alive) throw Missing(location);
         return value;
     }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static System.InvalidOperationException Missing(string location) => new System.InvalidOperationException(location + ": Object does not exist.");
     internal static bool Equal(__BlitzObject left, __BlitzObject right) =>
         System.Object.ReferenceEquals(left is { Alive: true } ? left : null, right is { Alive: true } ? right : null);
+}
+// Field images lent to external struct-pointer parameters. Lend reserves an image while
+// arguments are evaluated; Seal refreshes the call's images from live fields after the last
+// argument; Return copies images back in reverse order after the call.
+internal static class __BlitzFieldImage
+{
+    [System.ThreadStatic] private static System.Collections.Generic.Stack<(__BlitzObject Owner, byte[] Bytes, int Direction, string Location)> __lent;
+    internal static System.Span<byte> Lend(__BlitzObject value, int direction, string location)
+    {
+        var lent = __lent ??= new();
+        if (value is null)
+        {
+            lent.Push((null, null, 0, location));
+            return default;
+        }
+        var bytes = __BlitzObject.Require(value, location).__PackFields();
+        lent.Push((value, bytes, direction, location));
+        return bytes;
+    }
+    internal static T Seal<T>(T value, int count) { Seal(count); return value; }
+    internal static System.Span<byte> Seal(System.Span<byte> value, int count) { Seal(count); return value; }
+    private static void Seal(int count)
+    {
+        foreach (var (owner, bytes, direction, location) in System.Linq.Enumerable.Take(__lent, count))
+        {
+            if (owner is null) continue;
+            if (direction == 1) System.Array.Clear(bytes);
+            else __BlitzObject.Require(owner, location).__PackFields().CopyTo(bytes, 0);
+        }
+    }
+    internal static T Return<T>(T result, int count) { Return(count); return result; }
+    internal static void Return(int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var (owner, bytes, direction, location) = __lent.Pop();
+            if (owner is null || direction == 0) continue;
+            if (!owner.Alive) throw new System.InvalidOperationException(location + ": Object was deleted during the external call.");
+            owner.__UnpackFields(bytes);
+        }
+    }
 }
 internal static class __BlitzHandles
 {

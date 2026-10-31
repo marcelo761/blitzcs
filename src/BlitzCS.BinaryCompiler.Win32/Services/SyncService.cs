@@ -8,8 +8,10 @@ internal sealed class KernelEvent(bool manualReset, bool signaled)
 {
     private readonly object gate = new();
     private bool signaled = signaled;
+    private bool aborted;
     public void Set() { lock (gate) { signaled = true; Monitor.PulseAll(gate); } }
     public void Reset() { lock (gate) signaled = false; }
+    internal void Abort() { lock (gate) { aborted = true; Monitor.PulseAll(gate); } }
 
     public bool Wait(uint milliseconds)
     {
@@ -18,10 +20,15 @@ internal sealed class KernelEvent(bool manualReset, bool signaled)
         {
             while (!signaled)
             {
+                if (aborted) throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
                 if (milliseconds == 0) return false;
                 if (milliseconds == uint.MaxValue) { Monitor.Wait(gate); continue; }
                 var left = milliseconds - clock.ElapsedMilliseconds;
-                if (left <= 0 || !Monitor.Wait(gate, (int)left)) { if (!signaled) return false; }
+                if (left <= 0 || !Monitor.Wait(gate, (int)left))
+                {
+                    if (aborted) throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
+                    if (!signaled) return false;
+                }
             }
             if (!manualReset) signaled = false;
             return true;
@@ -33,6 +40,8 @@ internal sealed class KernelMutex
 {
     private readonly object gate = new();
     private int owner, count;
+    private bool aborted;
+    internal void Abort() { lock (gate) { aborted = true; Monitor.PulseAll(gate); } }
 
     public bool Acquire(uint milliseconds)
     {
@@ -42,10 +51,15 @@ internal sealed class KernelMutex
         {
             while (count != 0 && owner != me)
             {
+                if (aborted) throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
                 if (milliseconds == 0) return false;
                 if (milliseconds == uint.MaxValue) { Monitor.Wait(gate); continue; }
                 var left = milliseconds - clock.ElapsedMilliseconds;
-                if (left <= 0 || !Monitor.Wait(gate, (int)left)) { if (count != 0 && owner != me) return false; }
+                if (left <= 0 || !Monitor.Wait(gate, (int)left))
+                {
+                    if (aborted) throw new Win32UsageException("The guest process is exiting; background guest threads are terminated.");
+                    if (count != 0 && owner != me) return false;
+                }
             }
             owner = me; count++;
             return true;
@@ -63,11 +77,40 @@ internal sealed class KernelMutex
     }
 }
 
+internal static class WaitForSingleObjectHelper
+{
+    internal static uint Wait(object target, uint timeout) => target switch
+    {
+        KernelEvent e => e.Wait(timeout) ? SyncService.WaitObject0 : SyncService.WaitTimeout,
+        KernelMutex m => m.Acquire(timeout) ? SyncService.WaitObject0 : SyncService.WaitTimeout,
+        KernelThread t => t.Done.Wait(timeout) ? SyncService.WaitObject0 : SyncService.WaitTimeout,
+        _ => SyncService.WaitFailed,
+    };
+}
+
 internal sealed class SyncState
 {
     public readonly object AtomicGate = new();
     public readonly System.Collections.Concurrent.ConcurrentDictionary<uint, CriticalSection> CriticalSections = new();
     public readonly Dictionary<string, object> Named = [];
+    public readonly SrwState Srw = new();
+
+    internal void ReleaseOwnedCriticalSections()
+    {
+        var me = Environment.CurrentManagedThreadId;
+        foreach (var cs in CriticalSections.Values)
+            if (Volatile.Read(ref cs.Owner) == me)
+            {
+                cs.Owner = 0;
+                for (; cs.Depth > 0; cs.Depth--) Monitor.Exit(cs.Gate);
+            }
+    }
+
+    internal void AbortForProcessExit()
+    {
+        ReleaseOwnedCriticalSections();
+        Srw.Abort();
+    }
 }
 
 /// <summary>
@@ -96,7 +139,7 @@ public sealed class SyncService : Win32Service
         c.Mem.WriteUInt32(address + 12, cs.Depth == 0 ? 0 : c.Ctx.CurrentThreadId);
     }
 
-    private static uint Init(Win32Call c, uint address)
+    internal static uint Init(Win32Call c, uint address)
     {
         if (address == 0) throw new Win32UsageException("InitializeCriticalSection(NULL).");
         c.Mem.Write(address, new byte[24]);
@@ -154,6 +197,7 @@ public sealed class SyncService : Win32Service
         {
             var cs = Get(c, c[0], "EnterCriticalSection");
             Monitor.Enter(cs.Gate);
+            if (c.Ctx.IsExitingOnAnotherThread) { Monitor.Exit(cs.Gate); c.Ctx.ThrowIfPoisoned(); }
             cs.Owner = Environment.CurrentManagedThreadId; cs.Depth++;
             Mirror(c, c[0], cs);
             return 0;
@@ -206,14 +250,14 @@ public sealed class SyncService : Win32Service
         Std(K, "ReleaseMutex", 1, c => c.Ctx.GetHandle<KernelMutex>(c[0]) is not { } m ? c.Ctx.Fail(Win32Error.InvalidHandle) : m.Release() ? 1u : c.Ctx.Fail(Win32Error.NotOwner));
         Std(K, "WaitForSingleObject", 2, c =>
         {
-            var target = c.Ctx.GetHandle<object>(c[0]);
-            return target switch
-            {
-                KernelEvent e => e.Wait(c[1]) ? WaitObject0 : WaitTimeout,
-                KernelMutex m => m.Acquire(c[1]) ? WaitObject0 : WaitTimeout,
-                KernelThread t => t.Done.Wait(c[1]) ? WaitObject0 : WaitTimeout,
-                _ => c.Ctx.Fail(Win32Error.InvalidHandle, WaitFailed),
-            };
+            var handle = c[0];
+            var timeout = c[1];
+            var target = c.Ctx.GetHandle<object>(handle);
+            if (target is not (KernelEvent or KernelMutex or KernelThread))
+                return c.Ctx.Fail(Win32Error.InvalidHandle, WaitFailed);
+            if (timeout == 0) return WaitForSingleObjectHelper.Wait(target, timeout);
+            using (c.Ctx.SuspendGuestMemoryWriterForHostWait())
+                return WaitForSingleObjectHelper.Wait(target, timeout);
         });
     }
 

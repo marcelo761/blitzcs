@@ -19,11 +19,12 @@ public static class ComIids
 /// <summary>A COM call from the guest: <c>this</c> is argument 0 of the stdcall frame, method arguments follow.</summary>
 public readonly struct GuestComCall
 {
-    internal GuestComCall(GuestComHost host, GuestComObject obj, GuestComFace face, GuestCall raw) { Host = host; Object = obj; Face = face; Raw = raw; }
+    internal GuestComCall(GuestComHost host, GuestComObject obj, GuestComFace face, GuestCall raw, ComBridgeProfiler.Sample profile = default) { Host = host; Object = obj; Face = face; Raw = raw; Profile = profile; }
     public GuestComHost Host { get; }
     public GuestComObject Object { get; }
     public GuestComFace Face { get; }
     public GuestCall Raw { get; }
+    internal ComBridgeProfiler.Sample Profile { get; }
     public IWin32Memory Mem => Host.Memory;
     /// <summary>Method argument <paramref name="index"/> (0 = the first argument after <c>this</c>), as the 32-bit word the guest pushed.</summary>
     public uint Arg(int index) => Raw.Arg(index + 1);
@@ -59,6 +60,13 @@ public sealed class GuestComInterface
 
     public GuestComInterface Method(string name, int argCount, GuestComHandler handler) { methods.Add(new(name, argCount, handler ?? throw new ArgumentNullException(nameof(handler)))); return this; }
     public GuestComInterface NotImplemented(string name, int argCount, string reason) { methods.Add(new(name, argCount, null) { Reason = reason }); return this; }
+    /// <summary>A slot that exists in the interface but is not bridged: calling it faults naming <c>Interface::Method</c> and the reason (never a made-up HRESULT).</summary>
+    public GuestComInterface Absent(string name, int argCount, string reason)
+    {
+        var label = Name + "::" + name;
+        methods.Add(new(name, argCount, _ => throw new GuestComException($"{label} is not bridged: {reason}.")) { Reason = reason });
+        return this;
+    }
     public GuestComInterface Answers(Guid iid) { also.Add(iid); return this; }
     public GuestComInterface Add(GuestComMethod method) { methods.Add(method); return this; }
 
@@ -81,6 +89,8 @@ public sealed class GuestComObject
     private int destroyed;
     private readonly List<GuestComFace> faces = [];
     internal Action<GuestComObject>? OnDestroy;
+    /// <summary>Asked when QueryInterface finds no face for an IID: returns the interface to add as a new face of this same object (one identity), or null for E_NOINTERFACE.</summary>
+    internal Func<GuestComObject, Guid, GuestComInterface?>? QueryFallback;
 
     internal GuestComObject(int id, string name, object? state) { Id = id; Name = name; State = state; }
 
@@ -154,7 +164,8 @@ public sealed class GuestComHost : IDisposable
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(module);
         var host = hosts.GetValue(context, c => { var h = new GuestComHost(c, module); c.AddDisposable(h); return h; });
-        if (!ReferenceEquals(host.Module, module)) throw new Win32UsageException("This Win32 context already serves another guest module's COM objects; create one resolver per module.");
+        // in a shared process state the host (and the stubs of its objects) live in the first module that created it; the other modules reach them by cross-module dispatch
+        if (!context.IsSharedByModules && !ReferenceEquals(host.Module, module)) throw new Win32UsageException("This Win32 context already serves another guest module's COM objects; create one resolver per module.");
         return host;
     }
 
@@ -195,6 +206,35 @@ public sealed class GuestComHost : IDisposable
     }
 
     public GuestComObject Create(string name, object? state, GuestComInterface iface, Action<GuestComObject>? onDestroy = null) => Create(name, state, [iface], onDestroy);
+
+    /// <summary>
+    /// Like <see cref="Create(string, object?, IReadOnlyList{GuestComInterface}, Action{GuestComObject}?)"/>, for an object whose further interfaces are discovered at QueryInterface time
+    /// (a proxy of a native object): <paramref name="queryFallback"/> decides whether an unknown IID becomes a new face of the same object.
+    /// </summary>
+    public GuestComObject Create(string name, object? state, IReadOnlyList<GuestComInterface> interfaces, Action<GuestComObject>? onDestroy, Func<GuestComObject, Guid, GuestComInterface?> queryFallback)
+    {
+        var obj = Create(name, state, interfaces, onDestroy);
+        obj.QueryFallback = queryFallback;
+        return obj;
+    }
+
+    /// <summary>The face of <paramref name="obj"/> for <paramref name="iface"/>, added to the object (same identity and reference count) when it has none yet.</summary>
+    public GuestComFace FaceFor(GuestComObject obj, GuestComInterface iface)
+    {
+        lock (gate)
+        {
+            if (obj.Faces.FirstOrDefault(f => f.Interface == iface) is { } existing) return existing;
+            if (!obj.IsAlive) throw new GuestComException($"{obj} is already destroyed.");
+            var block = heap.Alloc(8, true);
+            if (block == 0) throw new Win32UsageException("The guest COM heap is exhausted.");
+            Memory.WriteUInt32(block, VtableFor(iface));
+            Memory.WriteUInt32(block + 4, (uint)obj.Id);
+            var face = new GuestComFace(obj, iface, block);
+            obj.AddFace(face);
+            faces[block] = face;
+            return face;
+        }
+    }
 
     /// <summary>The object behind a guest interface pointer (live or destroyed), or null when the address is no COM object of this host.</summary>
     public GuestComObject? Find(uint guestInterfacePointer)
@@ -239,9 +279,11 @@ public sealed class GuestComHost : IDisposable
     private string DeadMessage(uint self)
     {
         lock (gate)
+        {
             return tombstones.TryGetValue(self, out var name)
                 ? $"The guest called a method of {name} through interface pointer 0x{self:X8} after the object was destroyed (its last reference was already released: double Release or use after free)."
                 : $"The guest called a COM method through 0x{self:X8}, which is not an object of this module.";
+        }
     }
 
     private GuestComObject Resolve(uint self, out GuestComFace face)
@@ -255,10 +297,23 @@ public sealed class GuestComHost : IDisposable
 
     private uint Dispatch(GuestComMethod method, GuestCall g)
     {
+        var profiler = Context.ComBridgeProfiler;
+        if (profiler is null)
+        {
+            var unprofiledObject = Resolve(g.Arg(0), out var unprofiledFace);
+            if (!unprofiledObject.IsAlive) throw new GuestComException(DeadMessage(g.Arg(0)));
+            Context.Trace?.Invoke($"[{Environment.CurrentManagedThreadId}] {unprofiledFace.Interface.Name}::{method.Name} ({unprofiledObject})");
+            return method.Handler is { } unprofiledHandler ? unprofiledHandler(new GuestComCall(this, unprofiledObject, unprofiledFace, g)) : ComHr.NotImpl;
+        }
+
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var obj = Resolve(g.Arg(0), out var face);
         if (!obj.IsAlive) throw new GuestComException(DeadMessage(g.Arg(0)));
         Context.Trace?.Invoke($"[{Environment.CurrentManagedThreadId}] {face.Interface.Name}::{method.Name} ({obj})");
-        return method.Handler is { } h ? h(new GuestComCall(this, obj, face, g)) : ComHr.NotImpl;
+        var sample = profiler.BeginAt(face.Interface.Name, method.Name, started);
+        using var active = sample.Activate();
+        try { return method.Handler is { } h ? h(new GuestComCall(this, obj, face, g, sample)) : ComHr.NotImpl; }
+        finally { sample.Complete(); }
     }
 
     private uint QueryInterface(GuestCall g)
@@ -270,7 +325,9 @@ public sealed class GuestComHost : IDisposable
         Memory.WriteUInt32(ppv, 0);
         if (riid == 0) return ComHr.InvalidArg;
         var iid = new Guid(Memory.ReadBytes(riid, 16));
-        GuestComFace? match = iid == ComIids.IUnknown ? obj.Faces[0] : obj.Faces.FirstOrDefault(f => f.Interface.Matches(iid));
+        GuestComFace? match;
+        lock (gate) match = iid == ComIids.IUnknown ? obj.Faces[0] : obj.Faces.FirstOrDefault(f => f.Interface.Matches(iid));
+        if (match is null && obj.QueryFallback is { } fallback && fallback(obj, iid) is { } added) match = FaceFor(obj, added);
         Context.Trace?.Invoke($"[{Environment.CurrentManagedThreadId}] {obj}::QueryInterface({iid}) -> {(match is null ? "E_NOINTERFACE" : match.Interface.Name)}");
         if (match is null) return ComHr.NoInterface;
         if (obj.AddRefCore() == 0) throw new GuestComException(DeadMessage(g.Arg(0)));

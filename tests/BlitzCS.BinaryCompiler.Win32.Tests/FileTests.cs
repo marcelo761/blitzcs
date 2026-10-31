@@ -275,4 +275,45 @@ public sealed class FileTests : IDisposable
         Assert.Throws<BlitzCS.BinaryCompiler.Runtime.GuestMemoryException>(() => w.Kernel("WriteFile", h, 0x10, 4, n, 0));
         Assert.Throws<BlitzCS.BinaryCompiler.Runtime.GuestMemoryException>(() => w.Kernel("ReadFile", h, 0x10, 4, n, 0));
     }
+
+    [Fact]
+    public void FileStateCacheInvalidationAllowsFindingNewlyCreatedFilesAndDirectories()
+    {
+        using var w = New();
+        var subDir = Path.Combine(root, "SubFolder");
+        Directory.CreateDirectory(subDir);
+
+        // Before creating file: opening non-existent file returns Invalid
+        var hFail = Open(w, "SubFolder\\newfile.txt", Read, OpenExisting);
+        Assert.Equal(Invalid, hFail);
+        Assert.Equal(Win32Error.FileNotFound, w.LastError);
+
+        // Create file via CreateFileA with CreateNew
+        var hCreate = Open(w, "SubFolder\\newfile.txt", WriteAccess, CreateNew);
+        Assert.NotEqual(Invalid, hCreate);
+        WriteAll(w, hCreate, "sample data"u8.ToArray());
+        w.Kernel("CloseHandle", hCreate);
+
+        // Now case-insensitive open must succeed because cache was invalidated on creation
+        var hOpen = Open(w, "SUBFOLDER\\NEWFILE.TXT", Read, OpenExisting);
+        Assert.NotEqual(Invalid, hOpen);
+        var read = ReadSome(w, hOpen, 11);
+        Assert.Equal("sample data"u8.ToArray(), read);
+        w.Kernel("CloseHandle", hOpen);
+
+        // Delete file and verify it's no longer found
+        Assert.Equal(1u, w.Kernel("DeleteFileA", w.Str("SubFolder\\newfile.txt")));
+        var hAfterDelete = Open(w, "SUBFOLDER\\NEWFILE.TXT", Read, OpenExisting);
+        Assert.Equal(Invalid, hAfterDelete);
+
+        // Exercise ArrayPool renting in ReadFile with large buffer (> 65536 bytes)
+        var large = new byte[70000];
+        for (var i = 0; i < large.Length; i++) large[i] = (byte)(i % 251);
+        var hLarge = Open(w, "large.bin", Read | WriteAccess, CreateAlways);
+        WriteAll(w, hLarge, large);
+        w.Kernel("SetFilePointer", hLarge, 0, 0, 0);
+        var readLarge = ReadSome(w, hLarge, large.Length);
+        Assert.Equal(large, readLarge);
+        w.Kernel("CloseHandle", hLarge);
+    }
 }

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Blitz3DCS.Engine.Windows/Blitz3DCS.Engine.Windows.csproj" />
+    <ProjectReference Include="../../src/Blitz3DCS.Audio/Blitz3DCS.Audio.csproj" />
+    <ProjectReference Include="../../src/Blitz3DCS.Runtime/Blitz3DCS.Runtime.csproj" />
+  </ItemGroup>
+</Project>

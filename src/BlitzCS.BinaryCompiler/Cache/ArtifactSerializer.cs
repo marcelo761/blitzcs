@@ -7,7 +7,9 @@ public sealed class ArtifactFormatException(string message) : Exception(message)
 
 public sealed class ArtifactSerializer
 {
-    public const int CurrentVersion = 4;
+    /// <summary>5: the dispatch miss routine consults the process-wide module registry through a cell at ContextOffset (cross-module dispatch). 6: import stubs record
+    /// the guest's callee-saved registers and honour the register-image redirect, and the artifact carries the runtime stubs (guest SEH, see ImportStubLayout). Older versions are rejected.</summary>
+    public const int CurrentVersion = 6;
     private static readonly byte[] Magic = "BCSA"u8.ToArray();
     private const int MaxString = 1 << 20;
 
@@ -31,6 +33,7 @@ public sealed class ArtifactSerializer
             w.Write(a.RebasedFromImageBase.HasValue); w.Write(a.RebasedFromImageBase ?? 0u);
             Str(w, BinaryTargets.Normalize(a.TargetOs ?? BinaryTargets.LinuxSysV));
             w.Write(a.DynamicStubs);
+            w.Write(a.RuntimeStubs);
         }
         var body = ms.ToArray();
         var res = new byte[body.Length + 32];
@@ -55,7 +58,10 @@ public sealed class ArtifactSerializer
         using var r = new BinaryReader(ms, Encoding.UTF8);
         if (!r.ReadBytes(4).AsSpan().SequenceEqual(Magic)) throw new ArtifactFormatException("Bad artifact magic.");
         var ver = r.ReadInt32();
-        if (ver != CurrentVersion) throw new ArtifactFormatException($"Unsupported artifact version {ver}.");
+        if (ver != CurrentVersion)
+            throw new ArtifactFormatException(ver < CurrentVersion
+                ? $"Unsupported artifact version {ver}: it was translated before format {CurrentVersion} (cross-module dispatch; import stubs that record the guest registers and can redirect; runtime stubs for guest SEH). Re-translate the image (the cache key includes the compiler version, so a cache entry is simply regenerated)."
+                : $"Unsupported artifact version {ver} (this build reads {CurrentVersion}).");
         int Remaining() => (int)(ms.Length - ms.Position);
         int Count(int minElem) { var n = r.ReadInt32(); if (n < 0 || (long)n * minElem > Remaining()) throw new ArtifactFormatException("Bad element count."); return n; }
         string ReadStr() { var n = r.ReadInt32(); if (n < 0 || n > MaxString || n > Remaining()) throw new ArtifactFormatException("Bad string length."); return Encoding.UTF8.GetString(r.ReadBytes(n)); }
@@ -93,8 +99,10 @@ public sealed class ArtifactSerializer
         var target = BinaryTargets.TryNormalize(ReadStr()) ?? throw new ArtifactFormatException("Unknown artifact target OS.");
         var dynamicStubs = r.ReadInt32();
         if (dynamicStubs is < 0 or > BinaryCompilerOptions.MaxDynamicStubs) throw new ArtifactFormatException("Bad dynamic stub count.");
+        var runtimeStubs = r.ReadInt32();
+        if (runtimeStubs is not (0 or ImportStubLayout.RuntimeStubCount)) throw new ArtifactFormatException("Bad runtime stub count.");
         if (Remaining() != 0) throw new ArtifactFormatException("Trailing bytes in artifact.");
-        return new TranslationArtifact(fv, src, key, gb, gs, host, code, disp, thunk, ctx, enter, exit, stubs, map, exports, imports, diags, rebased ? rebasedBase : null, target, dynamicStubs);
+        return new TranslationArtifact(fv, src, key, gb, gs, host, code, disp, thunk, ctx, enter, exit, stubs, map, exports, imports, diags, rebased ? rebasedBase : null, target, dynamicStubs, runtimeStubs);
     }
 
     private static void Str(BinaryWriter w, string s) { var b = Encoding.UTF8.GetBytes(s); w.Write(b.Length); w.Write(b); }

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Blitz3DCS.Engine</AssemblyName>
+    <RootNamespace>Blitz3DCS.Engine</RootNamespace>
+  </PropertyGroup>
+</Project>

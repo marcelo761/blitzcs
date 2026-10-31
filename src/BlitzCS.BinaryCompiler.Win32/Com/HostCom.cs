@@ -8,14 +8,38 @@ public sealed unsafe class NativeScope : IDisposable
     private readonly List<nint> blocks = [];
     public nint AllocZeroed(int size)
     {
+        ComBridgeProfiler.RecordActiveAllocation(Math.Max(size, 1));
         var p = (nint)NativeMemory.AllocZeroed((nuint)Math.Max(size, 1));
         blocks.Add(p);
         return p;
     }
     public nint Copy(ReadOnlySpan<byte> bytes)
     {
+        ComBridgeProfiler.RecordActiveCopy(bytes.Length);
         var p = AllocZeroed(bytes.Length);
         bytes.CopyTo(new Span<byte>((void*)p, bytes.Length));
+        return p;
+    }
+    /// <summary>Copies guest bytes directly into isolated native scratch memory without an intermediate managed array.</summary>
+    internal nint CopyFromGuest(IWin32Memory memory, uint address, int length)
+    {
+        ArgumentNullException.ThrowIfNull(memory);
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        var size = Math.Max(length, 1);
+        var p = (nint)NativeMemory.AllocZeroed((nuint)size);
+        if (p == 0) throw new OutOfMemoryException();
+        try
+        {
+            memory.Read(address, new Span<byte>((void*)p, length));
+            blocks.Add(p);
+        }
+        catch
+        {
+            NativeMemory.Free((void*)p);
+            throw;
+        }
+        ComBridgeProfiler.RecordActiveAllocation(size);
+        ComBridgeProfiler.RecordActiveCopy(length);
         return p;
     }
     public void Dispose() { foreach (var b in blocks) NativeMemory.Free((void*)b); blocks.Clear(); }
@@ -43,21 +67,32 @@ public sealed unsafe class HostComInterface
     /// <summary>Calls vtable slot <paramref name="slot"/> (0 QueryInterface, 1 AddRef, 2 Release, then the interface's methods) with <c>this</c> first. Up to 10 arguments.</summary>
     public uint Invoke(int slot, params ReadOnlySpan<nint> args)
     {
+        var profile = ComBridgeProfiler.CurrentSample;
+        if (profile.Enabled) return InvokeProfiled(slot, profile, args);
+
         var self = Pointer;
         var f = (*(nint**)self)[slot];
-        return args.Length switch
+        if (args.Length > 8) throw new NotSupportedException($"{Name}: a native COM call with {args.Length} arguments is not supported (maximum 8).");
+        Span<nint> all = stackalloc nint[1 + args.Length];
+        all[0] = self;
+        args.CopyTo(all[1..]);
+        return (uint)HostBridge.HostInvoke.Call(f, all);
+    }
+
+    internal uint InvokeProfiled(int slot, ComBridgeProfiler.Sample profile, ReadOnlySpan<nint> args)
+    {
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
         {
-            0 => (uint)((delegate* unmanaged<nint, int>)f)(self),
-            1 => (uint)((delegate* unmanaged<nint, nint, int>)f)(self, args[0]),
-            2 => (uint)((delegate* unmanaged<nint, nint, nint, int>)f)(self, args[0], args[1]),
-            3 => (uint)((delegate* unmanaged<nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2]),
-            4 => (uint)((delegate* unmanaged<nint, nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2], args[3]),
-            5 => (uint)((delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2], args[3], args[4]),
-            6 => (uint)((delegate* unmanaged<nint, nint, nint, nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2], args[3], args[4], args[5]),
-            7 => (uint)((delegate* unmanaged<nint, nint, nint, nint, nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2], args[3], args[4], args[5], args[6]),
-            8 => (uint)((delegate* unmanaged<nint, nint, nint, nint, nint, nint, nint, nint, nint, int>)f)(self, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]),
-            _ => throw new NotSupportedException($"{Name}: a native COM call with {args.Length} arguments is not supported (maximum 8)."),
-        };
+            var self = Pointer;
+            var f = (*(nint**)self)[slot];
+            if (args.Length > 8) throw new NotSupportedException($"{Name}: a native COM call with {args.Length} arguments is not supported (maximum 8).");
+            Span<nint> all = stackalloc nint[1 + args.Length];
+            all[0] = self;
+            args.CopyTo(all[1..]);
+            return (uint)HostBridge.HostInvoke.Call(f, all);
+        }
+        finally { profile.RecordNativeCall(System.Diagnostics.Stopwatch.GetTimestamp() - start); }
     }
 
     public uint QueryInterface(Guid iid, out nint result)
@@ -81,13 +116,22 @@ public sealed unsafe class HostComInterface
     }
 }
 
-/// <summary>Per-call state of an adapted host COM call.</summary>
+/// <summary>
+/// Per-call state of an adapted host call: a COM method (<see cref="Call"/> is the guest COM call) or a flat DLL export of the host bridge (no COM object; the status passed to the
+/// completions is an HRESULT-style value, S_OK when the export reported success).
+/// </summary>
 public sealed class ComCallScope : IDisposable
 {
     private readonly List<Action<uint>> completions = [];
-    internal ComCallScope(GuestComCall call) { Call = call; }
-    public GuestComCall Call { get; }
-    public IWin32Memory Mem => Call.Mem;
+    private readonly GuestComCall? call;
+    internal ComCallScope(GuestComCall call, uint[]? guestArgs = null) { this.call = call; Mem = call.Mem; Ctx = call.Ctx; GuestArgs = guestArgs ?? []; }
+    internal ComCallScope(IWin32Memory mem, Win32Context ctx, uint[] guestArgs) { Mem = mem; Ctx = ctx; GuestArgs = guestArgs; }
+    public GuestComCall Call => call ?? throw new InvalidOperationException("This adapted call is a flat export, not a COM method.");
+    /// <summary>All guest argument words of the call (an argument whose conversion depends on another one, such as a counted string or array, reads it here).</summary>
+    public uint[] GuestArgs { get; } = [];
+    public uint Arg(int index) => index < GuestArgs.Length ? GuestArgs[index] : Call.Arg(index);
+    public IWin32Memory Mem { get; }
+    public Win32Context Ctx { get; }
     public NativeScope Native { get; } = new();
     /// <summary>Registers work to run after the native call returned (receives the HRESULT): copying results back to the guest, wrapping returned interfaces.</summary>
     public void OnCompleted(Action<uint> action) => completions.Add(action);
@@ -121,7 +165,7 @@ public static unsafe class ComArgs
     public static ComArg Guid(bool optional) => new DelegateComArg((s, v) =>
     {
         if (v == 0) return optional ? 0 : throw new ComArgumentException("A GUID pointer must not be NULL.");
-        return s.Native.Copy(s.Mem.ReadBytes(v, 16));
+        return s.Native.CopyFromGuest(s.Mem, v, 16);
     });
 
     /// <summary>A NUL-terminated ANSI string: a native copy.</summary>
@@ -133,7 +177,7 @@ public static unsafe class ComArgs
 
     /// <summary>An input structure whose guest and host layouts are byte-identical (only 32-bit fields): a native copy of <paramref name="size"/> bytes.</summary>
     public static ComArg InStruct(int size, bool optional = false) => new DelegateComArg((s, v) =>
-        v == 0 ? (optional ? 0 : throw new ComArgumentException("A structure pointer must not be NULL.")) : s.Native.Copy(s.Mem.ReadBytes(v, size)));
+        v == 0 ? (optional ? 0 : throw new ComArgumentException("A structure pointer must not be NULL.")) : s.Native.CopyFromGuest(s.Mem, v, size));
 
     /// <summary>An input structure with a layout that differs between the 32-bit guest and the 64-bit host (pointers inside): <paramref name="convert"/> builds the native image.</summary>
     public static ComArg InStruct(Func<ComCallScope, uint, nint> convert, bool optional = false) => new DelegateComArg((s, v) =>
@@ -158,7 +202,7 @@ public static unsafe class ComArgs
     public static ComArg InOutStruct(int size) => new DelegateComArg((s, v) =>
     {
         if (v == 0) throw new ComArgumentException("A structure pointer must not be NULL.");
-        var native = s.Native.Copy(s.Mem.ReadBytes(v, size));
+        var native = s.Native.CopyFromGuest(s.Mem, v, size);
         s.OnCompleted(hr =>
         {
             if (ComHr.Succeeded(hr)) s.Mem.Write(v, new ReadOnlySpan<byte>((void*)native, size));
@@ -205,11 +249,20 @@ public sealed class HostComMethod
     /// <summary>Converts the guest arguments, calls the native method, completes the out arguments and returns the host HRESULT unchanged (E_INVALIDARG for an unadaptable argument).</summary>
     public uint Invoke(HostComInterface host, GuestComCall call)
     {
-        using var scope = new ComCallScope(call);
+        if (call.Profile.Enabled) return InvokeProfiled(host, call, call.Profile, completeSample: false);
+        if (call.Ctx.ComBridgeProfiler is { } profiler)
+        {
+            var sample = profiler.Begin(host.Name, Name);
+            if (sample.Enabled) return InvokeProfiled(host, call, sample, completeSample: true);
+        }
+
+        var guestArgs = new uint[Args.Count];
+        for (var i = 0; i < Args.Count; i++) guestArgs[i] = call.Arg(i);
+        using var scope = new ComCallScope(call, guestArgs);
         Span<nint> native = stackalloc nint[Args.Count];
         try
         {
-            for (var i = 0; i < Args.Count; i++) native[i] = Args[i].ToHost(scope, call.Arg(i));
+            for (var i = 0; i < Args.Count; i++) native[i] = Args[i].ToHost(scope, guestArgs[i]);
         }
         catch (ComArgumentException e)
         {
@@ -217,8 +270,45 @@ public sealed class HostComMethod
             return ComHr.InvalidArg;
         }
         var hr = host.Invoke(HostSlot, native);
+        HostBridge.WindowProcBridge.ThrowPendingCallbackFault();   // the native method may have sent messages to a guest window procedure
         scope.Complete(hr);
         return hr;
+    }
+
+    private uint InvokeProfiled(HostComInterface host, GuestComCall call, ComBridgeProfiler.Sample sample, bool completeSample)
+    {
+        using var active = sample.Activate();
+        var preStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            var guestArgs = new uint[Args.Count];
+            for (var i = 0; i < Args.Count; i++) guestArgs[i] = call.Arg(i);
+            using var scope = new ComCallScope(call, guestArgs);
+            Span<nint> native = stackalloc nint[Args.Count];
+            try
+            {
+                for (var i = 0; i < Args.Count; i++) native[i] = Args[i].ToHost(scope, guestArgs[i]);
+            }
+            catch (ComArgumentException e)
+            {
+                sample.RecordPreHost(System.Diagnostics.Stopwatch.GetTimestamp() - preStart);
+                sample.RecordAdaptationFailure();
+                call.Ctx.Options.DebugOutput?.Invoke($"{host.Name}::{Name}: {e.Message}");
+                return ComHr.InvalidArg;
+            }
+            sample.RecordPreHost(System.Diagnostics.Stopwatch.GetTimestamp() - preStart);
+
+            var hr = host.Invoke(HostSlot, native);
+            var postStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            try
+            {
+                HostBridge.WindowProcBridge.ThrowPendingCallbackFault();
+                scope.Complete(hr);
+                return hr;
+            }
+            finally { sample.RecordPostHost(System.Diagnostics.Stopwatch.GetTimestamp() - postStart); }
+        }
+        finally { if (completeSample) sample.Complete(); }
     }
 
     /// <summary>The guest method row: <paramref name="hostOf"/> finds the native interface behind the guest object.</summary>

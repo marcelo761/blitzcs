@@ -41,6 +41,11 @@ internal static class OracleDifferential
     /// <summary>The imports a library may call, with the same formulas as the oracle driver's host functions.</summary>
     public static readonly (string Dll, string Name)[] CallbackImports = [("host.dll", "cb_std"), ("host.dll", "cb_c")];
 
+    /// <summary>The imports of the SEH library (lib/seh.c), bound to the guest runtime's dispatcher; the oracle uses the real kernel32 (PE32) or the reference model (ELF).</summary>
+    public static readonly (string Dll, string Name)[] SehImports = [("KERNEL32.dll", "RaiseException"), ("KERNEL32.dll", "RtlUnwind")];
+
+    private static (string Dll, string Name)[] ImportsOf(string lib) => lib switch { "cb" => CallbackImports, "seh" => SehImports, _ => [] };
+
     public static byte[] BuildFixture(OracleArtifacts a, FixtureMutation? mutation = null)
     {
         var code = (byte[])a.Code.Clone(); var data = a.Data.Length >= 16 ? (byte[])a.Data.Clone() : new byte[0x100];
@@ -48,9 +53,9 @@ internal static class OracleDifferential
         if (mutation is { DataOffset: >= 0 } d) data[d.DataOffset] ^= d.DataXor;
         var fx = new PeFixtureBuilder().WithImageBase(PeFixtureBuilder.OracleBase).WithCode(code).WithData(data);
         foreach (var (name, off) in a.Exports) fx.Export(name, off);
-        if (a.Name == "cb") foreach (var (dll, name) in CallbackImports) fx.Import(dll, name);
+        foreach (var (dll, name) in ImportsOf(a.Name)) fx.Import(dll, name);
         foreach (var r in a.Relocs) fx.Relocate(r);
-        if (a.Name == "cb")
+        if (ImportsOf(a.Name).Length > 0)
         {
             // The C source embeds the IAT slot addresses (iat.h) as literal constants, so gcc emits no relocation for them; a real linker would.
             // Registering them makes the fixture movable (the delta is zero at the preferred base, so nothing changes there).
@@ -82,7 +87,9 @@ internal static class OracleDifferential
         var trace = new List<string>();
         var resolver = new DictionaryGuestImportResolver()
             .Add("host.dll", "cb_std", GuestImportBuilder.Stdcall((a, b) => { var r = unchecked(a * 31u + (b ^ 0x55u) + 7u); trace.Add($"cb_std {a:x} {b:x} 0 {r:x}"); return r; }))
-            .Add("host.dll", "cb_c", GuestImportBuilder.Cdecl((a, b, c) => { var r = unchecked((a ^ b) + c * 3u); trace.Add($"cb_c {a:x} {b:x} {c:x} {r:x}"); return r; }));
+            .Add("host.dll", "cb_c", GuestImportBuilder.Cdecl((a, b, c) => { var r = unchecked((a ^ b) + c * 3u); trace.Add($"cb_c {a:x} {b:x} {c:x} {r:x}"); return r; }))
+            .Add("KERNEL32.dll", "RaiseException", GuestStructuredExceptions.RaiseExceptionImport())
+            .Add("KERNEL32.dll", "RtlUnwind", GuestStructuredExceptions.RtlUnwindImport());
         using var module = GuestModule.Load(tr, image, resolver, new GuestModuleOptions { RunEntryPoint = false });
         var fns = oracle.Functions.ToDictionary(f => f.Name, f => module.Bind(f.Name, f.Convention, f.ArgCount));
         var buf = new byte[oracle.DataLength];

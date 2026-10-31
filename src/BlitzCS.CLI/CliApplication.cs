@@ -11,9 +11,9 @@ public static class CliApplication
         var targetAt = Array.IndexOf(args, "--target");
         if (targetAt >= 0)
         {
-            if (targetAt + 1 >= args.Length || BinaryTargets.TryNormalize(args[targetAt + 1]) is null)
+            if (targetAt + 1 >= args.Length || !TargetCapabilities.TryParseTarget(args[targetAt + 1], out _))
             {
-                error.WriteLine("--target expects linux-x64 or windows-x64.");
+                error.WriteLine("--target expects linux-x64 or windows-x64 (or Win32, Linux32, Win64, Linux64).");
                 return 2;
             }
             target = args[targetAt + 1];
@@ -97,9 +97,9 @@ public static class CliApplication
             if (packageBuild)
             {
                 // Application and translated native code must always agree about the runtime target.
-                var applicationTarget = target is null ? BinaryTargets.WindowsX64 : BinaryTargets.Normalize(target);
+                var applicationTarget = target is null ? CompilationTarget.Win64 : TargetCapabilities.ParseTarget(target);
                 using var packageCatalog = externalPaths.Count > 0
-                    ? ExternalCatalog.LoadMany(externalPaths, applicationTarget)
+                    ? ExternalCatalog.LoadMany(externalPaths, target, isPackageBuild: true)
                     : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
                 if (tracePath is not null) _ = DependencyResolutionReport.Create(File.ReadAllText(sourcePath),sourcePath,packageCatalog,tracePath,assets);
                 var code = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, packageCatalog.Functions, out var inputs);
@@ -118,11 +118,19 @@ public static class CliApplication
                 throw new ArgumentException("--assets and --gui require an application package build.");
             var outputPath = Path.GetFullPath(args[3]);
             using var catalog = externalPaths.Count > 0
-                ? ExternalCatalog.LoadMany(externalPaths, target)
+                ? ExternalCatalog.LoadMany(externalPaths, target, isPackageBuild: false)
                 : new ExternalCatalogResult(ExternalFunctionRegistry.Empty, []);
             if (tracePath is not null) _ = DependencyResolutionReport.Create(File.ReadAllText(sourcePath),sourcePath,catalog,tracePath);
-            var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions, out var sourceInputs);
+            if (target is not null)
+            {
+                var explicitTarget = TargetCapabilities.ParseTarget(target);
+                foreach (var native in catalog.NativeLibraries.Except(catalog.BinaryLibraries ?? []))
+                    TargetCapabilities.ValidateNativeLibrary(native, explicitTarget);
+            }
+            // Binary binding diagnostics precede BASIC semantic diagnostics; output paths are validated once
+            // the compiler has reported its source inputs and before anything is written.
             var binaries = BinaryTranslationStep.Prepare(catalog, outputPath, error, target);
+            var generated = BasicCompiler.Compile(File.ReadAllText(sourcePath), sourcePath, catalog.Functions, out var sourceInputs);
             binaries.ValidateInputs(sourceInputs.Concat(catalog.InputPaths ?? [])
                 .Concat(catalog.Functions.ReferencePaths).Concat(catalog.NativeLibraries));
             DotNetEmitter.Emit(generated, outputPath, entryPointTypeName: "BlitzProgram",

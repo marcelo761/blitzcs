@@ -175,6 +175,56 @@ public sealed class Win32IntegrationTests
         Assert.Equal(3u * 3 + 3, module.Bind("t_crt", GuestCallingConvention.Cdecl, 2).Call(src.Address, 3));
     }
 
+    [Fact]
+    public async Task ConditionVariableWaitTemporarilyAdmitsStableHostReads()
+    {
+        var b = new Win32PeBuilder().WithData(new byte[0x100]);
+        var acquire = b.Import("KERNEL32.dll", "AcquireSRWLockExclusive");
+        var sleep = b.Import("KERNEL32.dll", "SleepConditionVariableSRW");
+        var release = b.Import("KERNEL32.dll", "ReleaseSRWLockExclusive");
+        var wake = b.Import("KERNEL32.dll", "WakeConditionVariable");
+        var baseVa = Win32PeBuilder.ImageBase;
+        var lockVa = baseVa + Win32PeBuilder.DataRva + 0x20;
+        var conditionVa = baseVa + Win32PeBuilder.DataRva + 0x24;
+        var resultVa = baseVa + Win32PeBuilder.DataRva + 0x28;
+        var code = new List<byte>();
+        void Abs(uint value)
+        {
+            b.Relocate(Win32PeBuilder.TextRva + (uint)code.Count);
+            code.AddRange(BitConverter.GetBytes(value));
+        }
+        void Push(uint value) { code.Add(0x68); Abs(value); }
+        void Call(uint iat) { code.AddRange([0xFF, 0x15]); Abs(baseVa + iat); }
+
+        var waitOffset = (uint)code.Count;
+        Push(lockVa); Call(acquire);
+        Push(0); Push(5_000); Push(lockVa); Push(conditionVa); Call(sleep);
+        code.Add(0xA3); Abs(resultVa);
+        Push(lockVa); Call(release);
+        code.Add(0xA1); Abs(resultVa); code.Add(0xC3);
+        var wakeOffset = (uint)code.Count;
+        Push(conditionVa); Call(wake); code.Add(0xC3);
+
+        b.WithCode([.. code]).Export("wait", waitOffset).Export("wake", wakeOffset);
+        var image = PeReader.Read(b.Build());
+        var artifact = X64Translator.Translate(image, new BinaryCompilerOptions(OptimizationProfile.Release), "condition-wait-stable-read");
+        using var resolver = new Win32ImportResolver();
+        var environment = new GuestProcessEnvironment(ownedBySet: false);
+        environment.ConfigureStableReads(VerifiedBankReader.RuntimeSha256);
+        using var module = GuestModule.Load(artifact, image, resolver, new GuestModuleOptions { RunEntryPoint = false }, environment, "condition-wait-stable-read");
+        var gate = Assert.IsType<StableMemoryReadGate>(environment.StableReads);
+
+        var before = gate.Epoch;
+        var waiting = Task.Run(() => module.Bind("wait", GuestCallingConvention.Cdecl, 0).Call());
+        StableMemoryReadGate.ReadLease reader = default;
+        Assert.True(SpinWait.SpinUntil(() => gate.Epoch >= before + 2 && gate.TryEnterRead(out reader), TimeSpan.FromSeconds(5)));
+        using (reader) Thread.Sleep(50); // The guest still owns the SRW lock, so wake waits until Monitor.Wait releases it.
+
+        Assert.False(waiting.IsCompleted);
+        Assert.Equal(0u, await Task.Run(() => module.Bind("wake", GuestCallingConvention.Cdecl, 0).Call()).WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1u, await waiting.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
     [NativeFact]
     public void MissingImportsFailLoadByDefaultAndNameTheApi()
     {

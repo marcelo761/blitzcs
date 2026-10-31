@@ -58,6 +58,7 @@ public sealed unsafe partial class GuestModule
             freeStubs.Add(j);
             *(nint*)(hostMap + (nint)artifact.ImportThunkTableOffset + 8 * (artifact.Imports.Count + j)) = slot.Import.FunctionPointer;
         }
+        InitializeRuntimeStubs();
     }
 
     /// <summary>

@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "BlitzCS: Executar arquivo atual",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/${fileBasenameNoExtension}.dll",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "preLaunchTask": "BlitzCS: Compilar arquivo atual"
+    }
+  ]
+}

@@ -115,7 +115,7 @@ public static class DirectSoundAdapters
     {
         var device = (DsDevice)c.Object.State!;
         nint window;
-        try { window = DsHost.MapWindow(c.Arg(0)); }
+        try { window = DsHost.MapWindow(c.Ctx.Options, c.Arg(0)); }
         catch (ComArgumentException e) { c.Ctx.Options.DebugOutput?.Invoke($"IDirectSound::SetCooperativeLevel: {e.Message}"); return ComHr.InvalidArg; }
         var hr = device.Host.Invoke(6, window, (nint)c.Arg(1));
         if (ComHr.Succeeded(hr)) device.CooperativeLevel = c.Arg(1);

@@ -2,12 +2,13 @@
 """Converts the statically linked oracle ELF32 (linked with oracle_win.ld) into a PE32 console EXE (stdlib only).
 usage: make_pe.py <in.elf> <out.exe>
 Image base 0x10000000, no relocations, DYNAMIC_BASE off, so a loader that honours the preferred base maps every section at the
-address the ELF was linked for. Imports (kernel32: GetStdHandle, WriteFile, ExitProcess) live in a generated .idata at VA 0x10008000
-whose IAT starts at its first byte: slot 0 GetStdHandle, 1 WriteFile, 2 ExitProcess (common.h reads them at those literal addresses)."""
+address the ELF was linked for. Imports (kernel32: GetStdHandle, WriteFile, ExitProcess, RaiseException, RtlUnwind) live in a generated .idata at VA 0x10008000
+whose IAT starts at its first byte: slot 0 GetStdHandle, 1 WriteFile, 2 ExitProcess (common.h reads them at those literal addresses), 3 RaiseException and
+4 RtlUnwind (the seh driver hands the real ones to its library)."""
 import struct, sys
 
 BASE = 0x10000000; SA = 0x1000; FA = 0x200; IDATA_RVA = 0x8000
-IMPORTS = ["GetStdHandle", "WriteFile", "ExitProcess"]
+IMPORTS = ["GetStdHandle", "WriteFile", "ExitProcess", "RaiseException", "RtlUnwind"]
 
 def align(v, a): return (v + a - 1) & ~(a - 1)
 
@@ -28,6 +29,7 @@ def read_elf(path):
 def build_idata():
     dll = b"KERNEL32.dll\0"
     off_ilt = 0x60; off_names = 0x80
+    assert 4 * (len(IMPORTS) + 1) <= 0x20, "the IAT must end before the import descriptor at +0x20"
     names = b""; hint_rvas = []
     for n in IMPORTS:
         hint_rvas.append(IDATA_RVA + off_names + len(names)); names += b"\0\0" + n.encode() + b"\0"
@@ -69,7 +71,7 @@ def main(elf, out):
     opt = struct.pack("<HBBIIIIII", 0x10B, 14, 0, code_sz, init_sz, 0, ep_rva, parts[0][1], parts[0][1])
     opt += struct.pack("<IIIHHHHHHIIIIHHIIIIII", BASE, SA, FA, 6, 0, 0, 0, 6, 0, 0, size_image, hdr_size, 0, 3, 0,  # subsystem=console, DllCharacteristics=0
                        0x100000, 0x1000, 0x100000, 0x1000, 0, 16)
-    dd = [(0, 0)] * 16; dd[1] = (IDATA_RVA + 0x20, 40); dd[12] = (IDATA_RVA, 16)
+    dd = [(0, 0)] * 16; dd[1] = (IDATA_RVA + 0x20, 40); dd[12] = (IDATA_RVA, 4 * (len(IMPORTS) + 1))
     opt += b"".join(struct.pack("<II", *x) for x in dd)
     pe += opt
     for name, vsize, rva, rsize, rptr, ch in rows:

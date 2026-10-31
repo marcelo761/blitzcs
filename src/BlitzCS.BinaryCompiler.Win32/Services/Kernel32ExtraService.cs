@@ -120,10 +120,13 @@ public sealed class Kernel32ExtraService : Win32Service
             catch (Exception e)
             {
                 state.ExitCode = 0xFFFFFFFF;
-                FaultTable.GetValue(ctx, _ => new Faults()).Queue.Enqueue(e);
-                ctx.PoisonProcess(e); // like an unhandled fault on Windows, but scoped to this module's Win32 state
+                if (!ctx.IsExiting)
+                {
+                    FaultTable.GetValue(ctx, _ => new Faults()).Queue.Enqueue(e);
+                    ctx.PoisonProcess(e); // like an unhandled fault on Windows, but scoped to this module's Win32 state
+                }
             }
-            finally { state.Finished = true; state.Done.Set(); }
+            finally { ctx.Sync.ReleaseOwnedCriticalSections(); state.Finished = true; state.Done.Set(); }
         }) { IsBackground = true, Name = "guest-thread" };
         state.HostThreadId = thread.ManagedThreadId;
         var handle = ctx.NewHandle(state);

@@ -245,14 +245,10 @@ public sealed class TebTests
     }
 
     [Fact]
-    public void SegmentRegisterOperandsAndGsAreExplicitErrors()
+    public void GsOverrideAndFsStringOpsAreExplicitErrors()
     {
         var cases = new (string Name, byte[] Bytes, string Code)[]
         {
-            ("mov eax, fs", [0x8C, 0xE0], "BC_UNSUPPORTED_INSTRUCTION"),
-            ("mov fs, eax", [0x8E, 0xE0], "BC_UNSUPPORTED_INSTRUCTION"),
-            ("push fs", [0x0F, 0xA0], "BC_UNSUPPORTED_INSTRUCTION"),
-            ("pop fs", [0x0F, 0xA1], "BC_UNSUPPORTED_INSTRUCTION"),
             ("gs:[0]", [0x65, 0x8B, 0x05, 0, 0, 0, 0], "BC_SEGMENT_OVERRIDE"),
             ("fs: movsb", [0x64, 0xA4], "BC_SEGMENT_OVERRIDE"),
         };
@@ -366,6 +362,68 @@ public sealed class TebTests
             module = m; fn = m.Bind("_f", GuestCallingConvention.Cdecl, 1);
             Assert.Equal(fn.Call(0), fn.Call(4));
             Assert.Equal(m.CurrentThreadTeb, fn.Call(3));
+        }
+    }
+
+    [Fact]
+    public void NestedCallKeepsModuleAliveAndBalancesItsLifetimeDepth()
+    {
+        foreach (var profile in Profiles)
+        {
+            GuestFunction? fn = null;
+            GuestModule? module = null;
+            var disposeRejected = false;
+            var resolver = new DictionaryGuestImportResolver().Add("HOST.DLL", "hook", GuestImportBuilder.CdeclCall(call =>
+            {
+                var value = call.Arg(0);
+                if (value == 0)
+                {
+                    Assert.Throws<InvalidOperationException>(() => module!.Dispose());
+                    disposeRejected = true;
+                    return 7;
+                }
+                return fn!.Call(value - 1);
+            }));
+            var b = CallbackLib(profile, a =>
+            {
+                a.mov(eax, __dword_ptr[esp + 4]); a.push(eax); a.call(__dword_ptr[Hook]); a.add(esp, 4); a.ret();
+            });
+            module = Load(b, resolver);
+            fn = module.Bind("_f", GuestCallingConvention.Cdecl, 1);
+
+            Assert.Equal(7u, fn.Call(1));
+            Assert.True(disposeRejected);
+            module.Dispose(); // the outermost lease has ended, including after the nested callback.
+            Assert.True(module.IsDisposed);
+        }
+    }
+
+    [Fact]
+    public void NestedCallExceptionReleasesOnlyItsLifetimeDepth()
+    {
+        foreach (var profile in Profiles)
+        {
+            GuestFunction? fn = null;
+            var nestedFaultObserved = false;
+            var resolver = new DictionaryGuestImportResolver().Add("HOST.DLL", "hook", GuestImportBuilder.CdeclCall(call =>
+            {
+                if (call.Arg(0) == 0) throw new InvalidOperationException("nested callback failure");
+                Assert.Throws<GuestImportException>(() => fn!.Call(0));
+                nestedFaultObserved = true;
+                return 9;
+            }));
+            var b = CallbackLib(profile, a =>
+            {
+                a.mov(eax, __dword_ptr[esp + 4]); a.push(eax); a.call(__dword_ptr[Hook]); a.add(esp, 4); a.ret();
+            });
+            using var module = Load(b, resolver);
+            fn = module.Bind("_f", GuestCallingConvention.Cdecl, 1);
+
+            var outerFault = Assert.Throws<GuestImportException>(() => fn.Call(1));
+            Assert.IsType<InvalidOperationException>(outerFault.InnerException);
+            Assert.True(nestedFaultObserved);
+            module.Dispose(); // proves the exception path returned Holds to zero.
+            Assert.True(module.IsDisposed);
         }
     }
 

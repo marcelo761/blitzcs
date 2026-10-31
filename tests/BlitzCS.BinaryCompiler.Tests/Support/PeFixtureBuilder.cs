@@ -24,6 +24,7 @@ public sealed class PeFixtureBuilder
     private readonly List<(string Dll, string Name)> imports = [];
     private readonly List<uint> relocRvas = [];
     private uint entryRva;
+    private bool executable;
     private readonly List<(string Dll, string Name, uint InitialCodeOffset)> delayImports = [];
     private uint delayAttributes = 1;
 
@@ -50,6 +51,8 @@ public sealed class PeFixtureBuilder
     public PeFixtureBuilder DelayAttributes(uint attributes) { delayAttributes = attributes; return this; }
     /// <summary>Registers an absolute 32-bit field (HIGHLOW) at the given RVA.</summary>
     public PeFixtureBuilder Relocate(uint rva) { relocRvas.Add(rva); return this; }
+    /// <summary>Builds an EXE (IMAGE_FILE_DLL cleared, console subsystem) instead of a DLL; the entry point is the program's start address.</summary>
+    public PeFixtureBuilder AsExecutable() { executable = true; return this; }
     public PeFixtureBuilder EntryPoint(uint codeOffset) { entryRva = TextRva + codeOffset; return this; }
 
     public byte[] Build()
@@ -74,12 +77,12 @@ public sealed class PeFixtureBuilder
         var pe = 0x40; Encoding.ASCII.GetBytes("PE\0\0").CopyTo(file, pe);
         var coff = pe + 4;
         W16(file, coff, 0x014C); W16(file, coff + 2, (ushort)sections.Count); W16(file, coff + 16, 224);
-        W16(file, coff + 18, (ushort)0x2102); // DLL | executable | 32-bit machine
+        W16(file, coff + 18, (ushort)(executable ? 0x0102 : 0x2102)); // [DLL |] executable | 32-bit machine
         var opt = coff + 20;
         W16(file, opt, 0x10B); W32(file, opt + 16, entryRva); W32(file, opt + 28, imageBase); W32(file, opt + 32, 0x1000); W32(file, opt + 36, 0x200);
         W16(file, opt + 40, 4); W16(file, opt + 48, 4);
         var lastRva = sections[^1].rva + (uint)((sections[^1].Item3.Length + 0xFFF) & ~0xFFF);
-        W32(file, opt + 56, lastRva); W32(file, opt + 60, headerSize); W16(file, opt + 68, 2); W32(file, opt + 92, 16);
+        W32(file, opt + 56, lastRva); W32(file, opt + 60, headerSize); W16(file, opt + 68, (ushort)(executable ? 3 : 2)); W32(file, opt + 92, 16);
         if (hasExports) { W32(file, opt + 96, EdataRva); W32(file, opt + 100, (uint)edata.Length); }
         if (hasImports) { W32(file, opt + 104, IdataRva); W32(file, opt + 108, (uint)idata.Length); }
         if (hasRelocs) { W32(file, opt + 96 + 5 * 8, RelocRva); W32(file, opt + 96 + 5 * 8 + 4, (uint)reloc.Length); }

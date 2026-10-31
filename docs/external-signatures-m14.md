@@ -1,6 +1,6 @@
 # External signatures
 
-External declarations let the compiler check BASIC calls before executable implementations are available. A declaration contains a name, return type and parameter types. Parameters support `Integer`, `Float` and `String`. Results also support **`Void`**, for commands that do not produce a value.
+External declarations let the compiler check BASIC calls before executable implementations are available. A declaration contains a name, return type and parameter types. Parameters support `Integer`, `Float` and `String`, plus the struct-pointer kinds `PointerIn`, `PointerOut` and `PointerInOut` described in [native struct ABI](native-struct-abi.md). Results also support **`Void`**, for commands that do not produce a value.
 
 ```json
 {

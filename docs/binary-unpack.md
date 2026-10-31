@@ -14,6 +14,9 @@ The AOT translator cannot translate that jump target, so the stub needs somethin
 | Native x86-32 compat child under ptrace | Rejected. Needs a 32-bit trampoline, a faked Win32 answered by the tracer, runs untrusted stub code natively, and depends on kernel IA-32 emulation being enabled. Not deterministic or portable. |
 | **Confined IA-32 interpreter (chosen)** | A small integer-only interpreter that decodes with Iced and runs against managed `byte[]` regions. No native memory is ever executable, so no RWX mapping exists anywhere and `GuestModule`'s W^X policy needs no exception. Instruction-bounded and deterministic. Unmodelled instructions refuse instead of misbehaving. Self-modifying code is just memory writes. |
 
+(That verdict is about build-time unpacking. Code a running program generates is now translated in the running process with the same translator, without RWX
+pages: docs/binary-dynamic-code.md.)
+
 Consequence: there is no `AllowWritableExecutableImage` option; it would be dead code and a weakening of the loader's policy, so it was deliberately not added.
 The stub never runs through the Win32 component either; the sandbox answers only the loader and allocator APIs itself (below).
 

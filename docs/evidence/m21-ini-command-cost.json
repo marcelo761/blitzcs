@@ -1,0 +1,97 @@
+{
+  "experiment": "Repeated INI parsing: native x86 and translated x64 command cost",
+  "scope": "Isolated parser fixture, not a full-game loading or FPS measurement",
+  "fixture": {
+    "source": "IniReadProfile.bb",
+    "sourceSha256": "519d5e80e51d786589a3edb027fb0a090bd48c1447e51b24c418681a8b4218c5",
+    "asset": "loadingscreens/loadingscreens.ini",
+    "assetSha256": "a3e52b240585934f14efbda76447a0bc0613b5360f7da239237498ed85919016",
+    "queries": 288,
+    "peekByteCalls": 2870012,
+    "chrCalls": 2793014,
+    "checksum": 175742
+  },
+  "nativeX86": {
+    "queryMilliseconds": [
+      818,
+      806,
+      809
+    ],
+    "medianQueryMilliseconds": 809
+  },
+  "translatedX64": {
+    "medianQueryMilliseconds": 15537,
+    "qualification": "Existing published runtime; direct string substitutions disabled"
+  },
+  "experimentalDirectStrings": {
+    "bindingSet": [
+      "Chr",
+      "Left",
+      "Right",
+      "Mid",
+      "Len",
+      "Asc",
+      "Instr",
+      "Lower",
+      "Trim",
+      "Upper"
+    ],
+    "queryMilliseconds": [
+      7383,
+      7046,
+      7003
+    ],
+    "medianQueryMilliseconds": 7046,
+    "binarySha256": {
+      "BlitzCS.BinaryBindings.dll": "2c6783214096683565d5411ab3614823f9f1f9d0fe8ec7b1e99658ea1799226d",
+      "Blitz3DCS.Runtime.dll": "1453dd17d4bbef8be9a070c5be6657005d13607741a98a3a84cb74b718dc67bf",
+      "BlitzCS.BinaryCompiler.Runtime.dll": "d33a6b6ba2ebfc137014f9018260156cc7083b39edde9cefa1972fef29282808",
+      "BlitzCS.BinaryCompiler.Win32.dll": "9f5fd29e2b894466bd99c775d32ed8a5cda78ac926da338e107884aa73d3edeb",
+      "BlitzCS.BinaryCompiler.dll": "05d9625e442d45ab1a30243d0d8f361d28a18eed99ca032282e04d0ec2df75b0",
+      "runtime.dll.bcx": "b9d3acd3e68171617976c0539fe884c5748d0bf5df20277ce9b609826fb59dd9"
+    },
+    "catalogSha256": "33632e30eed824dcc21b3f44956b9a018ecc933f2cffa556b0e6e661576cf667"
+  },
+  "compatibility": "The older direct-string catalog remains experimental because LegacyStrings validates Unicode strictly. The final optimized measurement instead uses unchanged normal generated bindings and guarded ASCII shortcuts inside the command bridge. Non-ASCII input, unsupported NUL cases, invalid arguments, unrecognized command identities and unrecognized images retain native dispatch.",
+  "measurement": "32 sections, nine queries per section. Bank load and section enumeration excluded; instrumentation counters and returned-value checksum included in the timed pass. Each variant produced the same call counts and checksum. The native compiler used a release build, without debugger instrumentation.",
+  "interpretation": "Final normal-binding x64 median is 545 ms versus 809 ms native: 32.63 percent less elapsed query time on this workload. This is 96.49 percent below the earlier translated reference, without changing parser source, query count or checksum.",
+  "finalPairedNormalBindings": {
+    "nativeX86QueryMilliseconds": [
+      817,
+      804,
+      809
+    ],
+    "optimizedX64QueryMilliseconds": [
+      544,
+      545,
+      572
+    ],
+    "nativeMedianMilliseconds": 809,
+    "optimizedMedianMilliseconds": 545,
+    "elapsedReductionVsNativePercent": 32.63,
+    "elapsedReductionVsTranslatedReferencePercent": 96.49,
+    "identities": {
+      "native": {
+        "exe": "228cc7b02bdb31fdfe78e62d841ea870ef80b7aed3d5fba97326271f59312588"
+      },
+      "ascii": {
+        "exe": "9c8b97730d625da9afb0ac61b113ea5d1c49a34a50f83fd3338a9a0814563d4e",
+        "BlitzCS.BinaryCompiler.Runtime.dll": "dfea3000073c1a1247ffdbbc9466b728b9f849eb66d0f27b880fbef10f6dfdea",
+        "BlitzCS.BinaryCompiler.Win32.dll": "0faace22b94300a5595ec4d1b29340169096d4191aac4e8e82a3495bd5977412",
+        "BlitzCS.BinaryBindings.dll": "935c6eef607acf10a0f0f1488bb13850c4f48c66cb9453d9ec9e3d5c04b1ecfb",
+        "runtime.dll.bcx": "b9d3acd3e68171617976c0539fe884c5748d0bf5df20277ce9b609826fb59dd9"
+      }
+    },
+    "counters": {
+      "sections": 32,
+      "queries": 288,
+      "peekbyte_calls": 2870012,
+      "chr_calls": 2793014,
+      "checksum": 175742
+    },
+    "protocol": "Three alternating native/optimized rounds, fresh process and output for each run, same source/asset and normal generated bindings. No builds or test suites ran during these samples. Wine graphics enabled, virtual audio, separate existing private prefixes, same Proton build and desktop display. TieredPGO and server GC disabled through the shared Wine environment. R2R enabled for the published x64 pair.",
+    "runtimeImageSha256": "ed61cd11cfae77f9f9c47c2ec2e5aa778ff79ddc5ee2f4f7353db4ce6006f39d",
+    "defaultPath": "Chr cache; validated PeekByte snapshot under process read gate; ASCII-only Left, Right, Mid, Upper, Lower, Trim, Instr, Asc, Len shortcuts. Unverified inputs retain native dispatch.",
+    "qualification": "Measured negative elapsed overhead for this isolated query workload. No universal per-command, whole-game loading or FPS claim."
+  }
+}

@@ -12,18 +12,22 @@ namespace BlitzCS.CLI;
 /// Preflight assumes stable filesystem paths and does not defend against concurrent hostile changes.</remarks>
 public static class DotNetEmitter
 {
-    public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName = null) =>
-        Emit(generatedCode, outputPath, entryPointTypeName, null);
-
-    public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName, IEnumerable<string>? referencePaths) =>
-        Emit(generatedCode, outputPath, entryPointTypeName, referencePaths, null);
+    public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName = null,
+        OptimizationLevel optimizationLevel = OptimizationLevel.Release) =>
+        Emit(generatedCode, outputPath, entryPointTypeName, null, null, null, optimizationLevel);
 
     public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName,
-        IEnumerable<string>? referencePaths, IEnumerable<string>? nativeLibraryPaths) =>
-        Emit(generatedCode, outputPath, entryPointTypeName, referencePaths, nativeLibraryPaths, null);
+        IEnumerable<string>? referencePaths, OptimizationLevel optimizationLevel = OptimizationLevel.Release) =>
+        Emit(generatedCode, outputPath, entryPointTypeName, referencePaths, null, null, optimizationLevel);
+
+    public static void Emit(string generatedCode, string outputPath, string? entryPointTypeName,
+        IEnumerable<string>? referencePaths, IEnumerable<string>? nativeLibraryPaths,
+        OptimizationLevel optimizationLevel = OptimizationLevel.Release) =>
+        Emit(generatedCode, outputPath, entryPointTypeName, referencePaths, nativeLibraryPaths, null, optimizationLevel);
 
     internal static void Emit(string generatedCode, string outputPath, string? entryPointTypeName,
-        IEnumerable<string>? referencePaths, IEnumerable<string>? nativeLibraryPaths, IEnumerable<string>? inputPaths)
+        IEnumerable<string>? referencePaths, IEnumerable<string>? nativeLibraryPaths, IEnumerable<string>? inputPaths,
+        OptimizationLevel optimizationLevel = OptimizationLevel.Release)
     {
         if (!string.Equals(Path.GetExtension(outputPath), ".dll", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Output must have the .dll extension.", nameof(outputPath));
@@ -109,7 +113,7 @@ public static class DotNetEmitter
         var compilation = CSharpCompilation.Create(
             Path.GetFileNameWithoutExtension(outputPath), [syntax], references,
             new CSharpCompilationOptions(OutputKind.ConsoleApplication,
-                optimizationLevel: OptimizationLevel.Release, checkOverflow: false,
+                optimizationLevel: optimizationLevel, checkOverflow: false,
                 deterministic: true, mainTypeName: entryPointTypeName));
         using var assembly = new MemoryStream();
         using var symbols = new MemoryStream();

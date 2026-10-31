@@ -26,6 +26,9 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     private int dependents;
 
+    /// <summary>True when allocations made for the whole process (shared Win32 state) live in this module; see <see cref="GuestMemory.PinAsProcessAnchor"/>.</summary>
+    internal volatile bool IsProcessAnchor;
+
     /// <summary>Number of modules (in a <see cref="GuestModuleSet"/>) whose imports are bound to this module's exports.</summary>
     internal int DependentCount => Volatile.Read(ref dependents);
     internal void AddDependent() => Interlocked.Increment(ref dependents);
@@ -39,8 +42,10 @@ public sealed unsafe partial class GuestModule : IDisposable
         public uint ImportEsp;
         public Exception? PendingFault;
         public unsafe byte* CallContext;
-        public TebBlock? Teb;
+        public GuestProcessEnvironment.TebBlock? Teb;
         public uint ExtFlags, ExtEdx;           // extended import return staged by the running handler (GuestCall.SetReturnEdx / SetReturnSt0)
+        public uint ExtRedirect;                // guest address of the register image of a redirect (ImportStubLayout.RedirectFlag)
+        public uint CallLow, CallTop;           // guest stack range owned by the innermost guest call of this module on this thread: [stack limit, its frame) (guest SEH boundary)
         public readonly byte[] ExtSt0 = new byte[10];
     }
 
@@ -57,20 +62,54 @@ public sealed unsafe partial class GuestModule : IDisposable
     private readonly List<GuestStack> allStacks = [];
     private readonly Stack<GuestStack> idleStacks = new();
     private readonly Dictionary<GuestBuffer, (nint Map, nuint Length)> buffers = [];
-    private uint entryRva;
+    private uint entryRva, imageEntryRva;
+    private bool imageIsDll;
     private GuestImport[] boundImports = [];
     private nint guestMap, hostMap;
     private nuint guestMapLength, hostMapLength;
     private bool attached, disposed;
 
-    private GuestModule(TranslationArtifact artifact, GuestModuleOptions options)
+    private GuestModule(TranslationArtifact artifact, GuestModuleOptions options, GuestProcessEnvironment environment, string name)
     {
         this.artifact = artifact;
         this.options = options;
+        env = environment;
+        env.ConfigureStableReads(artifact.SourceSha256);
+        Name = name;
         Memory = new GuestMemory(this);
     }
 
+    /// <summary>The name the module was registered under in its set (the image base in hex for a module loaded on its own); used in diagnostics.</summary>
+    public string Name { get; }
+
+
+    /// <summary>Disassembles the guest instruction at <paramref name="va"/> for a trap message; "an instruction" when the bytes are not readable.</summary>
+    private unsafe string DescribeGuestInstruction(uint va)
+    {
+        try
+        {
+            var bytes = new byte[15];
+            for (var k = 0; k < 15; k++) bytes[k] = *(byte*)(nuint)(va + (uint)k);
+            var decoder = Iced.Intel.Decoder.Create(32, bytes, va);
+            var ins = decoder.Decode();
+            if (ins.IsInvalid) return "an instruction";
+            var fmt = new Iced.Intel.NasmFormatter();
+            var output = new Iced.Intel.StringOutput();
+            fmt.Format(ins, output);
+            return "'" + output.ToStringAndReset() + "'";
+        }
+        catch (Exception) { return "an instruction"; }
+    }
+
     public GuestMemory Memory { get; }
+    internal GuestProcessEnvironment Environment => env;
+    internal GuestModuleOptions Options => options;
+
+    /// <summary>Translations of code the guest generated at run time in this module's process (docs/binary-dynamic-code.md), oldest first.</summary>
+    public IReadOnlyList<DynamicCodeTranslation> DynamicTranslations => env.DynamicTranslations;
+
+    /// <summary>Process-wide counters of the dynamic-code write guard: guest stores to data on write-protected code pages that were performed, and stores refused as self-modifying code.</summary>
+    public static (long DataWrites, long Refused) DynamicCodeGuardCounters => DynamicCodeGuard.Counters;
     public uint ImageBase => artifact.GuestImageBase;
     public nint HostImageBase => hostMap;
     public bool IsDisposed => Volatile.Read(ref disposed);
@@ -100,7 +139,13 @@ public sealed unsafe partial class GuestModule : IDisposable
     /// <summary>The module whose guest code is running on this thread, for imports that need memory access.</summary>
     public static GuestModule? Current => current;
 
-    public static GuestModule Load(TranslationArtifact artifact, PeImage image, IGuestImportResolver imports, GuestModuleOptions? options = null)
+    /// <summary>Temporarily releases this thread's process writer lease while a nonalertable host wait is parked.</summary>
+    internal IDisposable? SuspendMemoryWriterForHostWait() => env?.SuspendMemoryWriterForHostWait();
+
+    public static GuestModule Load(TranslationArtifact artifact, PeImage image, IGuestImportResolver imports, GuestModuleOptions? options = null) =>
+        Load(artifact, image, imports, options, null, null);
+
+    internal static GuestModule Load(TranslationArtifact artifact, PeImage image, IGuestImportResolver imports, GuestModuleOptions? options, GuestProcessEnvironment? environment, string? name)
     {
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentNullException.ThrowIfNull(image);
@@ -110,7 +155,8 @@ public sealed unsafe partial class GuestModule : IDisposable
 
         options ??= new GuestModuleOptions();
         Validate(artifact, image, options);
-        var module = new GuestModule(artifact, options);
+        var module = new GuestModule(artifact, options, environment ?? new GuestProcessEnvironment(ownedBySet: false), name ?? $"0x{artifact.GuestImageBase:X8}");
+        module.env.Attach(module);
         try { module.Initialize(image, imports); }
         catch { module.Teardown(); throw; }
         return module;
@@ -119,6 +165,8 @@ public sealed unsafe partial class GuestModule : IDisposable
     private static void Validate(TranslationArtifact a, PeImage image, GuestModuleOptions options)
     {
         var host = PlatformMemory.Current;
+        if (a.FormatVersion < ArtifactSerializer.CurrentVersion)
+            throw new GuestLoadException($"The artifact has format version {a.FormatVersion}; this runtime needs {ArtifactSerializer.CurrentVersion} (cross-module dispatch: the translated code must reach the module registry). Re-translate the image.");
         var artifactTarget = a.TargetOs ?? BinaryTargets.LinuxSysV;
         if (!string.Equals(artifactTarget, host.TargetOs, StringComparison.Ordinal))
             throw new GuestLoadException($"The artifact was translated for target '{artifactTarget}' but this host is '{host.TargetOs}'. Artifacts are target specific (their runtime routines follow the host calling convention): re-translate with TargetOs = \"{host.TargetOs}\".");
@@ -149,7 +197,8 @@ public sealed unsafe partial class GuestModule : IDisposable
         var len = (long)a.HostImage.Length;
         if (a.EnterGuestOffset >= a.CodeSize) throw new GuestLoadException("EnterGuestOffset lies outside the code area.");
         if (a.ContextOffset < a.CodeSize || a.ContextOffset + 64L > len) throw new GuestLoadException("ContextOffset must lie inside the RW data area.");
-        if (a.ImportThunkTableOffset < a.CodeSize || a.ImportThunkTableOffset + 8L * (a.Imports.Count + a.DynamicStubs) > len)
+        if (a.RuntimeStubs is not (0 or ImportStubLayout.RuntimeStubCount)) throw new GuestLoadException($"The artifact declares {a.RuntimeStubs} runtime stubs; this runtime expects 0 or {ImportStubLayout.RuntimeStubCount}.");
+        if (a.ImportThunkTableOffset < a.CodeSize || a.ImportThunkTableOffset + 8L * (a.Imports.Count + a.DynamicStubs + a.RuntimeStubs) > len)
             throw new GuestLoadException("ImportThunkTableOffset must lie inside the RW data area.");
         if (a.ExitGuestRva < a.GuestImageSize || a.ImportStubBaseRva < a.GuestImageSize)
             throw new GuestLoadException("ExitGuestRva and ImportStubBaseRva must be synthetic RVAs at or above SizeOfImage.");
@@ -187,7 +236,7 @@ public sealed unsafe partial class GuestModule : IDisposable
 
         // 2. Guest image at the fixed base.
         var ps = (uint)PlatformMemory.Current.PageSize;
-        var end = Math.Max(artifact.GuestImageSize, Math.Max(artifact.ExitGuestRva + 1UL, artifact.ImportStubBaseRva + 16UL * (uint)Math.Max(1, bound.Length + artifact.DynamicStubs)));
+        var end = Math.Max(artifact.GuestImageSize, Math.Max(artifact.ExitGuestRva + 1UL, artifact.ImportStubBaseRva + 16UL * (uint)Math.Max(1, bound.Length + artifact.DynamicStubs + artifact.RuntimeStubs)));
         var size = (end + ps - 1) / ps * ps;
         if ((ulong)artifact.GuestImageBase + size > uint.MaxValue)
             throw new GuestAddressSpaceException("Guest image plus synthetic region does not fit below 4 GiB.");
@@ -224,8 +273,18 @@ public sealed unsafe partial class GuestModule : IDisposable
         for (var i = 0; i < bound.Length; i++)
             *(nint*)(hostMap + (nint)artifact.ImportThunkTableOffset + 8 * i) = bound[i].FunctionPointer;
         InitializeStubPool();
+        // Cross-module dispatch: the registry cell is filled and the module published before any guest code (TLS callbacks, DllMain) runs, because DllMain may hand
+        // its own function pointers to modules that call them while it is still running.
+        if (artifact.ContextOffset + ModuleRegistryLayout.CellOffset + 8UL > (ulong)artifact.HostImage.Length) throw new GuestLoadException("ContextOffset leaves no room for the module registry cell.");
+        *(nint*)(hostMap + (nint)(artifact.ContextOffset + ModuleRegistryLayout.CellOffset)) = env.RegistryAddress;
+        var tableEntries = (uint)((artifact.HostImage.Length - (long)artifact.DispatchTableOffset) / 4);
+        registryBound = tableEntries - 1;
+        registrySlot = env.Publish(artifact.GuestImageBase, registryBound, hostMap, hostMap + (nint)artifact.DispatchTableOffset);
         PlatformMemory.Current.Protect(hostMap, (nuint)artifact.CodeSize, MemoryProtection.ReadExecute);
+        DynamicCodeGuard.AddHostCode(hostMap, (nuint)artifact.CodeSize);
+        RuntimeCommandProfiler.Instance?.RegisterModule(Name, artifact, (ulong)(nuint)hostMap);
 
+        imageEntryRva = image.EntryPointRva; imageIsDll = image.IsDll;
         // 4. TLS callbacks (DLL_PROCESS_ATTACH), then DllMain(hinst, DLL_PROCESS_ATTACH, 0)
         if (options.RunEntryPoint && tlsCallbacks.Length > 0)
         {
@@ -356,9 +415,12 @@ public sealed unsafe partial class GuestModule : IDisposable
             if (state.Teb is null) CreateThreadTeb(state);
             var teb = state.Teb!;
             var outermost = state.Depth == 0;
+            var processOutermost = teb.Depth == 0;   // no guest code of any module of the process runs on this thread
+            uint savedStackBase = 0, savedStackLimit = 0;
             GuestStack stack;
             uint start;
             var savedEsp = state.ImportEsp;
+            var (savedCallLow, savedCallTop) = (state.CallLow, state.CallTop);
             if (outermost)
             {
                 stack = RentStack();
@@ -370,7 +432,13 @@ public sealed unsafe partial class GuestModule : IDisposable
                 start = state.ImportEsp;
                 stack = FindStack(start);
             }
-            if (outermost) PrepareTebForCall(teb, stack.Top, stack.Low);
+            if (processOutermost) GuestProcessEnvironment.PrepareTebForCall(teb, stack.Top, stack.Low);
+            else if (outermost)
+            {
+                // A nested call into another module of the process runs on that module's own stack: the shared TEB follows it and is restored afterwards. The SEH chain is left alone.
+                savedStackBase = *(uint*)(teb.Map + (nint)TebStackBase); savedStackLimit = *(uint*)(teb.Map + (nint)TebStackLimit);
+                *(uint*)(teb.Map + (nint)TebStackBase) = stack.Top; *(uint*)(teb.Map + (nint)TebStackLimit) = stack.Low;
+            }
 
             var previous = current;
             try
@@ -396,13 +464,24 @@ public sealed unsafe partial class GuestModule : IDisposable
                 *(uint*)(callContext + 8) = ecx; // CtxEcxIn / CtxEdxIn: register arguments of thiscall and fastcall
                 *(uint*)(callContext + 12) = edx;
                 *(uint*)(callContext + 56) = kind switch { GuestReturn.St0 => 2u, GuestReturn.Xmm0 => 4u, St0IfPresent => 2u, _ => 0u };
+                var nestedWaitWriter = teb.Depth != 0 && env.EnterNestedGuestCallDuringWait(teb);
+                if (teb.Depth == 0) env.ThreadEntered();
                 current = this;
                 state.Depth++;
+                teb.Depth++;
                 var savedContext = state.CallContext;
                 state.CallContext = callContext;
+                state.CallLow = stack.Low; state.CallTop = esp;
                 uint eax;
                 try { eax = (uint)enter((ulong)hostTarget, esp, (ulong)callContext); }
-                finally { state.Depth--; current = previous; state.ImportEsp = savedEsp; state.CallContext = savedContext; }
+                finally
+                {
+                    state.Depth--; current = previous; state.ImportEsp = savedEsp; state.CallContext = savedContext;
+                    state.CallLow = savedCallLow; state.CallTop = savedCallTop;
+                    if (--teb.Depth == 0) env.ThreadLeft();
+                    else if (outermost) { *(uint*)(teb.Map + (nint)TebStackBase) = savedStackBase; *(uint*)(teb.Map + (nint)TebStackLimit) = savedStackLimit; }
+                    if (nestedWaitWriter) env.LeaveNestedGuestCallDuringWait(teb);
+                }
 
                 var abi = *(uint*)(callContext + 112);
                 if ((abi & 1) != 0)
@@ -411,8 +490,15 @@ public sealed unsafe partial class GuestModule : IDisposable
                 if (trapKind != 0)
                 {
                     var trapAddress = *(ulong*)(callContext + 24);
+                    if (trapKind == 4) throw new GuestFastFailException(*(uint*)(callContext + 8), (uint)trapAddress);
+                    if (trapKind == DynamicCodeGuard.TrapSelfModifyingCode) throw env.SelfModifyingCodeFault((uint)trapAddress);
+                    if (trapKind == 5) throw new GuestTrapException($"Guest executed {DescribeGuestInstruction((uint)trapAddress)} at 0x{trapAddress:X8}, a segment-register or far-pointer load whose new value is not the current flat selector (the guest runs in a flat model; this is a named deferred fault, not a translation error).");
                     throw new GuestTrapException(trapKind == 1
-                        ? $"Guest control flow reached untranslated code at 0x{trapAddress:X8} (indirect target not discovered at build time)."
+                        ? env.TakeDynamicCodeFailure((uint)trapAddress) is { } dynamicFailure
+                            ? $"Guest control flow reached 0x{trapAddress:X8}: {dynamicFailure}"
+                        : env.FindRetired((uint)trapAddress) is { } gone
+                            ? $"Guest control flow reached 0x{trapAddress:X8}, which lies inside module '{gone}' that has been unloaded (FreeLibrary/Unload): a function pointer or return address into it outlived the module."
+                            : $"Guest control flow reached untranslated code at 0x{trapAddress:X8} (indirect target not discovered at build time, and not inside any other module of this process)."
                         : trapKind == 3
                             ? $"Guest instruction at 0x{trapAddress:X8} used an fs: offset outside the thread environment block (run-time offset beyond the TLS slot array)."
                             : $"Guest executed an instruction the translator rejected at 0x{trapAddress:X8}.");
@@ -476,6 +562,7 @@ public sealed unsafe partial class GuestModule : IDisposable
             if (state.ExtFlags != 0 && state.CallContext != null)
             {
                 var ctx = state.CallContext; // CtxEdx / CtxImportFlags / CtxSt0Raw of the calling guest call (scratch until the call exits)
+                if ((state.ExtFlags & ImportStubLayout.RedirectFlag) != 0) eax = (eax & ~0xFFFFFFFFUL) | state.ExtRedirect;
                 *(uint*)(ctx + 48) = state.ExtEdx;
                 *(uint*)(ctx + 60) = state.ExtFlags;
                 if ((state.ExtFlags & 2) != 0) state.ExtSt0.AsSpan().CopyTo(new Span<byte>(ctx + 64, 10));
@@ -539,9 +626,11 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     internal void ReleaseBuffer(GuestBuffer buffer, nint map, nuint length)
     {
+        using var mutation = env.EnterMemoryMutation();
         lock (resourceLock)
         {
             if (!buffers.Remove(buffer)) return; // the module already freed it
+            env.InvalidateDynamicCode((uint)map, (uint)length);   // translations of code in freed memory die with it
             Memory.Remove((ulong)map);
             PlatformMemory.Current.Free(map, length);
         }
@@ -551,19 +640,26 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     internal void EnterCall()
     {
-        lifetime.EnterReadLock();
-        if (disposed)
+        var state = threadState.Value!;
+        // A nested call on the same thread is already protected by the outer read lease.
+        // Keep Holds as the recursion depth used by disposal, but avoid recursively
+        // entering ReaderWriterLockSlim for every bridge callback and memory helper.
+        if (state.Holds == 0)
         {
-            lifetime.ExitReadLock();
-            throw new ObjectDisposedException(nameof(GuestModule), "The guest module has been disposed.");
+            lifetime.EnterReadLock();
+            if (disposed)
+            {
+                lifetime.ExitReadLock();
+                throw new ObjectDisposedException(nameof(GuestModule), "The guest module has been disposed.");
+            }
         }
-        threadState.Value!.Holds++;
+        state.Holds++;
     }
 
     internal void ExitCall()
     {
-        threadState.Value!.Holds--;
-        lifetime.ExitReadLock();
+        var state = threadState.Value!;
+        if (--state.Holds == 0) lifetime.ExitReadLock();
     }
 
     public void Dispose() => TryDispose(Timeout.Infinite);
@@ -611,8 +707,12 @@ public sealed unsafe partial class GuestModule : IDisposable
 
     private void Teardown()
     {
+        using var mutation = env.EnterMemoryMutation();
+        if (registrySlot >= 0) env.Retire(registrySlot, Name, artifact.GuestImageBase, registryBound);   // dead before the host image goes away
+        registrySlot = -1;
+        env.UnregisterTls(this);
         Memory.Clear();
-        FreeAllTebs();
+        env.Detach(this);
         lock (resourceLock)
         {
             foreach (var (_, (map, length)) in buffers) PlatformMemory.Current.Free(map, length);
@@ -621,6 +721,7 @@ public sealed unsafe partial class GuestModule : IDisposable
             allStacks.Clear();
             idleStacks.Clear();
         }
+        if (hostMap != 0) DynamicCodeGuard.RemoveHostCode(hostMap);
         PlatformMemory.Current.Free(hostMap, hostMapLength);
         PlatformMemory.Current.Free(guestMap, guestMapLength);
         hostMap = 0;

@@ -1,0 +1,211 @@
+dll	name	implemented	group	direct_sites	upper_sites	roots
+WINMM.dll	waveOutWrite	yes	winmm timers/sound	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	waveOutUnprepareHeader	yes	winmm timers/sound	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	waveOutPrepareHeader	yes	winmm timers/sound	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	waveOutClose	yes	winmm timers/sound	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	waveOutOpen	yes	winmm timers/sound	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	timeKillEvent	yes	winmm timers/sound	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	timeGetTime	yes	winmm timers/sound	0	33	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	timeGetDevCaps	no	winmm timers/sound	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	timeBeginPeriod	no	winmm timers/sound	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	timeEndPeriod	no	winmm timers/sound	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	waveOutReset	yes	winmm timers/sound	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+WINMM.dll	timeSetEvent	yes	winmm timers/sound	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+WS2_32.dll	ord#9	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#116	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#115	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#52	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#23	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#21	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#20	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#19	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#1	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#17	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#16	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#15	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#14	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#13	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#11	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#18	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#8	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#6	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#5	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#10	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#4	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#3	no	network (ws2_32)	0	0	
+WS2_32.dll	ord#2	no	network (ws2_32)	0	0	
+DINPUT8.dll	DirectInput8Create	no	DirectX/COM creation	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+DDRAW.dll	DirectDrawCreateEx	no	DirectX/COM creation	0	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+DDRAW.dll	DirectDrawEnumerateExA	no	DirectX/COM creation	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+d3dxof.dll	DirectXFileCreate	no	DirectX/COM creation	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	WriteFile	yes	kernel32 file/console/locale	12	18	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	FlushFileBuffers	yes	kernel32 file/console/locale	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetFileType	yes	kernel32 file/console/locale	1	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetStdHandle	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	EnumSystemLocalesW	yes	kernel32 file/console/locale	0	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetUserDefaultLCID	yes	kernel32 other	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	IsValidLocale	yes	kernel32 file/console/locale	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetLocaleInfoW	yes	kernel32 file/console/locale	0	33	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	LCMapStringW	yes	kernel32 file/console/locale	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	CompareStringW	yes	kernel32 file/console/locale	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetTimeFormatW	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetConsoleOutputCP	yes	kernel32 file/console/locale	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetConsoleMode	yes	kernel32 file/console/locale	4	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetFileSizeEx	yes	kernel32 file/console/locale	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	SetFilePointerEx	yes	kernel32 file/console/locale	2	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	ReadConsoleW	yes	kernel32 file/console/locale	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetDateFormatW	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetTimeZoneInformation	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetCommandLineA	yes	kernel32 CRT/startup	1	4	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	ExitProcess	yes	kernel32 other	5	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	VirtualAlloc	yes	kernel32 memory/resources	1	4	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetModuleHandleA	yes	kernel32 CRT/startup	1	1	_bbWinMain@0
+KERNEL32.dll	LoadResource	yes	kernel32 memory/resources	1	1	_bbWinMain@0
+KERNEL32.dll	LockResource	yes	kernel32 memory/resources	1	1	_bbWinMain@0
+KERNEL32.dll	FindResourceA	yes	kernel32 memory/resources	1	1	_bbWinMain@0
+KERNEL32.dll	FreeLibrary	yes	kernel32 module loading	6	15	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetProcAddress	yes	kernel32 module loading	6	18	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	LoadLibraryA	yes	kernel32 module loading	0	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetTempPathA	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	Sleep	yes	kernel32 sync/threads/TLS	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetSystemDirectoryA	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetWindowsDirectoryA	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetVersionExA	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetModuleFileNameA	yes	kernel32 CRT/startup	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	CloseHandle	yes	kernel32 other	5	18	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	SetEvent	yes	kernel32 sync/threads/TLS	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	WaitForSingleObject	yes	kernel32 sync/threads/TLS	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	CreateEventA	yes	kernel32 sync/threads/TLS	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	FindClose	yes	kernel32 other	4	18	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	FindNextFileA	yes	kernel32 file/console/locale	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	SetCurrentDirectoryA	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetCurrentDirectoryA	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	CreateDirectoryA	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	DeleteFileA	yes	kernel32 file/console/locale	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	FindFirstFileA	yes	kernel32 file/console/locale	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetFileAttributesA	yes	kernel32 file/console/locale	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	RemoveDirectoryA	yes	kernel32 other	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	HeapReAlloc	yes	kernel32 memory/resources	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	MultiByteToWideChar	yes	kernel32 file/console/locale	2	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	VirtualFree	yes	kernel32 memory/resources	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetFullPathNameA	yes	kernel32 other	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	OutputDebugStringA	yes	kernel32 other	0	42	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetLastError	yes	kernel32 other	57	120	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	LoadLibraryExA	yes	kernel32 module loading	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	EnterCriticalSection	yes	kernel32 sync/threads/TLS	7	18	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	LeaveCriticalSection	yes	kernel32 sync/threads/TLS	7	18	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	InitializeCriticalSectionAndSpinCount	yes	kernel32 sync/threads/TLS	3	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	DeleteCriticalSection	yes	kernel32 sync/threads/TLS	2	21	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	CreateThread	yes	kernel32 sync/threads/TLS	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	TlsSetValue	yes	kernel32 sync/threads/TLS	4	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	TlsGetValue	yes	kernel32 sync/threads/TLS	4	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	TlsAlloc	yes	kernel32 sync/threads/TLS	2	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	SetLastError	yes	kernel32 other	10	18	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	InterlockedFlushSList	yes	kernel32 CRT/startup	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	RtlUnwind	yes	kernel32 SEH/diagnostics	0	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	RaiseException	yes	kernel32 SEH/diagnostics	1	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	InitializeSListHead	yes	kernel32 CRT/startup	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetSystemTimeAsFileTime	yes	kernel32 CRT/startup	2	5	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetCurrentThreadId	yes	kernel32 CRT/startup	2	2	DllMain,_bbWinMain@0
+KERNEL32.dll	TlsFree	yes	kernel32 sync/threads/TLS	4	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetCurrentProcessId	yes	kernel32 CRT/startup	2	2	DllMain,_bbWinMain@0
+KERNEL32.dll	QueryPerformanceCounter	yes	kernel32 other	2	2	DllMain,_bbWinMain@0
+KERNEL32.dll	GetModuleHandleW	yes	kernel32 CRT/startup	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetStartupInfoW	yes	kernel32 CRT/startup	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	IsDebuggerPresent	yes	kernel32 SEH/diagnostics	4	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	TerminateProcess	yes	kernel32 other	6	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetCurrentProcess	yes	kernel32 CRT/startup	6	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	SetUnhandledExceptionFilter	yes	kernel32 SEH/diagnostics	6	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	UnhandledExceptionFilter	yes	kernel32 SEH/diagnostics	6	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	IsProcessorFeaturePresent	yes	kernel32 CRT/startup	10	21	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	SleepConditionVariableSRW	yes	kernel32 sync/threads/TLS	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	WakeAllConditionVariable	yes	kernel32 other	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	AcquireSRWLockExclusive	yes	kernel32 other	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	ReleaseSRWLockExclusive	yes	kernel32 other	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetCPInfo	yes	kernel32 file/console/locale	6	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetStringTypeW	yes	kernel32 file/console/locale	2	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	LCMapStringEx	yes	kernel32 file/console/locale	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	WideCharToMultiByte	yes	kernel32 file/console/locale	2	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	DecodePointer	yes	kernel32 other	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	EncodePointer	yes	kernel32 CRT/startup	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	InitializeCriticalSectionEx	yes	kernel32 sync/threads/TLS	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	LoadLibraryExW	yes	kernel32 module loading	8	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	HeapAlloc	yes	kernel32 memory/resources	4	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	IsValidCodePage	yes	kernel32 file/console/locale	2	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetACP	yes	kernel32 file/console/locale	2	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetOEMCP	yes	kernel32 file/console/locale	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetCommandLineW	yes	kernel32 CRT/startup	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetEnvironmentStringsW	yes	kernel32 file/console/locale	4	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	FreeEnvironmentStringsW	yes	kernel32 file/console/locale	8	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	SetEnvironmentVariableW	yes	kernel32 file/console/locale	4	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetProcessHeap	yes	kernel32 memory/resources	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	SetStdHandle	yes	kernel32 other	2	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	CreateFileW	yes	kernel32 file/console/locale	3	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	HeapSize	yes	kernel32 memory/resources	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	WriteConsoleW	yes	kernel32 file/console/locale	4	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	SetEndOfFile	yes	kernel32 file/console/locale	1	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	CopyFileA	yes	kernel32 file/console/locale	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	ReadFile	yes	kernel32 file/console/locale	7	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	FindFirstFileExW	yes	kernel32 file/console/locale	2	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	HeapFree	yes	kernel32 memory/resources	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetModuleFileNameW	yes	kernel32 CRT/startup	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	GetModuleHandleExW	yes	kernel32 CRT/startup	2	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	FileTimeToSystemTime	yes	kernel32 file/console/locale	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	SystemTimeToTzSpecificLocalTime	yes	kernel32 memory/resources	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+KERNEL32.dll	FindNextFileW	yes	kernel32 file/console/locale	2	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	MapVirtualKeyA	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	ToAscii	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	LoadCursorA	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	GetDesktopWindow	yes	user32 window/message	0	24	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	SetWindowLongA	no	user32 window/message	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	GetWindowLongA	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	ScreenToClient	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	ClientToScreen	no	user32 window/message	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	GetCursorPos	no	user32 window/message	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	SetCursor	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	SetCursorPos	no	user32 window/message	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	ShowCursor	no	user32 window/message	0	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	GetWindowRect	no	user32 window/message	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	GetClientRect	no	user32 window/message	0	18	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	SetWindowTextA	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	InvalidateRect	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	SystemParametersInfoA	no	user32 window/message	0	0	
+USER32.dll	BeginPaint	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	SetForegroundWindow	no	user32 window/message	0	15	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	UpdateWindow	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	GetSystemMetrics	no	user32 window/message	0	0	
+USER32.dll	ReleaseCapture	no	user32 window/message	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	SetCapture	no	user32 window/message	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	SetWindowPos	no	user32 window/message	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	MoveWindow	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	DestroyWindow	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	CreateWindowExA	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	UnregisterClassA	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	RegisterClassA	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	DefWindowProcA	no	user32 window/message	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	PostMessageA	no	user32 window/message	0	21	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	PeekMessageA	no	user32 window/message	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	DispatchMessageA	no	user32 window/message	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	GetMessageA	no	user32 window/message	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	MessageBoxA	yes	user32 window/message	2	8	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	EndPaint	no	user32 window/message	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+USER32.dll	ShowWindow	no	user32 window/message	0	12	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	RemoveFontResourceA	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	GetTextExtentPoint32A	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	GetCharABCWidthsA	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	DeleteObject	no	gdi32/gdiplus/printing	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	SetBkColor	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	CreateFontA	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	CreateCompatibleDC	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	AddFontResourceA	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	GetStockObject	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	SelectObject	no	gdi32/gdiplus/printing	0	9	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	SetTextColor	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	GetTextMetricsA	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	DeleteDC	no	gdi32/gdiplus/printing	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime
+GDI32.dll	ExtTextOutA	no	gdi32/gdiplus/printing	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+SHELL32.dll	ShellExecuteA	no	shell/theme/IME	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+ole32.dll	CoCreateInstance	yes	ole32/oleaut32 COM	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+ole32.dll	CoInitializeEx	yes	ole32/oleaut32 COM	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+ole32.dll	CoInitialize	yes	ole32/oleaut32 COM	0	3	DllMain,_bbWinMain@0,runtimeGetRuntime
+ole32.dll	CoUninitialize	yes	ole32/oleaut32 COM	0	6	DllMain,_bbWinMain@0,runtimeGetRuntime

@@ -25,29 +25,101 @@ public sealed class Win32Coverage
 /// not resolved (the loader reports it by name or the guest faults at call time naming dll!name): there are no placeholder stubs.
 /// Create one resolver per guest module: it owns the emulated process state (heaps, handles, TLS, files) and its guest allocations.
 /// </summary>
-public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImportResolver, IDisposable
+public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImportResolver, IGuestProcessExitResolver, IDisposable
 {
-    private readonly Win32Registry registry = new();
+    /// <summary>What the resolvers of one guest process share: the API registry, the service instances and the Win32 context (heaps, handle table, TLS/FLS index space, critical sections, files, registry ...). Reference counted: the context dies with the last resolver.</summary>
+    private sealed class SharedState
+    {
+        public readonly Win32Registry Registry = new();
+        public IReadOnlyList<IWin32Service> Services = [];
+        public Win32Context Context = null!;
+        public int Refs;
+        public readonly object Gate = new();
+    }
+
+    private readonly SharedState state;
+    private readonly Win32Registry registry;
+    private int disposed;
 
     public Win32ImportResolver(Win32Options? options = null, IEnumerable<IWin32Service>? services = null)
     {
-        Services = [.. services ?? DefaultServices()];
+        state = new SharedState { Refs = 1 };
+        registry = state.Registry;
+        Services = state.Services = [.. services ?? DefaultServices(options)];
         foreach (var s in Services) s.Register(registry);
-        Context = new Win32Context(options ?? new Win32Options());
+        Context = state.Context = new Win32Context(options ?? new Win32Options());
         Context.Process.RegisterSystem(registry.All.Select(a => a.Dll));
         Context.ApiLookup = (dll, name) => registry.Find(dll, name, null);
     }
 
-    /// <summary>The standard composition. Each service can be omitted or replaced independently.</summary>
-    public static IEnumerable<IWin32Service> DefaultServices() =>
+    /// <summary>A view over the shared state of one process (one Win32Context, one set of service instances).</summary>
+    private Win32ImportResolver(SharedState shared)
+    {
+        state = shared; registry = shared.Registry; Services = shared.Services; Context = shared.Context;
+    }
+
+    /// <summary>
+    /// Another resolver for a further module of the process this resolver serves. Windows has one heap, handle table, TLS/FLS index space, environment, current
+    /// directory and module list per process, so the modules of one <see cref="GuestModuleSet"/> must see the same Win32 state: everything is shared and
+    /// only per-module identity stays with the module (<c>GuestModule.Current</c>: the stub provider, DllMain bookkeeping, the module handle). Disposing a view
+    /// releases its reference; the context is disposed with the last one.
+    /// </summary>
+    public Win32ImportResolver ForAnotherModule()
+    {
+        lock (state.Gate)
+        {
+            if (state.Refs == 0) throw new ObjectDisposedException(nameof(Win32ImportResolver), "The Win32 state of this process has been disposed.");
+            state.Refs++;
+        }
+        state.Context.MarkShared();
+        return new Win32ImportResolver(state);
+    }
+
+    /// <summary>
+    /// A resolver factory for <see cref="GuestModuleSet(Func{string, IGuestImportResolver}, ModuleLinkOptions?)"/> in which every module of the set gets a resolver over
+    /// the same Win32 state (the first call creates it from <paramref name="options"/>). Use it instead of <c>name =&gt; new Win32ImportResolver(options)</c> unless the modules
+    /// are meant to be separate processes.
+    /// </summary>
+    public static Func<string, IGuestImportResolver> SharedFactory(Win32Options? options = null, IEnumerable<IWin32Service>? services = null)
+    {
+        Win32ImportResolver? first = null;
+        var gate = new object();
+        return _ =>
+        {
+            lock (gate)
+            {
+                if (first is null || first.state.Refs == 0) return first = new Win32ImportResolver(options, services);   // a fresh process once the previous one is gone
+                return first.ForAnotherModule();
+            }
+        };
+    }
+
+    /// <summary>
+    /// The standard composition. Each service can be omitted or replaced independently. With <see cref="Win32Options.UsesHostWindowing"/> (the default on a Windows host) user32/gdi32 are
+    /// the host bridge (<see cref="HostUser32Service"/>, <see cref="HostGdi32Service"/>, <see cref="HostDirectXService"/>) and the sandbox subset keeps only MessageBoxA; elsewhere those
+    /// services are not part of the composition at all, so their APIs stay absent and fault by name.
+    /// </summary>
+    public static IEnumerable<IWin32Service> DefaultServices(Win32Options? options = null)
+    {
+        var host = (options ?? new Win32Options()).UsesHostWindowing;
+        return [.. Common(host), .. host ? new IWin32Service[] { new HostUser32Service(), new HostGdi32Service(), new HostDirectXService() } : []];
+    }
+
+    private static IEnumerable<IWin32Service> Common(bool hostWindowing) =>
     [
         new HeapService(), new MemoryService(), new SyncService(), new TlsService(), new ProcessService(),
         new StringService(), new FileService(), new CrtService(), new WinsockService(),
         new Advapi32RegistryService(),
         new Ole32Service(),
-        new User32BasicService(),
+        new User32BasicService(messageBoxOnly: hostWindowing),
         new MsvcrtRuntimeService(),
         new Kernel32ExtraService(),
+        new Kernel32StartupService(),
+        new Kernel32SrwService(),
+        new Kernel32ResourceService(),
+        new Kernel32TimeService(),
+        new Kernel32WideService(),
+        new FilePathService(),
         new WinmmService(),
         new DirectSoundService(),
         new WinsockCoreService(),
@@ -102,6 +174,8 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         return api.Handler(new Win32Call(Context, memory, args.AsSpan(0, api.ArgCount), api.Variadic ? i => captured[i] : null));
     }
 
+    public uint Call(GuestMemory memory, string dll, string name, params uint[] args) => Call(Context.Bind(memory), dll, name, args);
+
     /// <summary>Static view of what the standard composition implements, against the priority list taken from real binaries.</summary>
     public static Win32Coverage Coverage { get; } = BuildCoverage();
 
@@ -127,5 +201,13 @@ public sealed class Win32ImportResolver : IGuestImportResolver, IGuestDataImport
         }),
     ];
 
-    public void Dispose() => Context.Dispose();
+    public void OnProcessExiting() => Context.BeginProcessExit();
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+        bool last;
+        lock (state.Gate) last = --state.Refs == 0;
+        if (last) Context.Dispose();
+    }
 }

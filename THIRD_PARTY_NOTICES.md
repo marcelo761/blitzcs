@@ -27,7 +27,7 @@ Primary sources: [Roslyn](https://github.com/dotnet/roslyn), [.NET runtime](http
 - **libsndfile**: the core library uses the GNU Lesser General Public License, version 2.1 or optionally version 3; the verified system library is 1.2.2. Copies of [LGPL 2.1](licenses/libsndfile-COPYING.txt), [LGPL 3](licenses/LGPL-3.0.txt) and its accompanying [GPL 3](licenses/GPL-3.0.txt) are provided. Copyright belongs to Erik de Castro Lopo and other libsndfile contributors. [Official licensing and redistribution guidance](https://libsndfile.github.io/libsndfile/FAQ.html).
 - **Codec dependencies**: the decoder uses system libsndfile, whose enabled codecs and transitive libraries depend on the installed build. Ogg/Vorbis and FLAC may be involved; they are not vendored here. A binary distributor must inventory the actual native dependency closure, preserve each license and comply with the LGPL obligations for its exact build. No universal codec bundle is licensed by this notice.
 
-The native libraries are dynamically loaded from the host; their binaries are not committed. Apache-2.0 on Blitz3DCS.Audio does not relicense them. FFmpeg/libvorbis was used as an external tool to create the synthetic Vorbis fixture, not incorporated as source or distributed as a binary here.
+The native libraries are dynamically loaded from the host; their binaries are not committed. Apache-2.0 on Blitz3DCS.Audio and Blitz3DCS.Windowing does not relicense them. The window/input backend independently loads SDL3; it does not incorporate SDL source or binaries. FFmpeg/libvorbis was used as an external tool to create the synthetic Vorbis fixture, not incorporated as source or distributed as a binary here.
 
 ## Blitz3D reference implementation
 

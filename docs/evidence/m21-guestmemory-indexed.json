@@ -1,0 +1,192 @@
+{
+  "host": "Microsoft Windows 10.0.19045.0 under Proton/Wine",
+  "targetOs": "windows-x64",
+  "fixture": "two linked GuestModuleSet modules; consumer has N own buffers and peer has N buffers; each buffer 4096 bytes",
+  "timing": "10,000 alternating ReadUInt32 operations per sample; one untimed 10,000-operation warm-up; 3 samples; DOTNET_TieredCompilation=0, DOTNET_TieredPGO=0",
+  "baselineRuntime": "Own-region lookaside with linear own/peer fallback",
+  "baselineRuntimeSha256": "eccc6b0de70c1ca5da45b29256563ad335a66f7d89e8cb961f0fdbb5fae4f1d1",
+  "currentRuntime": "Own-region lookaside with sorted snapshots and binary own/peer fallback",
+  "currentRuntimeSha256": "fda15d56a7db316e5edbc91e7e3d177cb8670f30492f657678f26e5b21c6bec0",
+  "rows": [
+    {
+      "heldOwnGuestBuffers": 512,
+      "heldPeerGuestBuffers": 512,
+      "workload": "own-oldest-vs-newest",
+      "iterationsPerSample": 10000,
+      "samples": 3,
+      "baselineSamplesNsPerOperation": [
+        340.67,
+        317.01,
+        316.71
+      ],
+      "baselineMedianNsPerOperation": 317.01,
+      "currentSamplesNsPerOperation": [
+        69.5,
+        70.03,
+        71.71
+      ],
+      "currentMedianNsPerOperation": 70.03,
+      "speedup": 4.53
+    },
+    {
+      "heldOwnGuestBuffers": 512,
+      "heldPeerGuestBuffers": 512,
+      "workload": "own-newest-vs-peer-newest",
+      "iterationsPerSample": 10000,
+      "samples": 3,
+      "baselineSamplesNsPerOperation": [
+        621.89,
+        599.27,
+        668.55
+      ],
+      "baselineMedianNsPerOperation": 621.89,
+      "currentSamplesNsPerOperation": [
+        70.4,
+        71.23,
+        70.59
+      ],
+      "currentMedianNsPerOperation": 70.59,
+      "speedup": 8.81
+    },
+    {
+      "heldOwnGuestBuffers": 512,
+      "heldPeerGuestBuffers": 512,
+      "workload": "peer-newest-repeat",
+      "iterationsPerSample": 10000,
+      "samples": 3,
+      "baselineSamplesNsPerOperation": [
+        1136.05,
+        1252.08,
+        1389.86
+      ],
+      "baselineMedianNsPerOperation": 1252.08,
+      "currentSamplesNsPerOperation": [
+        89.78,
+        89.09,
+        90.46
+      ],
+      "currentMedianNsPerOperation": 89.78,
+      "speedup": 13.95
+    },
+    {
+      "heldOwnGuestBuffers": 2048,
+      "heldPeerGuestBuffers": 2048,
+      "workload": "own-oldest-vs-newest",
+      "iterationsPerSample": 10000,
+      "samples": 3,
+      "baselineSamplesNsPerOperation": [
+        1571.87,
+        1323.63,
+        1331.25
+      ],
+      "baselineMedianNsPerOperation": 1331.25,
+      "currentSamplesNsPerOperation": [
+        74.93,
+        72.34,
+        72.81
+      ],
+      "currentMedianNsPerOperation": 72.81,
+      "speedup": 18.28
+    },
+    {
+      "heldOwnGuestBuffers": 2048,
+      "heldPeerGuestBuffers": 2048,
+      "workload": "own-newest-vs-peer-newest",
+      "iterationsPerSample": 10000,
+      "samples": 3,
+      "baselineSamplesNsPerOperation": [
+        3731.99,
+        3849.46,
+        3768.76
+      ],
+      "baselineMedianNsPerOperation": 3768.76,
+      "currentSamplesNsPerOperation": [
+        78.95,
+        75,
+        75.52
+      ],
+      "currentMedianNsPerOperation": 75.52,
+      "speedup": 49.9
+    },
+    {
+      "heldOwnGuestBuffers": 2048,
+      "heldPeerGuestBuffers": 2048,
+      "workload": "peer-newest-repeat",
+      "iterationsPerSample": 10000,
+      "samples": 3,
+      "baselineSamplesNsPerOperation": [
+        7746.04,
+        7528.6,
+        7761.1
+      ],
+      "baselineMedianNsPerOperation": 7746.04,
+      "currentSamplesNsPerOperation": [
+        96.74,
+        96.66,
+        96.44
+      ],
+      "currentMedianNsPerOperation": 96.66,
+      "speedup": 80.14
+    },
+    {
+      "heldOwnGuestBuffers": 5000,
+      "heldPeerGuestBuffers": 5000,
+      "workload": "own-oldest-vs-newest",
+      "iterationsPerSample": 10000,
+      "samples": 3,
+      "baselineSamplesNsPerOperation": [
+        4627.62,
+        4545.17,
+        4625.13
+      ],
+      "baselineMedianNsPerOperation": 4625.13,
+      "currentSamplesNsPerOperation": [
+        76.81,
+        77.43,
+        81.9
+      ],
+      "currentMedianNsPerOperation": 77.43,
+      "speedup": 59.73
+    },
+    {
+      "heldOwnGuestBuffers": 5000,
+      "heldPeerGuestBuffers": 5000,
+      "workload": "own-newest-vs-peer-newest",
+      "iterationsPerSample": 10000,
+      "samples": 3,
+      "baselineSamplesNsPerOperation": [
+        8867.68,
+        9141.13,
+        9008.69
+      ],
+      "baselineMedianNsPerOperation": 9008.69,
+      "currentSamplesNsPerOperation": [
+        79.76,
+        80.09,
+        79.27
+      ],
+      "currentMedianNsPerOperation": 79.76,
+      "speedup": 112.95
+    },
+    {
+      "heldOwnGuestBuffers": 5000,
+      "heldPeerGuestBuffers": 5000,
+      "workload": "peer-newest-repeat",
+      "iterationsPerSample": 10000,
+      "samples": 3,
+      "baselineSamplesNsPerOperation": [
+        18545.48,
+        18014.51,
+        17964.85
+      ],
+      "baselineMedianNsPerOperation": 18014.51,
+      "currentSamplesNsPerOperation": [
+        104.83,
+        102.42,
+        103.4
+      ],
+      "currentMedianNsPerOperation": 103.4,
+      "speedup": 174.22
+    }
+  ]
+}

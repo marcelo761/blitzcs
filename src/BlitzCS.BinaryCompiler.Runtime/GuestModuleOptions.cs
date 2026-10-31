@@ -20,6 +20,34 @@ public sealed class GuestModuleOptions
     /// </summary>
     public bool AllowUnboundImports { get; init; }
 
+    /// <summary>
+    /// Translate code the guest generates at run time when control reaches it (docs/binary-dynamic-code.md): a dispatch miss into memory the guest made executable
+    /// is translated from the bytes there, which are then write protected. Default true; false keeps the named "untranslated code" trap. Decided by the module
+    /// the thread entered. Only the windows-x64 runtime can do it (the write guard is a vectored exception handler); elsewhere the trap names that.
+    /// </summary>
+    public bool DynamicCode { get; init; } = true;
+
     /// <summary>Run DllMain(DLL_PROCESS_ATTACH/DETACH) for DLLs with a non-zero entry point.</summary>
     public bool RunEntryPoint { get; init; } = true;
+
+    /// <summary>
+    /// What the guest's PEB describes about the process (ProcessParameters, OS version fields). Null: an anonymous process with
+    /// empty image path / command line / environment and Windows XP SP3 (5.1.2600) version fields. See docs/binary-teb-contract.md.
+    /// </summary>
+    public GuestProcessInfo? Process { get; init; }
+}
+
+/// <summary>
+/// Process identity a host wants the guest PEB to carry: the 32-bit RTL_USER_PROCESS_PARAMETERS strings and the OS version fields of the PEB.
+/// The Win32 component builds one from its options (<c>Win32ProcessInfo.From</c>) so the PEB, GetCommandLineW and GetVersionEx agree.
+/// </summary>
+public sealed record GuestProcessInfo(
+    string ImagePath,
+    string CommandLine,
+    IReadOnlyList<string> Environment,
+    uint OsMajor = 5, uint OsMinor = 1, ushort OsBuild = 2600, ushort OsServicePack = 0x0300,
+    string CurrentDirectory = "C:\\", uint StandardInput = 0, uint StandardOutput = 0, uint StandardError = 0)
+{
+    /// <summary>The OS version fields only (the strings stay empty).</summary>
+    public static GuestProcessInfo Default { get; } = new("", "", []);
 }

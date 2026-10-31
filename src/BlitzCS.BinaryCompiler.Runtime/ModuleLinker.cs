@@ -61,11 +61,18 @@ internal static class ModuleBridge
 {
     internal static GuestImport Create(GuestModule target, TranslatedExport export, ExportSignature signature, int window, BridgeCounter counter)
     {
+        var (handler, pop) = CreateHandler(target, export, signature, window, counter);
+        return GuestImport.Create(handler, pop);
+    }
+
+    /// <summary>The forwarding handler and the bytes the guest stub must pop: shared by static module imports and by the stubs GetProcAddress hands out.</summary>
+    internal static (GuestImportHandler Handler, uint Pop) CreateHandler(GuestModule target, TranslatedExport export, ExportSignature signature, int window, BridgeCounter counter)
+    {
         var host = target.HostImageBase + (nint)export.HostOffset;
         var stdcall = signature.Convention == GuestCallingConvention.Stdcall;
         var words = stdcall ? signature.ArgCount!.Value : window;
         var pop = stdcall ? checked((uint)(4 * words)) : 0u;
-        return GuestImport.Create(call =>
+        GuestImportHandler handler = call =>
         {
             Interlocked.Increment(ref counter.Calls);
             Span<uint> args = stackalloc uint[words];
@@ -80,7 +87,8 @@ internal static class ModuleBridge
                 call.SetReturnSt0(raw);
             }
             return result.Eax;
-        }, pop);
+        };
+        return (handler, pop);
     }
 
     private static int Capture(GuestCall call, Span<uint> destination, bool exact)

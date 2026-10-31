@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Lists every BC_UNTRANSLATED_TARGET diagnostic of PE images and classifies each target (read-only; nothing is executed). Not part of BlitzCS.slnx. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>UntranslatedTargets</AssemblyName>
+    <RootNamespace>UntranslatedTargets</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/BlitzCS.BinaryCompiler/BlitzCS.BinaryCompiler.csproj" />
+  </ItemGroup>
+</Project>

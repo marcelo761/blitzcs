@@ -25,6 +25,14 @@ public sealed class ApplicationPackageTests
         var executable = Path.Combine(package, "hello.exe");
         Assert.True(File.Exists(executable), $"Expected package executable at {executable}");
         AssertPeX64Executable(executable, 3);
+        var crossgenPacks = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages",
+            "microsoft.netcore.app.crossgen2.linux-x64");
+        if (OperatingSystem.IsLinux() && Directory.Exists(crossgenPacks))
+        {
+            using var game = new System.Reflection.PortableExecutable.PEReader(File.OpenRead(Path.Combine(package, "hello.dll")));
+            Assert.NotNull(game.PEHeaders.CorHeader);
+            Assert.NotEqual(0, game.PEHeaders.CorHeader!.ManagedNativeHeaderDirectory.Size);
+        }
         Assert.True(File.Exists(Path.Combine(package, "coreclr.dll")), "Self-contained package must include coreclr.dll.");
         Assert.True(File.Exists(Path.Combine(package, "hostfxr.dll")), "Self-contained package must include hostfxr.dll.");
 
@@ -243,6 +251,20 @@ public sealed class ApplicationPackageTests
         }
 
         public void Dispose() => Directory.Delete(WorkingDirectory, recursive: true);
+    }
+
+    [Fact]
+    public void PublisherPropertyGroupIncludesPerformanceAndRuntimeFlags()
+    {
+        var group = ApplicationPublisher.CreatePropertyGroup("game", false);
+        Assert.Equal("true", group.Element("PublishReadyToRun")?.Value);
+        Assert.Equal("true", group.Element("TieredPGO")?.Value);
+        Assert.Equal("true", group.Element("InvariantGlobalization")?.Value);
+        Assert.Equal("true", group.Element("ConcurrentGarbageCollection")?.Value);
+        Assert.Equal("false", group.Element("ServerGarbageCollection")?.Value);
+        Assert.Equal("true", group.Element("SelfContained")?.Value);
+        Assert.Equal("false", group.Element("PublishTrimmed")?.Value);
+        Assert.Equal("false", group.Element("PublishSingleFile")?.Value);
     }
 
     private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);

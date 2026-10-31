@@ -69,21 +69,31 @@ public sealed class TargetOsTests
     public void Linux_sysv_output_is_pinned_byte_for_byte(OptimizationProfile profile)
     {
         // Pinned from the translator before the Win64 ABI existed: the sysv runtime routines and guest code must never change by accident.
+        // Re-pinned once, deliberately, for cross-module dispatch (format 5): the only difference to the previous pin is the miss routine at host offset 0 (it now tries the module registry before the kind 1 trap) and the artifact has no other change.
+        // Re-pinned again, deliberately, for guest SEH (format 6): every import stub records EBX/EBP/ESI/EDI in the call context, the extended-return tail gained the register-image
+        // redirect, and two runtime stubs follow the imports (ImportStubLayout); the guest code is unchanged.
+        // Re-pinned again, deliberately, for code generated at run time (compiler 0.14.0, docs/binary-dynamic-code.md): the miss routine gained the slow path that calls the
+        // registry's miss handler before the kind 1 trap; nothing else changed.
+        // Re-pinned again for compiler 0.14.1: the miss routine checks and updates a per-artifact cached registry record before/after the full scan.
+        // Re-pinned for compiler 0.14.2: registry fallback now scans newest-first so MRU misses on late modules do not walk earlier records.
         var art = For("linux-sysv", profile).Artifact;
         var hash = Convert.ToHexString(SHA256.HashData(art.HostImage));
         Assert.Equal(profile == OptimizationProfile.Debug ? PinnedDebug : PinnedRelease, hash);
     }
 
-    private const string PinnedDebug = "8590EF11744340294A0AA3C2EA2623C5EACE0DEDCC48EE108A5D02CCD7468BD1", PinnedRelease = "10FC2ADBF32D2B8C1714E2379E5A580A96E3EFDE2230F24F757BA8970475E432";
+    private const string PinnedDebug = "2AEF4B5F90E4220A2C9ED454C80C5034AB21346F59CD134C2348B227E9991FA6", PinnedRelease = "221DD308B403F31FA333B3B2131A8042312843903D86FB3BE2C71F6CB11808B6";
 
 
-    private const string PinnedWinDebug = "0BCF56C738E1A25AF93984AE268A8A316D85A323F7C3E9B8FD0F7CF466C239D9", PinnedWinRelease = "A90F0706522AEA6A258B729DEAAFC18E3F5CE455A7A043961545C91FDA19634C";
+    private const string PinnedWinDebug = "A0B6807BD9E19551E6BD3111B03924E41106B085A4952A695010DBE47B5C64B4", PinnedWinRelease = "CA5B2F8ADE6A4D3410971814A3427BEDBD1923E7691F5E14FD794FC3C3EE1520";
 
     [Theory]
     [InlineData(OptimizationProfile.Debug), InlineData(OptimizationProfile.Release)]
     public void Windows_x64_output_without_a_stub_pool_is_pinned_byte_for_byte(OptimizationProfile profile)
     {
         // Pinned from the translator at commit 49eaa1b, before the dynamic stub pool existed (DynamicStubs = 0 must change nothing: same code, same layout); the linux-sysv pins above are the same check.
+        // Re-pinned deliberately for guest SEH (format 6) and for the miss-handler slow path (compiler 0.14.0), the same changes as the linux-sysv pins.
+        // Re-pinned again for compiler 0.14.1: the miss routine checks and updates a per-artifact cached registry record before/after the full scan.
+        // Re-pinned for compiler 0.14.2: the registry fallback scans newest-first after an MRU miss.
         var hash = Convert.ToHexString(SHA256.HashData(For("windows-x64", profile).Artifact.HostImage));
         Assert.Equal(profile == OptimizationProfile.Debug ? PinnedWinDebug : PinnedWinRelease, hash);
     }
@@ -104,12 +114,14 @@ public sealed class TargetOsTests
         Assert.Equal(plain.ExitGuestRva, pooled.ExitGuestRva);
         uint Entry(TranslationArtifact a, uint rva) => BitConverter.ToUInt32(a.HostImage, (int)(a.DispatchTableOffset + 4 * rva));
         var first = pooled.ImportStubBaseRva;
-        for (var k = 0u; k < 1 + 5; k++) Assert.NotEqual(0u, Entry(pooled, first + 16 * k));    // 1 real import + 5 pool stubs
-        Assert.Equal(0u, Entry(pooled, first + 16 * 6));                                          // beyond the pool: still the trap
-        Assert.Equal(0u, Entry(plain, first + 16 * 1));
-        var distinct = Enumerable.Range(0, 6).Select(k => Entry(pooled, first + 16u * (uint)k)).Distinct().Count();
-        Assert.Equal(6, distinct);                                                                // each stub has its own body (own thunk slot)
-        Assert.True(pooled.DispatchTableOffset >= pooled.ImportThunkTableOffset + 8u * 6);       // the thunk table has a slot per stub
+        const uint R = ImportStubLayout.RuntimeStubCount;                                         // runtime stubs (guest SEH) always follow the pool
+        for (var k = 0u; k < 1 + 5 + R; k++) Assert.NotEqual(0u, Entry(pooled, first + 16 * k));  // 1 real import + 5 pool stubs + the runtime stubs
+        Assert.Equal(0u, Entry(pooled, first + 16 * (6 + R)));                                    // beyond them: still the trap
+        Assert.NotEqual(0u, Entry(plain, first + 16 * 1));
+        Assert.Equal(0u, Entry(plain, first + 16 * (1 + R)));
+        var distinct = Enumerable.Range(0, 6 + (int)R).Select(k => Entry(pooled, first + 16u * (uint)k)).Distinct().Count();
+        Assert.Equal(6 + (int)R, distinct);                                                       // each stub has its own body (own thunk slot)
+        Assert.True(pooled.DispatchTableOffset >= pooled.ImportThunkTableOffset + 8u * (6 + R));  // the thunk table has a slot per stub
         // the guest code itself is unchanged: same translated bytes for the export, relative to the (moved) layout
         var f = pooled.Exports.Single(e => e.Name == "_f").HostOffset - plain.Exports.Single(e => e.Name == "_f").HostOffset;
         Assert.True(f > 0);                                                                       // the pool bodies precede the guest code

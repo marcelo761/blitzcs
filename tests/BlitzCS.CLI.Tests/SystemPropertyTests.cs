@@ -7,6 +7,23 @@ namespace BlitzCS.CLI.Tests;
 public sealed class SystemPropertyTests
 {
     [Fact]
+    public void MilliSecs_uses_system_uptime_and_the_Basic_call_is_statically_bound()
+    {
+        var before = Environment.TickCount;
+        var value = LegacySystem.MilliSecs();
+        var after = Environment.TickCount;
+        // Windows timeGetTime and the system tick clock can have different timer
+        // resolutions. Compare modulo 32 bits, including signed wraparound.
+        var offset = unchecked((uint)(value - before) + 64u);
+        var interval = unchecked((uint)(after - before));
+        Assert.True(offset <= interval + 128u, "MilliSecs must use system uptime, not time since the first BASIC call.");
+        var registry = new ExternalFunctionRegistry([new ExternalFunction("MilliSecs", typeof(LegacySystem).GetMethod("MilliSecs")!)]);
+        var code = BasicCompiler.Compile("Local started = MilliSecs()\nPrint MilliSecs() - started", "clock.bb", registry);
+        Assert.Contains("@LegacySystem.@MilliSecs", code);
+        Assert.DoesNotContain(".Invoke(", code);
+    }
+
+    [Fact]
     public void Real_host_directories_are_case_insensitive_and_keep_legacy_trailing_separator()
     {
         var temp = LegacySystem.SystemProperty("tempdir");

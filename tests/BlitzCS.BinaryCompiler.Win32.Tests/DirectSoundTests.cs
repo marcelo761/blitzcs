@@ -15,7 +15,7 @@ internal sealed class DsRig : IDisposable
     public GuestComHost Com => GuestComHost.For(Rig.Resolver.Context, Rig.Module);
 
     public DsRig(DirectSoundBackendKind kind = DirectSoundBackendKind.Default, Action<string>? debug = null) =>
-        Rig = new ComRig(256, new Win32Options { DirectSound = kind, DebugOutput = debug ?? (Environment.GetEnvironmentVariable("DS_TRACE") == "1" ? (m => { Console.Error.WriteLine("DBG " + m); Console.Error.Flush(); }) : null), CallTrace = Environment.GetEnvironmentVariable("DS_TRACE") == "1" ? (m => { Console.Error.WriteLine(m); Console.Error.Flush(); }) : null });
+        Rig = new ComRig(256, new Win32Options { DirectSound = kind, HostWindowing = HostWindowingKind.None /* the sandbox desktop HWND; with the window bridge HWNDs are host windows */, DebugOutput = debug ?? (Environment.GetEnvironmentVariable("DS_TRACE") == "1" ? (m => { Console.Error.WriteLine("DBG " + m); Console.Error.Flush(); }) : null), CallTrace = Environment.GetEnvironmentVariable("DS_TRACE") == "1" ? (m => { Console.Error.WriteLine(m); Console.Error.Flush(); }) : null });
 
     public static uint D(uint offset) => ComRig.Data(offset);
     public uint Fn(string name) => Rig.GetProc("dsound.dll", name);

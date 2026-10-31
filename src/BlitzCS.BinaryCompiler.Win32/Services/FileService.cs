@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 
 namespace BlitzCS.BinaryCompiler.Win32;
@@ -25,10 +26,25 @@ internal sealed class FindHandle(List<FileSystemInfo?> entries, List<string> nam
 
 internal sealed class FileState : IDisposable
 {
+    internal sealed class DirectoryListing
+    {
+        public readonly string[] Names;
+        public readonly Dictionary<string, string> ByName;
+
+        public DirectoryListing(string[] names)
+        {
+            Names = names;
+            ByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var n in names)
+                ByName.TryAdd(n, n);
+        }
+    }
+
     private readonly Win32Context ctx;
     private readonly uint[] stdSlots = [3, 7, 11];
     private Stream?[] stdStreams = new Stream?[3];
     private readonly object gate = new();
+    private readonly Dictionary<string, DirectoryListing> dirListings = new(StringComparer.Ordinal);
 
     public FileState(Win32Context ctx)
     {
@@ -57,6 +73,36 @@ internal sealed class FileState : IDisposable
             };
     }
 
+    internal DirectoryListing GetDirectoryListing(string dir)
+    {
+        lock (gate)
+        {
+            if (dirListings.TryGetValue(dir, out var listing)) return listing;
+            string[] entries;
+            try
+            {
+                entries = Directory.EnumerateFileSystemEntries(dir)
+                    .Select(Path.GetFileName)
+                    .Where(n => n is not null)
+                    .Select(n => n!)
+                    .ToArray();
+            }
+            catch
+            {
+                entries = [];
+            }
+            listing = new DirectoryListing(entries);
+            dirListings[dir] = listing;
+            return listing;
+        }
+    }
+
+    public void InvalidatePathCache()
+    {
+        lock (gate)
+            dirListings.Clear();
+    }
+
     public void Dispose() { }
 
     // ---- path translation ----
@@ -70,6 +116,7 @@ internal sealed class FileState : IDisposable
         if (windows.StartsWith("\\\\") || windows.StartsWith("//")) return (null, Win32Error.BadPathname); // UNC and \\.\ device paths
         var path = windows;
         if (path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':') path = path[2..];
+        else if (path[0] is not ('\\' or '/')) path = ctx.Process.CurrentDirectory.TrimEnd('\\') + "\\" + path; // relative: resolved against the process's current directory
         var parts = new List<string>();
         foreach (var part in path.Split('\\', '/'))
         {
@@ -84,11 +131,11 @@ internal sealed class FileState : IDisposable
             var next = Path.Combine(current, parts[i]);
             if (!Exists(next) && ctx.Options.CaseInsensitiveFileNames && Directory.Exists(current))
             {
-                var match = Directory.EnumerateFileSystemEntries(current).Select(Path.GetFileName).FirstOrDefault(n => string.Equals(n, parts[i], StringComparison.OrdinalIgnoreCase));
-                if (match is not null) next = Path.Combine(current, match);
+                var listing = GetDirectoryListing(current);
+                if (listing.ByName.TryGetValue(parts[i], out var match)) next = Path.Combine(current, match);
             }
             else if (!ctx.Options.CaseInsensitiveFileNames && HostIsCaseInsensitive && Exists(next) && Directory.Exists(current)
-                     && !Directory.EnumerateFileSystemEntries(current).Any(e => string.Equals(Path.GetFileName(e), parts[i], StringComparison.Ordinal)))
+                     && !GetDirectoryListing(current).Names.Any(e => string.Equals(e, parts[i], StringComparison.Ordinal)))
             {
                 // Exact-case lookups were requested but the host file system folds case (Windows, macOS, Wine): Exists() would accept "DIR" for "dir".
                 // The name only matches in a different case, which a case-sensitive file system would report as missing.
@@ -121,9 +168,11 @@ public sealed class FileService : Win32Service
     public override string Name => "Kernel32.File";
     private const uint InvalidHandle = 0xFFFFFFFF;
 
-    private static uint Open(Win32Call c)
+    private static uint Open(Win32Call c) => OpenNamed(c, c.Mem.ReadAnsiString(c[0], 1024));
+
+    /// <summary>CreateFile with the file name already decoded (shared by CreateFileA and CreateFileW).</summary>
+    internal static uint OpenNamed(Win32Call c, string name)
     {
-        var name = c.Mem.ReadAnsiString(c[0], 1024);
         uint access = c[1], disposition = c[4], flags = c[5];
         if ((flags & (0x40000000 | 0x04000000)) != 0) return c.Ctx.Fail(Win32Error.NotSupported, InvalidHandle);
         if (disposition is < 1 or > 5) return c.Ctx.Fail(Win32Error.InvalidParameter, InvalidHandle);
@@ -153,6 +202,7 @@ public sealed class FileService : Win32Service
             var stream = new FileStream(host, mode, hostAccess, FileShare.ReadWrite | FileShare.Delete);
             var handle = c.Ctx.NewHandle(new FileHandle(stream, wantRead, wantWrite, host));
             c.Ctx.LastError = existed && disposition is 2 or 4 ? Win32Error.AlreadyExists : Win32Error.Success;
+            if (disposition is 1 or 2 or 4) c.Ctx.Files.InvalidatePathCache();
             return handle;
         }
         catch (UnauthorizedAccessException) { return c.Ctx.Fail(Win32Error.AccessDenied, InvalidHandle); }
@@ -170,19 +220,22 @@ public sealed class FileService : Win32Service
         if (c.Ctx.GetHandle<FileHandle>(handle) is { } f) { if (!f.CanRead) return c.Ctx.Fail(Win32Error.AccessDenied); stream = f.Stream; }
         else if (c.Ctx.GetHandle<StdStream>(handle) is { Slot: 0 } std) stream = c.Ctx.Files.HostStream(std);
         else return c.Ctx.Fail(c.Ctx.GetHandle<StdStream>(handle) is null ? Win32Error.InvalidHandle : Win32Error.AccessDenied);
-        var chunk = new byte[(int)Math.Min(count, 65536u)];
+        var chunkSize = (int)Math.Min(count, 65536u);
+        if (chunkSize == 0) { c.Mem.WriteUInt32(readPtr, 0); return 1; }
+        var chunk = ArrayPool<byte>.Shared.Rent(chunkSize);
         uint total = 0;
         try
         {
             while (total < count)
             {
-                var n = stream.Read(chunk, 0, (int)Math.Min(chunk.Length, count - total));
+                var n = stream.Read(chunk, 0, (int)Math.Min(chunkSize, count - total));
                 if (n == 0) break;
                 c.Mem.Write(buffer + total, chunk.AsSpan(0, n));
                 total += (uint)n;
             }
         }
         catch (IOException) { c.Mem.WriteUInt32(readPtr, total); return c.Ctx.Fail(Win32Error.InvalidFunction); }
+        finally { ArrayPool<byte>.Shared.Return(chunk); }
         c.Mem.WriteUInt32(readPtr, total);
         return 1;
     }
@@ -196,13 +249,15 @@ public sealed class FileService : Win32Service
         if (c.Ctx.GetHandle<FileHandle>(handle) is { } f) { if (!f.CanWrite) return c.Ctx.Fail(Win32Error.AccessDenied); stream = f.Stream; }
         else if (c.Ctx.GetHandle<StdStream>(handle) is { Slot: > 0 } std) { stream = c.Ctx.Files.HostStream(std); flush = true; }
         else return c.Ctx.Fail(c.Ctx.GetHandle<StdStream>(handle) is null ? Win32Error.InvalidHandle : Win32Error.AccessDenied);
-        var chunk = new byte[(int)Math.Min(count, 65536u)];
+        var chunkSize = (int)Math.Min(count, 65536u);
+        if (chunkSize == 0) { c.Mem.WriteUInt32(writtenPtr, 0); return 1; }
+        var chunk = ArrayPool<byte>.Shared.Rent(chunkSize);
         uint total = 0;
         try
         {
             while (total < count)
             {
-                var n = (int)Math.Min(chunk.Length, count - total);
+                var n = (int)Math.Min(chunkSize, count - total);
                 c.Mem.Read(buffer + total, chunk.AsSpan(0, n));
                 stream.Write(chunk, 0, n);
                 total += (uint)n;
@@ -210,16 +265,19 @@ public sealed class FileService : Win32Service
             if (flush) stream.Flush();
         }
         catch (IOException) { c.Mem.WriteUInt32(writtenPtr, total); return c.Ctx.Fail(Win32Error.InvalidFunction); }
+        finally { ArrayPool<byte>.Shared.Return(chunk); }
         c.Mem.WriteUInt32(writtenPtr, total);
         return 1;
     }
 
     private static string Wildcard(string pattern) => "^" + System.Text.RegularExpressions.Regex.Escape(pattern == "*.*" ? "*" : pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
 
-    private static uint FindFirst(Win32Call c)
+    private static uint FindFirst(Win32Call c) => FindFirstNamed(c, c.Mem.ReadAnsiString(c[0], 1024), c[1], false);
+
+    /// <summary>FindFirstFile with the pattern decoded; <paramref name="wide"/> selects WIN32_FIND_DATAW (592 bytes) over WIN32_FIND_DATAA (320 bytes).</summary>
+    internal static uint FindFirstNamed(Win32Call c, string name, uint dataPtr, bool wide)
     {
-        var name = c.Mem.ReadAnsiString(c[0], 1024);
-        if (c[1] == 0) return c.Ctx.Fail(Win32Error.InvalidParameter, InvalidHandle);
+        if (dataPtr == 0) return c.Ctx.Fail(Win32Error.InvalidParameter, InvalidHandle);
         var cut = name.LastIndexOfAny(['\\', '/']);
         var dirPart = cut < 0 ? "" : name[..(cut + 1)];
         var pattern = cut < 0 ? name : name[(cut + 1)..];
@@ -235,14 +293,14 @@ public sealed class FileService : Win32Service
         foreach (var i in infos) { entries.Add(i); names.Add(i.Name); }
         if (entries.Count == 0) return c.Ctx.Fail(Win32Error.FileNotFound, InvalidHandle);
         var find = new FindHandle(entries, names);
-        FillFindData(c, find, c[1]);
+        FillFindData(c, find, dataPtr, wide);
         return c.Ctx.NewHandle(find);
     }
 
-    private static void FillFindData(Win32Call c, FindHandle find, uint data)
+    internal static void FillFindData(Win32Call c, FindHandle find, uint data, bool wide)
     {
         var info = find.Entries[find.Next]; var name = find.Names[find.Next++];
-        var d = new byte[320];
+        var d = new byte[wide ? 592 : 320];
         var isDir = info is null || info is DirectoryInfo;
         BitConverter.TryWriteBytes(d.AsSpan(0), isDir ? 0x10u : 0x80u);
         var file = info as FileInfo;
@@ -250,7 +308,7 @@ public sealed class FileService : Win32Service
         BitConverter.TryWriteBytes(d.AsSpan(4), created); BitConverter.TryWriteBytes(d.AsSpan(12), access); BitConverter.TryWriteBytes(d.AsSpan(20), write);
         var length = file?.Length ?? 0;
         BitConverter.TryWriteBytes(d.AsSpan(28), (uint)(length >> 32)); BitConverter.TryWriteBytes(d.AsSpan(32), (uint)length);
-        var bytes = Nls.EncodeChars(c.Ctx.Options.AnsiCodePage, name, (byte)'?', false, out _, out _);
+        var bytes = wide ? Nls.ToUtf16(name.Length > 259 ? name[..259] : name) : Nls.EncodeChars(c.Ctx.Options.AnsiCodePage, name, (byte)'?', false, out _, out _);
         bytes.AsSpan(0, Math.Min(bytes.Length, 259)).CopyTo(d.AsSpan(44));
         c.Mem.Write(data, d);
     }
@@ -311,20 +369,12 @@ public sealed class FileService : Win32Service
             f.Stream.SetLength(f.Stream.Position);
             return 1;
         });
-        Std(K, "GetFileAttributesA", 1, c =>
-        {
-            var (host, error) = c.Ctx.Files.Translate(c.Mem.ReadAnsiString(c[0], 1024));
-            if (host is null) return c.Ctx.Fail(error, InvalidHandle);
-            if (Directory.Exists(host)) return 0x10;
-            if (File.Exists(host)) return 0x80;
-            return c.Ctx.Fail(Directory.Exists(Path.GetDirectoryName(host) ?? "") ? Win32Error.FileNotFound : Win32Error.PathNotFound, InvalidHandle);
-        });
         Std(K, "FindFirstFileA", 2, FindFirst);
         Std(K, "FindNextFileA", 2, c =>
         {
             if (c.Ctx.GetHandle<FindHandle>(c[0]) is not { } find) return c.Ctx.Fail(Win32Error.InvalidHandle);
             if (find.Next >= find.Entries.Count) return c.Ctx.Fail(Win32Error.NoMoreFiles);
-            FillFindData(c, find, c[1]);
+            FillFindData(c, find, c[1], false);
             return 1;
         });
         Std(K, "FindClose", 1, c => c.Ctx.GetHandle<FindHandle>(c[0]) is not null && c.Ctx.RemoveHandle(c[0], out _) ? 1u : c.Ctx.Fail(Win32Error.InvalidHandle));
