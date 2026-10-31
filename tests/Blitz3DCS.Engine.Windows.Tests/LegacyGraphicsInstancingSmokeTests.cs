@@ -207,6 +207,14 @@ public sealed class LegacyGraphicsInstancingSmokeTests
             LitMeshes(entities, camera, altTexture, report, allHashes);
             Clear(entities);
             BlendedRun(entities, camera, report, allHashes);
+            Clear(entities);
+            // Real-shaped particle passes (separate CreateSprite entities cycling through three textures at distinct
+            // depths, so the distance sort interleaves them). Their lines are reported but kept out of hash= so the
+            // hash line of the earlier passes is unchanged.
+            var extraTextures = new[] { white, altTexture, MakeTexture(backBuffer) };
+            InterleavedSprites(entities, extraTextures, 3, "interleavedAdditive", report);
+            Clear(entities);
+            InterleavedSprites(entities, extraTextures, 1, "interleavedAlpha", report);
 
             LastReport = $"\nhash={Sha256Hex(Encoding.ASCII.GetBytes(allHashes.ToString()))}\n{report}";
         }
@@ -297,6 +305,20 @@ public sealed class LegacyGraphicsInstancingSmokeTests
         var pixels = Render("sprites", report, hashes);
         AssertCornersBlack(pixels, "sprites");
         Assert.True(CountLit(pixels) > 400, "The 50 additive sprites must cover a visible area.");
+    }
+
+    private static void InterleavedSprites(List<int> entities, int[] textures, int blend, string name, StringBuilder report)
+    {
+        for (var i = 0; i < 36; i++)
+        {
+            var colour = Palette[i % Palette.Length];
+            var sprite = NewSprite(entities, textures[i % textures.Length], -2.5f + (i % 6) * 1f, -1.5f + (i / 6) * .6f,
+                -3f + i * .17f, 1, .7f + (i % 5) * .1f, i * 17f, colour.R, colour.G, colour.B, blend == 1 ? .45f : .6f);
+            LegacyGraphics.EntityBlend(sprite, blend);
+        }
+        var pixels = Render(name, report, new StringBuilder());
+        AssertCornersBlack(pixels, name);
+        Assert.True(CountLit(pixels) > 400, "The interleaved sprites must cover a visible area.");
     }
 
     private static void AdditiveCounts(List<int> entities, int texture)
