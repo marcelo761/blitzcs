@@ -124,6 +124,7 @@ public sealed partial class SceneGraph
         var state = GetCollisionState(entity);
         state.Triangles = triangles.ToArray();
         state.TriangleCollider = null;
+        state.BoundValid = false;
         state.TriangleCandidates.Clear();
     }
 
@@ -575,6 +576,17 @@ public sealed partial class SceneGraph
         var found = false;
         var nearestTime = 1f;
         var statFindStart = EngineStats.Now();
+        // Conservative swept-volume bounds (scaled space) of the whole start->end segment, padded by the source radius
+        // and a safety margin; a target whose bound is disjoint from it cannot produce a hit.
+        _broadOn = !_legacyCollisionPath && !EngineOptimizations.Disabled;
+        if (_broadOn)
+        {
+            var end = Add(lineStart, lineDirection);
+            var pad = sourceRadius + BroadMargin(lineStart, end);
+            _sweepMin = new(MathF.Min(lineStart.X, end.X) - pad, MathF.Min(lineStart.Y, end.Y) - pad, MathF.Min(lineStart.Z, end.Z) - pad);
+            _sweepMax = new(MathF.Max(lineStart.X, end.X) + pad, MathF.Max(lineStart.Y, end.Y) + pad, MathF.Max(lineStart.Z, end.Z) + pad);
+            _broadOn = float.IsFinite(pad) && float.IsFinite(_sweepMin.X + _sweepMin.Y + _sweepMin.Z + _sweepMax.X + _sweepMax.Y + _sweepMax.Z);
+        }
         ReadOnlySpan<CollisionRule> rules = _legacyCollisionPath || EngineOptimizations.Disabled
             ? CollectionsMarshal.AsSpan(_collisionRules)
             : _rulesBySource[sourceType];
@@ -609,6 +621,11 @@ public sealed partial class SceneGraph
     {
         hit = default;
         var targetTransform = GetWorldTransform(target);
+        if (_broadOn && BroadReject(rule.Method, targetTransform, targetState, yScale))
+        {
+            EngineStats.Add(EngineStats.ColPairsRejBound);
+            return false;
+        }
         if (rule.Method == CollisionMethodSphere)
         {
             EngineStats.Add(EngineStats.ColSphereTests);
@@ -694,6 +711,63 @@ public sealed partial class SceneGraph
             return true;
         }
 
+        return false;
+    }
+
+    private bool _broadOn;
+    private SceneVector3 _sweepMin, _sweepMax;
+
+    private static float BroadMargin(SceneVector3 a, SceneVector3 b) =>
+        0.01f + 1e-4f * MathF.Max(MathF.Max(MathF.Abs(a.X), MathF.Abs(a.Y)), MathF.Max(MathF.Abs(a.Z),
+            MathF.Max(MathF.Abs(b.X), MathF.Max(MathF.Abs(b.Y), MathF.Abs(b.Z)))));
+
+    private bool Disjoint(float minX, float minY, float minZ, float maxX, float maxY, float maxZ)
+    {
+        // NaN compares false everywhere, so a non-finite bound is never rejected.
+        return maxX < _sweepMin.X || minX > _sweepMax.X || maxY < _sweepMin.Y || minY > _sweepMax.Y
+            || maxZ < _sweepMin.Z || minZ > _sweepMax.Z;
+    }
+
+    /// <summary>True when the target's volume (scaled space) provably cannot be hit by the current sweep.</summary>
+    private bool BroadReject(int method, SceneTransform world, CollisionEntityState state, float yScale)
+    {
+        var pos = world.Position;
+        var cy = pos.Y * yScale;
+        if (method == CollisionMethodSphere)
+        {
+            var e = state.Radii.X + BroadMargin(pos, pos);
+            return Disjoint(pos.X - e, cy - e, pos.Z - e, pos.X + e, cy + e, pos.Z + e);
+        }
+        if (method == CollisionMethodBox)
+        {
+            // The narrow phase uses unit-length basis columns, so |M * corner| <= |x| + |y| + |z| of the corner.
+            var min = state.BoxMinimum; var max = state.BoxMaximum;
+            var e = MathF.Max(MathF.Abs(min.X), MathF.Abs(max.X)) + MathF.Max(MathF.Abs(min.Y), MathF.Abs(max.Y))
+                + MathF.Max(MathF.Abs(min.Z), MathF.Abs(max.Z)) + BroadMargin(pos, pos);
+            return Disjoint(pos.X - e, cy - e, pos.Z - e, pos.X + e, cy + e, pos.Z + e);
+        }
+        if (method == CollisionMethodPolygon && !state.InfinitePlane)
+        {
+            if (!(state.BoundValid && state.BoundTransform == world))
+            {
+                var collider = state.TriangleCollider ??= new SceneTriangleCollider(state.Triangles);
+                if (!collider.TryGetLocalBounds(out var local)) return false;
+                var mn = new SceneVector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+                var mx = new SceneVector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+                for (var corner = 0; corner < 8; corner++)
+                {
+                    var p = world.TransformPoint(new((corner & 1) == 0 ? local.Minimum.X : local.Maximum.X,
+                        (corner & 2) == 0 ? local.Minimum.Y : local.Maximum.Y, (corner & 4) == 0 ? local.Minimum.Z : local.Maximum.Z));
+                    mn = new(MathF.Min(mn.X, p.X), MathF.Min(mn.Y, p.Y), MathF.Min(mn.Z, p.Z));
+                    mx = new(MathF.Max(mx.X, p.X), MathF.Max(mx.Y, p.Y), MathF.Max(mx.Z, p.Z));
+                }
+                state.BoundMin = mn; state.BoundMax = mx; state.BoundTransform = world; state.BoundValid = true;
+            }
+            var m = BroadMargin(state.BoundMin, state.BoundMax);
+            var y0 = state.BoundMin.Y * yScale; var y1 = state.BoundMax.Y * yScale;
+            return Disjoint(state.BoundMin.X - m, MathF.Min(y0, y1) - m, state.BoundMin.Z - m,
+                state.BoundMax.X + m, MathF.Max(y0, y1) + m, state.BoundMax.Z + m);
+        }
         return false;
     }
 
@@ -874,6 +948,9 @@ public sealed partial class SceneGraph
         public bool InfinitePlane { get; set; }
         public SceneCollisionTriangle[] Triangles { get; set; } = [];
         public SceneTriangleCollider? TriangleCollider { get; set; }
+        public bool BoundValid;
+        public SceneTransform BoundTransform;
+        public SceneVector3 BoundMin, BoundMax;
         public List<int> TriangleCandidates { get; } = [];
         public SceneTransform PreviousTransform { get; set; }
         public bool HasPreviousTransform { get; set; }

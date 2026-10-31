@@ -202,3 +202,110 @@ public sealed class SceneUpdateWorldDifferentialTests
         Assert.True(totalHits > 100, "scenario must actually produce collisions");
     }
 }
+
+/// <summary>Broadphase and no-op-setter differential: spread, scaled and rotated scenes against the legacy path.</summary>
+public sealed class SceneBroadphaseDifferentialTests
+{
+    private static SceneCollisionTriangle[] Slab(float size)
+    {
+        var t = new List<SceneCollisionTriangle>();
+        for (var i = 0; i < 8; i++)
+        {
+            var x = i * size / 4;
+            t.Add(new(new(x, 0, 0), new(x, 0, size), new(x + size / 4, 0, size), t.Count));
+            t.Add(new(new(x, 0, 0), new(x + size / 4, 0, size), new(x + size / 4, 0, 0), t.Count));
+            t.Add(new(new(x, 0, 0), new(x, 3, 0), new(x + size / 4, 3, 0), t.Count));
+        }
+        return t.ToArray();
+    }
+
+    private static int Bits(float v) => BitConverter.SingleToInt32Bits(v);
+
+    [Theory]
+    [InlineData(11)] [InlineData(12)] [InlineData(13)] [InlineData(14)] [InlineData(15)] [InlineData(16)]
+    [InlineData(17)] [InlineData(18)] [InlineData(19)] [InlineData(20)] [InlineData(21)] [InlineData(22)]
+    public void Spread_scaled_rotated_scenes_match_legacy(int seed)
+    {
+        var rng = new Random(seed);
+        float R(float lo, float hi) => lo + (float)rng.NextDouble() * (hi - lo);
+        var legacy = new SceneGraph { UseLegacyCollisionPathForTesting = true };
+        var fast = new SceneGraph();
+        var live = new List<int>();
+        void Each(Action<SceneGraph> a) { a(legacy); a(fast); }
+        int Create(int parent)
+        {
+            var a = legacy.CreatePivot(parent); var b = fast.CreatePivot(parent);
+            Assert.Equal(a, b); live.Add(a); return a;
+        }
+        void Configure(int id)
+        {
+            var radius = R(.3f, 1.5f); var radiusY = rng.Next(2) == 0 ? radius : radius * 2; var tri = Slab(R(3, 14));
+            switch (rng.Next(5))
+            {
+                case 0: Each(s => { s.EntityType(id, 1); s.EntityRadius(id, radius, radiusY); }); break;
+                case 1: Each(s => { s.EntityType(id, 2); s.EntityRadius(id, radius); }); break;
+                case 2: { var w = R(.5f, 4); Each(s => { s.EntityType(id, 3); s.EntityBox(id, -w, -1, -w, 2 * w, 2, 2 * w); }); break; }
+                case 3: Each(s => { s.EntityType(id, 4); s.SetCollisionTriangles(id, tri); }); break;
+                default: Each(s => { s.EntityType(id, 5); s.EntityRadius(id, radius); }); break;
+            }
+        }
+        for (var i = 0; i < 70; i++)
+        {
+            var id = Create(live.Count > 3 && rng.Next(4) == 0 ? live[rng.Next(live.Count)] : 0);
+            float x = R(-60, 60), y = R(0, 10), z = R(-60, 60), sc = R(.5f, 3), rx = R(0, 360), ry = R(0, 360); var sy = sc * (rng.Next(3) == 0 ? 2 : 1);
+            Each(s => { s.PositionEntity(id, x, y, z); s.ScaleEntity(id, sc, sy, sc); s.RotateEntity(id, rx, ry, 0); });
+            Configure(id);
+        }
+        int[,] rules = { { 1, 2, 1, 1 }, { 1, 3, 3, 2 }, { 1, 4, 2, 2 }, { 1, 5, 1, 3 }, { 2, 4, 2, 1 }, { 2, 3, 3, 2 }, { 5, 4, 2, 3 }, { 5, 3, 3, 2 }, { 5, 5, 1, 2 } };
+        for (var r = 0; r < rules.GetLength(0); r++)
+        {
+            int a = rules[r, 0], b = rules[r, 1], m = rules[r, 2], resp = rules[r, 3];
+            Each(s => s.Collisions(a, b, m, resp));
+        }
+        var hits = 0;
+        for (var step = 0; step < 120; step++)
+        {
+            for (var k = rng.Next(1, 14); k > 0; k--)
+            {
+                var id = live[rng.Next(live.Count)];
+                float dx = R(-9, 9), dy = R(-2, 2), dz = R(-9, 9);
+                var global = rng.Next(2) == 0;
+                Each(s => s.TranslateEntity(id, dx, dy, dz, global));
+                if (rng.Next(4) == 0) { var same = legacy.EntityX(id, false); Each(s => s.PositionEntity(id, same, legacy.EntityY(id, false), legacy.EntityZ(id, false), false)); }
+            }
+            if (step % 15 == 7 && live.Count > 20)
+            {
+                var id = live[rng.Next(1, live.Count)];
+                var sub = legacy.GetSubtreeEntityIds(id);
+                Each(s => s.FreeEntity(id)); live.RemoveAll(e => Array.IndexOf(sub, e) >= 0);
+            }
+            if (step % 11 == 3) Configure(live[rng.Next(live.Count)]);
+            Each(s => s.UpdateWorld());
+            foreach (var id in live)
+            {
+                foreach (var g in new[] { true, false })
+                {
+                    Assert.Equal(Bits(legacy.EntityX(id, g)), Bits(fast.EntityX(id, g)));
+                    Assert.Equal(Bits(legacy.EntityY(id, g)), Bits(fast.EntityY(id, g)));
+                    Assert.Equal(Bits(legacy.EntityZ(id, g)), Bits(fast.EntityZ(id, g)));
+                }
+                var n = legacy.CountCollisions(id);
+                Assert.Equal(n, fast.CountCollisions(id));
+                hits += n;
+                for (var i = 1; i <= n; i++)
+                {
+                    Assert.Equal(legacy.CollisionEntity(id, i), fast.CollisionEntity(id, i));
+                    Assert.Equal(legacy.CollisionTriangle(id, i), fast.CollisionTriangle(id, i));
+                    Assert.Equal(Bits(legacy.CollisionX(id, i)), Bits(fast.CollisionX(id, i)));
+                    Assert.Equal(Bits(legacy.CollisionY(id, i)), Bits(fast.CollisionY(id, i)));
+                    Assert.Equal(Bits(legacy.CollisionZ(id, i)), Bits(fast.CollisionZ(id, i)));
+                    Assert.Equal(Bits(legacy.CollisionNX(id, i)), Bits(fast.CollisionNX(id, i)));
+                    Assert.Equal(Bits(legacy.CollisionNY(id, i)), Bits(fast.CollisionNY(id, i)));
+                    Assert.Equal(Bits(legacy.CollisionNZ(id, i)), Bits(fast.CollisionNZ(id, i)));
+                    Assert.Equal(Bits(legacy.CollisionTime(id, i)), Bits(fast.CollisionTime(id, i)));
+                }
+            }
+        }
+        Assert.True(hits > 20, "scenario must produce collisions");
+    }
+}

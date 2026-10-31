@@ -34,6 +34,13 @@ internal sealed class SceneTriangleCollider
 
     internal int TriangleCount => _triangles.Length;
 
+    /// <summary>Local-space bounds of every triangle; false when there is no geometry.</summary>
+    internal bool TryGetLocalBounds(out TriangleBounds bounds)
+    {
+        bounds = _root is null ? default : _root.Bounds;
+        return _root is not null;
+    }
+
     /// <summary>
     /// Returns original triangle ordinals whose cached local bounds overlap a conservative
     /// local-space AABB of the swept sphere. Result ordering matches the source triangle list.
