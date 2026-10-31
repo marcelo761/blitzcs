@@ -9,10 +9,7 @@ namespace Blitz3DCS.Graphics.D3D11;
 
 public sealed unsafe partial class D3D11Renderer
 {
-    /// <summary>Set BLITZCS_D3D11_NOOPT=1 to restore the original call stream (read once) for A/B comparison.</summary>
-    internal static readonly bool Optimize = Environment.GetEnvironmentVariable("BLITZCS_D3D11_NOOPT") != "1";
-
-    private readonly PipelineStateTracker _tracker = new(Optimize);
+    private readonly PipelineStateTracker _tracker = new();
     private readonly BlitBatcher _blits = new();
     private BlitBatcher.FlushHandler? _drawBlitBatchCache;
     // Cached once: a method-group conversion allocates a new delegate on every call.

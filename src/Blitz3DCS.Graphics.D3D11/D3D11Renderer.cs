@@ -455,8 +455,8 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         return true;
     }
 
-    /// <summary>Whether the renderer-side optimizations are enabled (BLITZCS_D3D11_NOOPT unset).</summary>
-    public static bool OptimizationsEnabled => Optimize;
+    /// <summary>Always true; kept only until callers drop the check.</summary>
+    public static bool OptimizationsEnabled => true;
 
     public void UpdateMeshVertices(D3D11Mesh mesh, ReadOnlySpan<D3D11Vertex> vertices)
     {
@@ -949,7 +949,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             _ = TryClipRegion(source, region, targetWidth, targetHeight, out _);
         if (regions.IsEmpty) return;
 
-        if (Optimize && destination is null)
+        if (destination is null)
         {
             // Backbuffer quads with identical state accumulate and draw together (flushed by the next renderer call).
             if (source.MipmapsDirty) FlushBlits();
@@ -1464,16 +1464,10 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     private Matrix4x4 NormalMatrixFor(in Matrix4x4 world)
     {
         Matrix4x4 normal;
-        if (Optimize && _hasLastNormal && world == _lastWorld) normal = _lastNormal;
-        else if (Optimize)
-        {
-            normal = _normalCache.Get(world);
-            _lastWorld = world; _lastNormal = normal; _hasLastNormal = true;
-        }
+        if (_hasLastNormal && world == _lastWorld) normal = _lastNormal;
         else
         {
-            normal = Matrix4x4.Identity;
-            if (Matrix4x4.Invert(world, out var inverseWorld)) normal = Matrix4x4.Transpose(inverseWorld);
+            normal = _normalCache.Get(world);
             _lastWorld = world; _lastNormal = normal; _hasLastNormal = true;
         }
         return normal;
@@ -1493,7 +1487,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     {
         var normal = NormalMatrixFor(world);
         BuildTransformConstants(out var transformed, worldViewProjection, worldView, world, normal);
-        if (Optimize && _hasLastTransform && SameBytes(transformed, _lastTransform))
+        if (_hasLastTransform && SameBytes(transformed, _lastTransform))
         {
             if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.SkippedConstantBufferMaps);
             return;
@@ -1515,7 +1509,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     {
         var constants = new MaterialConstants();
         BuildMaterialConstants(ref constants, layers, color, clampRegion, fog, effects, shininess);
-        if (Optimize && _hasLastMaterial && SameBytes(constants, _lastMaterial))
+        if (_hasLastMaterial && SameBytes(constants, _lastMaterial))
         {
             if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.SkippedConstantBufferMaps);
             return;

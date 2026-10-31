@@ -11,9 +11,8 @@ public enum PipelineSlot
 /// <summary>
 /// Pure shadow of the device binding state. Each query returns true when the device call must be issued and records
 /// the new value; <see cref="Invalidate"/> must follow anything that resets the device (ClearState, resource disposal).
-/// When disabled every query reports "changed", reproducing the unoptimized call stream.
-/// </summary>
-public sealed class PipelineStateTracker(bool enabled = true)
+////// </summary>
+public sealed class PipelineStateTracker
 {
     public const int ResourceSlots = 8;
     private static readonly object Unset = new();
@@ -21,8 +20,6 @@ public sealed class PipelineStateTracker(bool enabled = true)
     private readonly object?[] _shaderResources = NewArray(ResourceSlots);
     private readonly object?[] _samplers = NewArray(ResourceSlots);
     private (float, float, float, float, float, float)? _viewport;
-
-    public bool Enabled { get; } = enabled;
 
     /// <summary>Number of device calls reported as redundant since construction.</summary>
     public long Skipped { get; private set; }
@@ -41,7 +38,7 @@ public sealed class PipelineStateTracker(bool enabled = true)
     public bool Changed(PipelineSlot slot, object? value)
     {
         ref var current = ref _slots[(int)slot];
-        if (Enabled && ReferenceEquals(current, value)) { Skipped++; return false; }
+        if (ReferenceEquals(current, value)) { Skipped++; return false; }
         current = value;
         return true;
     }
@@ -49,7 +46,7 @@ public sealed class PipelineStateTracker(bool enabled = true)
     public bool ViewportChanged(float x, float y, float width, float height, float minDepth, float maxDepth)
     {
         var next = (x, y, width, height, minDepth, maxDepth);
-        if (Enabled && _viewport == next) { Skipped++; return false; }
+        if (_viewport == next) { Skipped++; return false; }
         _viewport = next;
         return true;
     }
@@ -67,7 +64,7 @@ public sealed class PipelineStateTracker(bool enabled = true)
         if (desired.Length != ResourceSlots) throw new ArgumentException("Exactly eight slots are required.", nameof(desired));
         int first = -1, last = -1;
         for (var i = 0; i < ResourceSlots; i++)
-            if (!Enabled || !ReferenceEquals(shadow[i], desired[i])) { if (first < 0) first = i; last = i; }
+            if (!ReferenceEquals(shadow[i], desired[i])) { if (first < 0) first = i; last = i; }
         if (first < 0) { start = length = 0; Skipped++; return false; }
         start = first; length = last - first + 1;
         for (var i = first; i <= last; i++) shadow[i] = desired[i];

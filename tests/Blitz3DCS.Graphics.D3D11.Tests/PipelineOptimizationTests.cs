@@ -23,23 +23,6 @@ public sealed class PipelineOptimizationTests
     }
 
     [Fact]
-    public void DisabledTrackerReproducesEveryCall()
-    {
-        var tracker = new PipelineStateTracker(enabled: false);
-        var o = new object();
-        Assert.True(tracker.Changed(PipelineSlot.VertexShader, o));
-        Assert.True(tracker.Changed(PipelineSlot.VertexShader, o));
-        Assert.True(tracker.ViewportChanged(0, 0, 4, 4, 0, 1));
-        Assert.True(tracker.ViewportChanged(0, 0, 4, 4, 0, 1));
-        var views = new object?[8];
-        Assert.True(tracker.DirtyShaderResources(views, out var start, out var length));
-        Assert.Equal((0, 8), (start, length));
-        Assert.True(tracker.DirtyShaderResources(views, out start, out length));
-        Assert.Equal((0, 8), (start, length));
-        Assert.Equal(0, tracker.Skipped);
-    }
-
-    [Fact]
     public void ViewportOnlyReportsChanges()
     {
         var tracker = new PipelineStateTracker();

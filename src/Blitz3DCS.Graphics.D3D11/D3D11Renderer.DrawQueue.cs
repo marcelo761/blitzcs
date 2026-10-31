@@ -15,14 +15,10 @@ namespace Blitz3DCS.Graphics.D3D11;
 /// cbuffer InstanceBuffer. The pixel shader and the non-instanced vertex shader are unchanged, and the instanced vertex
 /// shader is derived from the original text by renaming the constant sources only, so the float arithmetic is the
 /// same. Any other renderer call flushes the queue first (CheckAccess), so device-visible order is unchanged.
-/// Disabled by BLITZCS_D3D11_NOOPT=1 (whole feature) or BLITZCS_D3D11_NOINSTANCING=1 (instancing only), and when the
-/// device does not report ConstantBufferOffsetting.
+/// Falls back to the per-draw path only when the device does not report ConstantBufferOffsetting.
 /// </summary>
 public sealed unsafe partial class D3D11Renderer
 {
-    internal static readonly bool InstancingRequested =
-        Optimize && Environment.GetEnvironmentVariable("BLITZCS_D3D11_NOINSTANCING") != "1";
-
     internal const int StageSlots = 8;
     private const int InitialObjectBufferBytes = 2 << 20;
     private static readonly uint TransformWindow = ObjectConstantRing.ConstantCount(DrawRecordPlanner.TransformBytes);
@@ -65,7 +61,6 @@ public sealed unsafe partial class D3D11Renderer
 
     private void CreateObjectConstantPipeline()
     {
-        if (!Optimize) return;
         FeatureDataD3D11Options options;
         try { options = _device!.CheckFeatureOptions(); }
         catch { return; }
@@ -86,7 +81,6 @@ public sealed unsafe partial class D3D11Renderer
             return;
         }
         _queueDraws = true;
-        if (!InstancingRequested) return;
         try
         {
             var bytecode = Compiler.Compile(InstancedShaderSource, "VSInstanced", "triangle-instanced.hlsl", "vs_4_0",
@@ -208,7 +202,7 @@ public sealed unsafe partial class D3D11Renderer
         if (count == 0) return;
         _queueCount = 0;
         _queueEpoch++;
-        if (_instancing && InstancingReorder) GroupCommutativeDraws(count);
+        if (_instancing) GroupCommutativeDraws(count);
         var source = new QueuedRecordSource(this, count);
         var bytes = DrawRecordPlanner.Plan(ref source, _instancing, _drawPlan);
         var reservation = _objectRing!.Reserve(bytes);
@@ -247,8 +241,6 @@ public sealed unsafe partial class D3D11Renderer
             CountSkips();
         }
     }
-
-    internal static readonly bool InstancingReorder = Environment.GetEnvironmentVariable("BLITZCS_D3D11_NOREORDER") != "1";
 
     private int[] _reorder = [], _reorderGroupOf = [], _reorderGroupStart = [];
     private QueuedMeshDraw[] _reorderDraws = [];

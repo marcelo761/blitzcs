@@ -8,9 +8,8 @@ using Xunit;
 namespace Blitz3DCS.Engine.Windows.Tests;
 
 /// <summary>
-/// Native scene for comparing the instanced and queued D3D11 submission paths. Assertions are structural and
-/// renderer-independent; the log carries a full back-buffer hash for byte-for-byte A/B comparison between runs
-/// with and without BLITZCS_D3D11_NOINSTANCING / BLITZCS_D3D11_NOOPT.
+/// Native scene exercising the instanced and queued D3D11 submission paths. Assertions are structural and
+/// renderer-independent; the log carries a full back-buffer hash for byte-for-byte comparison between runs.
 /// </summary>
 public sealed class LegacyGraphicsInstancingSmokeTests
 {
