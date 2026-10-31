@@ -39,11 +39,14 @@ internal abstract class __BlitzObject
         if (value is null) throw new System.InvalidOperationException(location + ": Object does not exist.");
         return value;
     }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal static T Require<T>(T value, string location) where T : __BlitzObject
     {
-        if (value is null || !value.Alive) throw new System.InvalidOperationException(location + ": Object does not exist.");
+        if (value is null || !value.Alive) throw Missing(location);
         return value;
     }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static System.InvalidOperationException Missing(string location) => new System.InvalidOperationException(location + ": Object does not exist.");
     internal static bool Equal(__BlitzObject left, __BlitzObject right) =>
         System.Object.ReferenceEquals(left is { Alive: true } ? left : null, right is { Alive: true } ? right : null);
 }
