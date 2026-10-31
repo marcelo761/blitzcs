@@ -1544,25 +1544,29 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             constants.RegionFlags.Z = 1;
             constants.RegionFlags.W = (effects & 32) != 0 ? 0 : MathF.Truncate(128 * color.W) / 255f;
         }
+        // Blend0/Blend1 and Alpha0/Alpha1 are adjacent float4s: stage i is element i of each 8-float run. Disabled
+        // stages keep the zero they were initialized with (the original code wrote 0 explicitly).
+        var blends = MemoryMarshal.CreateSpan(ref constants.Blend0.X, 8);
+        var alphas = MemoryMarshal.CreateSpan(ref constants.Alpha0.X, 8);
         for (var i = 0; i < layers.Length; i++)
         {
-            var layer = layers[i];
-            var uv = layer.UvTransform ?? Matrix3x2.Identity;
-            constants.UvRowsX[i] = new Vector4(uv.M11, uv.M21, uv.M31, layer.CoordinateSet);
-            constants.UvRowsY[i] = new Vector4(uv.M12, uv.M22, uv.M32, 0);
-            constants.BumpMatrices[i] = layer.BumpMatrix ?? Vector4.Zero;
-            var enabled = layer.Texture is not null && layer.Blend != 0;
-            var blend = enabled ? layer.Blend : 0;
-            var component = i & 3;
-            if (i < 4)
+            ref readonly var layer = ref layers[i];
+            if (layer.UvTransform is { } uv)
             {
-                SetComponent(ref constants.Blend0, component, blend);
-                SetComponent(ref constants.Alpha0, component, enabled && layer.UseAlpha ? 1 : 0);
+                constants.UvRowsX[i] = new Vector4(uv.M11, uv.M21, uv.M31, layer.CoordinateSet);
+                constants.UvRowsY[i] = new Vector4(uv.M12, uv.M22, uv.M32, 0);
             }
             else
             {
-                SetComponent(ref constants.Blend1, component, blend);
-                SetComponent(ref constants.Alpha1, component, enabled && layer.UseAlpha ? 1 : 0);
+                // Matrix3x2.Identity: M11 = M22 = 1, all other elements 0.
+                constants.UvRowsX[i] = new Vector4(1, 0, 0, layer.CoordinateSet);
+                constants.UvRowsY[i] = new Vector4(0, 1, 0, 0);
+            }
+            if (layer.BumpMatrix is { } bump) constants.BumpMatrices[i] = bump;
+            if (layer.Texture is not null && layer.Blend != 0)
+            {
+                blends[i] = layer.Blend;
+                if (layer.UseAlpha) alphas[i] = 1;
             }
         }
     }
@@ -1597,17 +1601,6 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         _context!.GenerateMips(texture.ShaderResourceView);
         texture.MarkMipmapsClean();
         if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.MipGenerations); D3D11FrameCounters.AddSince(D3D11FrameCounters.MipTicks, profileStart); }
-    }
-
-    private static void SetComponent(ref Vector4 vector, int component, float value)
-    {
-        switch (component)
-        {
-            case 0: vector.X = value; break;
-            case 1: vector.Y = value; break;
-            case 2: vector.Z = value; break;
-            default: vector.W = value; break;
-        }
     }
 
     [StructLayout(LayoutKind.Sequential)]

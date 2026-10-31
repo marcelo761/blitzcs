@@ -133,31 +133,144 @@ public sealed class ObjectConstantSubmissionTests
     {
         var mesh = FakeMesh();
         var otherMesh = FakeMesh();
+        var texture = FakeTexture();
+        var otherTexture = FakeTexture();
         var state = new D3D11LightingDrawState(Effects: 1 | 8, Shininess: 0, Blend: 3, DepthMode: 1);
-        var draw = new D3D11Renderer.QueuedMeshDraw(mesh, 6, 1, state, false);
-        D3D11TextureLayer[] layers = [new D3D11TextureLayer(null, Blend: 2)];
+        D3D11TextureLayer[] layers = [new D3D11TextureLayer(texture, Blend: 2)];
+        var draw = Queued(mesh, layers, state, out var textures);
         var red = Material(layers, new Vector4(1, 0, 0, 0.5f), state);
         var green = Material(layers, new Vector4(0, 1, 0, 0.25f), state);
-        Assert.True(D3D11Renderer.CanShareInstancedDraw(draw, draw, layers, layers, red, green));
+        Assert.True(D3D11Renderer.CanShareInstancedDraw(draw, draw, textures, textures, red, green));
 
-        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { Mesh = otherMesh }, layers, layers, red, red));
-        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { IndexCount = 3 }, layers, layers, red, red));
-        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { AlphaBlend = true }, layers, layers, red, red));
-        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { State = state with { Blend = 1 } }, layers, layers, red, red));
-        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { State = state with { DepthMode = 2 } }, layers, layers, red, red));
-        D3D11TextureLayer[] clamped = [new D3D11TextureLayer(null, Blend: 2, ClampU: true)];
-        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw, layers, clamped, red, red));
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { Mesh = otherMesh }, textures, textures, red, red));
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { IndexCount = 3 }, textures, textures, red, red));
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { AlphaBlend = true }, textures, textures, red, red));
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { State = state with { Blend = 1 } }, textures, textures, red, red));
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { State = state with { DepthMode = 2 } }, textures, textures, red, red));
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw with { State = state with { Wireframe = true } }, textures, textures, red, red));
+
+        var clamped = Queued(mesh, [new D3D11TextureLayer(texture, Blend: 2, ClampU: true)], state, out var clampedTextures);
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, clamped, textures, clampedTextures, red, red));
+        var retextured = Queued(mesh, [new D3D11TextureLayer(otherTexture, Blend: 2)], state, out var otherTextures);
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, retextured, textures, otherTextures, red, red));
+        var twoStage = Queued(mesh, [layers[0], new D3D11TextureLayer(texture, Blend: 2)], state, out var twoStageTextures);
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, twoStage, textures, twoStageTextures, red, red));
         var fogged = Material(layers, new Vector4(1, 0, 0, 0.5f), state, new D3D11Fog(Vector3.One, 1, 10));
-        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw, layers, layers, red, fogged));
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw, textures, textures, red, fogged));
+        D3D11TextureLayer[] scrolled = [new D3D11TextureLayer(texture, Blend: 2, UvTransform: Matrix3x2.CreateTranslation(0.5f, 0))];
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(draw, draw, textures, textures, red, Material(scrolled, red.Color, state)));
 
         // Masked texture: the alpha-test threshold (RegionFlags.w) depends on the color alpha, so it must not merge.
-        D3D11TextureLayer[] masked = [new D3D11TextureLayer(null, Blend: 2, Masked: true)];
+        D3D11TextureLayer[] masked = [new D3D11TextureLayer(texture, Blend: 2, Masked: true)];
         var maskedLit = new D3D11LightingDrawState(Effects: 0, Shininess: 0);
-        var a = MaterialWithMaskedTexture(new Vector4(1, 1, 1, 1f), maskedLit);
-        var b = MaterialWithMaskedTexture(new Vector4(1, 1, 1, 0.5f), maskedLit);
+        var a = Material(masked, new Vector4(1, 1, 1, 1f), maskedLit);
+        var b = Material(masked, new Vector4(1, 1, 1, 0.5f), maskedLit);
         Assert.NotEqual(a.RegionFlags.W, b.RegionFlags.W);
-        var maskedDraw = draw with { State = maskedLit };
-        Assert.False(D3D11Renderer.CanShareInstancedDraw(maskedDraw, maskedDraw, masked, masked, a, b));
+        var maskedDraw = Queued(mesh, masked, maskedLit, out var maskedTextures);
+        Assert.False(D3D11Renderer.CanShareInstancedDraw(maskedDraw, maskedDraw, maskedTextures, maskedTextures, a, b));
+    }
+
+    [Fact]
+    public void StoredStageBindingsMatchWhatSetPixelResourcesBinds()
+    {
+        var t0 = FakeTexture();
+        var t2 = FakeTexture();
+        D3D11TextureLayer[] layers =
+        [
+            new(t0, Blend: 2, ClampV: true), new(null, Blend: 2), new(t2, Blend: 3, ClampU: true),
+            new(FakeTexture(), Blend: 0), default, default, default, default,
+        ];
+        var textures = new D3D11Texture?[8];
+        textures.AsSpan().Fill(FakeTexture()); // stale entries from an earlier draw must not leak into gaps
+        var stages = D3D11Renderer.StoreStageTextures(layers, textures, out var samplerBits);
+        Assert.Equal(3, stages);
+        Assert.Same(t0, textures[0]);
+        Assert.Null(textures[1]);
+        Assert.Same(t2, textures[2]);
+        Assert.Equal(2 | (1 << 4), samplerBits);
+        Assert.Equal(0, D3D11Renderer.StoreStageTextures([default, new(null, Blend: 2)], textures, out samplerBits));
+        Assert.Equal(0, samplerBits);
+    }
+
+    /// <summary>The optimized material builder must produce the bytes of the original (34c5038) builder.</summary>
+    [Fact]
+    public void MaterialRecordsMatchTheOriginalBuilderByteForByte()
+    {
+        var random = new Random(7);
+        var textures = new[] { null, FakeTexture(), FakeTexture() };
+        int[] blends = [0, 1, 2, 3, 5, 6];
+        for (var i = 0; i < 2000; i++)
+        {
+            var layers = new D3D11TextureLayer[random.Next(0, 9)];
+            for (var s = 0; s < layers.Length; s++)
+                layers[s] = random.Next(5) == 0 ? default : new D3D11TextureLayer(
+                    textures[random.Next(textures.Length)], Blend: blends[random.Next(blends.Length)],
+                    ClampU: random.Next(2) == 0, ClampV: random.Next(2) == 0, UseAlpha: random.Next(2) == 0,
+                    UvTransform: random.Next(2) == 0 ? null : Matrix3x2.CreateRotation(random.NextSingle()) * Matrix3x2.CreateTranslation(random.NextSingle(), -0f),
+                    CoordinateSet: random.Next(2), Masked: random.Next(3) == 0,
+                    BumpMatrix: random.Next(2) == 0 ? null : new Vector4(random.NextSingle(), -random.NextSingle(), 0, 1));
+            var color = new Vector4(random.NextSingle(), random.NextSingle(), random.NextSingle(), random.NextSingle());
+            D3D11Fog? fog = random.Next(2) == 0 ? null : new D3D11Fog(new Vector3(random.NextSingle()), 1, 1 + random.NextSingle() * 50);
+            var effects = random.Next(0, 0x40);
+            var shininess = random.NextSingle() * 2 - 0.5f;
+            var clamp = random.Next(4) == 0;
+            var optimized = new D3D11Renderer.MaterialConstants();
+            D3D11Renderer.BuildMaterialConstants(ref optimized, layers, color, clamp, fog, effects, shininess);
+            var original = OriginalMaterial(layers, color, clamp, fog, effects, shininess);
+            Assert.True(Bytes(optimized).SequenceEqual(Bytes(original)), "case " + i);
+        }
+    }
+
+    /// <summary>Verbatim copy of the pre-WP6 UploadMaterial record construction (the equality oracle).</summary>
+    private static D3D11Renderer.MaterialConstants OriginalMaterial(ReadOnlySpan<D3D11TextureLayer> layers, Vector4 color,
+        bool clampRegion, D3D11Fog? fog, int effects, float shininess)
+    {
+        var constants = new D3D11Renderer.MaterialConstants
+        {
+            Color = color,
+            RegionFlags = new Vector4(clampRegion ? 1 : 0, effects, 0, 0),
+            FogColor = fog is { } activeFog ? new Vector4(activeFog.Color, 1) : Vector4.Zero,
+            FogParameters = fog is { } parameters ? new Vector4(parameters.Start, parameters.End, 1, 0) : Vector4.Zero,
+            Shininess = new Vector4(Math.Clamp(shininess, 0, 1), Math.Clamp(shininess, 0, 1) * 128, 0, 0),
+        };
+        if (layers.Length > 0 && layers[0].Texture is not null && layers[0].Masked)
+        {
+            constants.RegionFlags.Z = 1;
+            constants.RegionFlags.W = (effects & 32) != 0 ? 0 : MathF.Truncate(128 * color.W) / 255f;
+        }
+        for (var i = 0; i < layers.Length; i++)
+        {
+            var layer = layers[i];
+            var uv = layer.UvTransform ?? Matrix3x2.Identity;
+            constants.UvRowsX[i] = new Vector4(uv.M11, uv.M21, uv.M31, layer.CoordinateSet);
+            constants.UvRowsY[i] = new Vector4(uv.M12, uv.M22, uv.M32, 0);
+            constants.BumpMatrices[i] = layer.BumpMatrix ?? Vector4.Zero;
+            var enabled = layer.Texture is not null && layer.Blend != 0;
+            var blend = enabled ? layer.Blend : 0;
+            var component = i & 3;
+            if (i < 4)
+            {
+                SetComponent(ref constants.Blend0, component, blend);
+                SetComponent(ref constants.Alpha0, component, enabled && layer.UseAlpha ? 1 : 0);
+            }
+            else
+            {
+                SetComponent(ref constants.Blend1, component, blend);
+                SetComponent(ref constants.Alpha1, component, enabled && layer.UseAlpha ? 1 : 0);
+            }
+        }
+        return constants;
+
+        static void SetComponent(ref Vector4 vector, int component, float value)
+        {
+            switch (component)
+            {
+                case 0: vector.X = value; break;
+                case 1: vector.Y = value; break;
+                case 2: vector.Z = value; break;
+                default: vector.W = value; break;
+            }
+        }
     }
 
     /// <summary>
@@ -248,20 +361,21 @@ public sealed class ObjectConstantSubmissionTests
 
     private static D3D11Mesh FakeMesh() => new(null!, null!, null!, 6, 4);
 
+    private static D3D11Texture FakeTexture() => new(null!, null!, null!, 4, 4, false);
+
+    private static D3D11Renderer.QueuedMeshDraw Queued(D3D11Mesh mesh, D3D11TextureLayer[] layers,
+        D3D11LightingDrawState state, out D3D11Texture?[] textures)
+    {
+        textures = new D3D11Texture?[8];
+        var stages = D3D11Renderer.StoreStageTextures(layers, textures, out var samplerBits);
+        return new D3D11Renderer.QueuedMeshDraw(mesh, 6, stages, samplerBits, state, false);
+    }
+
     private static D3D11Renderer.MaterialConstants Material(ReadOnlySpan<D3D11TextureLayer> layers, Vector4 color,
         D3D11LightingDrawState state, D3D11Fog? fog = null)
     {
         var material = new D3D11Renderer.MaterialConstants();
         D3D11Renderer.BuildMaterialConstants(ref material, layers, color, false, fog, state.Effects, state.Shininess);
-        return material;
-    }
-
-    private static D3D11Renderer.MaterialConstants MaterialWithMaskedTexture(Vector4 color, D3D11LightingDrawState state)
-    {
-        // BuildMaterialConstants only sets the alpha-test fields when stage 0 has a texture; emulate that record.
-        var material = Material([new D3D11TextureLayer(null, Blend: 2, Masked: true)], color, state);
-        material.RegionFlags.Z = 1;
-        material.RegionFlags.W = MathF.Truncate(128 * color.W) / 255f;
         return material;
     }
 

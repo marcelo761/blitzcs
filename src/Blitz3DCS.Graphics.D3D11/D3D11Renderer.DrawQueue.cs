@@ -12,7 +12,7 @@ namespace Blitz3DCS.Graphics.D3D11;
 /// draw's records with the D3D11.1 VS/PSSetConstantBuffers1 offset variants instead of two Map(WRITE_DISCARD) per
 /// draw. Consecutive queued draws that differ only in transform and MaterialColor (particles/sprites sharing the quad
 /// mesh, repeated props) become one DrawIndexedInstanced whose vertex shader reads the same per-object values from
-/// cbuffer Instances. The pixel shader and the non-instanced vertex shader are unchanged, and the instanced vertex
+/// cbuffer InstanceBuffer. The pixel shader and the non-instanced vertex shader are unchanged, and the instanced vertex
 /// shader is derived from the original text by renaming the constant sources only, so the float arithmetic is the
 /// same. Any other renderer call flushes the queue first (CheckAccess), so device-visible order is unchanged.
 /// Disabled by BLITZCS_D3D11_NOOPT=1 (whole feature) or BLITZCS_D3D11_NOINSTANCING=1 (instancing only), and when the
@@ -23,7 +23,7 @@ public sealed unsafe partial class D3D11Renderer
     internal static readonly bool InstancingRequested =
         Optimize && Environment.GetEnvironmentVariable("BLITZCS_D3D11_NOINSTANCING") != "1";
 
-    internal const int LayerSlots = 8;
+    internal const int StageSlots = 8;
     private const int InitialObjectBufferBytes = 2 << 20;
     private static readonly uint TransformWindow = ObjectConstantRing.ConstantCount(DrawRecordPlanner.TransformBytes);
     private static readonly uint MaterialWindow = ObjectConstantRing.ConstantCount(DrawRecordPlanner.MaterialBytes);
@@ -38,7 +38,10 @@ public sealed unsafe partial class D3D11Renderer
     private QueuedMeshDraw[] _queuedDraws = new QueuedMeshDraw[256];
     private TransformConstants[] _queuedTransforms = new TransformConstants[256];
     private MaterialConstants[] _queuedMaterials = new MaterialConstants[256];
-    private D3D11TextureLayer[] _queuedLayers = new D3D11TextureLayer[256 * LayerSlots];
+    // Only what reaches the device per stage: the bound texture (null when the stage is disabled) for the first
+    // QueuedMeshDraw.Stages slots; sampler choices are packed in QueuedMeshDraw.SamplerBits. Everything else a texture
+    // layer carries is in the material record.
+    private D3D11Texture?[] _queuedTextures = new D3D11Texture?[256 * StageSlots];
     private int _queueCount;
     private int _queueEpoch = 1;
     private readonly List<PlannedDraw> _drawPlan = [];
@@ -55,8 +58,10 @@ public sealed unsafe partial class D3D11Renderer
     /// <summary>Issues every queued mesh draw now (also implied by any other renderer call).</summary>
     public void SubmitQueuedDraws() => CheckAccess();
 
+    /// <param name="Stages">Leading texture stages stored for this draw (last enabled stage + 1).</param>
+    /// <param name="SamplerBits">Sampler index (ClampU | ClampV &lt;&lt; 1) of enabled stage s at bits 2s..2s+1.</param>
     internal readonly record struct QueuedMeshDraw(
-        D3D11Mesh Mesh, uint IndexCount, int LayerCount, D3D11LightingDrawState State, bool AlphaBlend);
+        D3D11Mesh Mesh, uint IndexCount, int Stages, int SamplerBits, D3D11LightingDrawState State, bool AlphaBlend);
 
     private void CreateObjectConstantPipeline()
     {
@@ -119,8 +124,8 @@ public sealed unsafe partial class D3D11Renderer
 
         var index = _queueCount;
         if (index == _queuedDraws.Length) GrowQueue();
-        _queuedDraws[index] = new QueuedMeshDraw(mesh, indexCount, layers.Length, state, alphaBlend);
-        layers.CopyTo(_queuedLayers.AsSpan(index * LayerSlots, LayerSlots));
+        var stages = StoreStageTextures(layers, _queuedTextures.AsSpan(index * StageSlots, StageSlots), out var samplerBits);
+        _queuedDraws[index] = new QueuedMeshDraw(mesh, indexCount, stages, samplerBits, state, alphaBlend);
         // EvaluateLighting returns before reading World/NormalMatrix when FX_FULLBRIGHT (1) is set, so fullbright draws
         // (sprites, particles) skip the inversion: only constants the shader never reads differ.
         var normal = (state.Effects & 1) != 0 ? Matrix4x4.Identity : NormalMatrixFor(world);
@@ -131,6 +136,40 @@ public sealed unsafe partial class D3D11Renderer
         mesh.QueueEpoch = _queueEpoch;
         _queueCount = index + 1;
         if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.MeshDraws); D3D11FrameCounters.Add(D3D11FrameCounters.Triangles, indexCount / 3); }
+    }
+
+    /// <summary>
+    /// Records the per-stage device bindings SetPixelResources derives from <paramref name="layers"/>: the texture of
+    /// each enabled stage (Texture set and Blend != 0) and its sampler index. Returns the stored stage count.
+    /// </summary>
+    internal static int StoreStageTextures(ReadOnlySpan<D3D11TextureLayer> layers, Span<D3D11Texture?> textures, out int samplerBits)
+    {
+        var stages = 0;
+        samplerBits = 0;
+        for (var stage = 0; stage < layers.Length; stage++)
+        {
+            ref readonly var layer = ref layers[stage];
+            if (layer.Texture is null || layer.Blend == 0) continue;
+            for (var gap = stages; gap < stage; gap++) textures[gap] = null;
+            textures[stage] = layer.Texture;
+            samplerBits |= ((layer.ClampU ? 1 : 0) | (layer.ClampV ? 2 : 0)) << (2 * stage);
+            stages = stage + 1;
+        }
+        return stages;
+    }
+
+    private void SetQueuedPixelResources(int first, in QueuedMeshDraw draw)
+    {
+        Array.Clear(_pixelShaderResources);
+        Array.Clear(_pixelSamplers);
+        var textures = _queuedTextures.AsSpan(first * StageSlots, draw.Stages);
+        for (var stage = 0; stage < textures.Length; stage++)
+        {
+            if (textures[stage] is not { } texture) continue;
+            _pixelShaderResources[stage] = texture.ShaderResourceView;
+            _pixelSamplers[stage] = _textureSamplers[(draw.SamplerBits >> (2 * stage)) & 3]!;
+        }
+        BindPixelResources();
     }
 
     private static bool NeedsMipmaps(ReadOnlySpan<D3D11TextureLayer> layers)
@@ -146,7 +185,7 @@ public sealed unsafe partial class D3D11Renderer
         Array.Resize(ref _queuedDraws, size);
         Array.Resize(ref _queuedTransforms, size);
         Array.Resize(ref _queuedMaterials, size);
-        Array.Resize(ref _queuedLayers, size * LayerSlots);
+        Array.Resize(ref _queuedTextures, size * StageSlots);
     }
 
     /// <summary>Flushes when a queued draw uses <paramref name="mesh"/>, whose buffers are about to change or go away.</summary>
@@ -158,7 +197,7 @@ public sealed unsafe partial class D3D11Renderer
     private void DiscardMeshQueue()
     {
         Array.Clear(_queuedDraws, 0, _queueCount);
-        Array.Clear(_queuedLayers, 0, _queueCount * LayerSlots);
+        Array.Clear(_queuedTextures, 0, _queueCount * StageSlots);
         _queueCount = 0;
         _queueEpoch++;
     }
@@ -256,7 +295,7 @@ public sealed unsafe partial class D3D11Renderer
             else if (materialStale) SetVsWindow(1, materialOffset, MaterialWindow);
         }
         BindPixelShader(_texturedPixelShader!);
-        SetPixelResources(_queuedLayers.AsSpan(planned.First * LayerSlots, draw.LayerCount));
+        SetQueuedPixelResources(planned.First, draw);
         if (WindowStale(PipelineSlot.PsConstantBuffer1, ref _psMaterialWindow, materialOffset, MaterialWindow))
             SetPsMaterialWindow(materialOffset);
         BindLightingDrawState(draw.State, draw.AlphaBlend);
@@ -304,17 +343,23 @@ public sealed unsafe partial class D3D11Renderer
     }
 
     /// <summary>
-    /// Whether two queued draws can be one instanced draw: same mesh, index count, texture layers, pipeline state and
-    /// a material record that differs at most in MaterialColor (read only by the vertex shader, which takes it from
-    /// the instance record). Masked materials whose alpha-test threshold depends on the color differ in RegionFlags.w
-    /// and therefore never merge.
+    /// Whether two queued draws can be one instanced draw: same mesh, index count, bound textures and samplers,
+    /// pipeline state, and a material record that differs at most in MaterialColor (read only by the vertex shader,
+    /// which takes it from the instance record). Masked materials whose alpha-test threshold depends on the color
+    /// differ in RegionFlags.w and therefore never merge.
     /// </summary>
     internal static bool CanShareInstancedDraw(in QueuedMeshDraw first, in QueuedMeshDraw candidate,
-        ReadOnlySpan<D3D11TextureLayer> firstLayers, ReadOnlySpan<D3D11TextureLayer> candidateLayers,
-        in MaterialConstants firstMaterial, in MaterialConstants candidateMaterial) =>
-        ReferenceEquals(first.Mesh, candidate.Mesh) && first.IndexCount == candidate.IndexCount &&
-        first.AlphaBlend == candidate.AlphaBlend && first.State == candidate.State &&
-        firstLayers.SequenceEqual(candidateLayers) && SameBytesExceptColor(firstMaterial, candidateMaterial);
+        ReadOnlySpan<D3D11Texture?> firstTextures, ReadOnlySpan<D3D11Texture?> candidateTextures,
+        in MaterialConstants firstMaterial, in MaterialConstants candidateMaterial)
+    {
+        if (!ReferenceEquals(first.Mesh, candidate.Mesh) || first.IndexCount != candidate.IndexCount ||
+            first.Stages != candidate.Stages || first.SamplerBits != candidate.SamplerBits ||
+            first.AlphaBlend != candidate.AlphaBlend || first.State != candidate.State)
+            return false;
+        for (var stage = 0; stage < first.Stages; stage++)
+            if (!ReferenceEquals(firstTextures[stage], candidateTextures[stage])) return false;
+        return SameBytesExceptColor(firstMaterial, candidateMaterial);
+    }
 
     private static bool SameBytesExceptColor(in MaterialConstants a, in MaterialConstants b) =>
         MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(in a, 1))[16..]
@@ -330,10 +375,9 @@ public sealed unsafe partial class D3D11Renderer
         {
             var draws = renderer._queuedDraws;
             if (!ReferenceEquals(draws[first].Mesh, draws[candidate].Mesh)) return false;
-            var layers = renderer._queuedLayers;
+            var textures = renderer._queuedTextures;
             return CanShareInstancedDraw(draws[first], draws[candidate],
-                layers.AsSpan(first * LayerSlots, draws[first].LayerCount),
-                layers.AsSpan(candidate * LayerSlots, draws[candidate].LayerCount),
+                textures.AsSpan(first * StageSlots, StageSlots), textures.AsSpan(candidate * StageSlots, StageSlots),
                 renderer._queuedMaterials[first], renderer._queuedMaterials[candidate]);
         }
     }
@@ -346,7 +390,7 @@ public sealed unsafe partial class D3D11Renderer
 
     /// <summary>
     /// Appends VSInstanced to the shader text. Its body is the original VSMain/EvaluateLighting text with only the
-    /// per-object constant sources renamed to the instance record (cbuffer Instances, indexed by SV_InstanceID), so
+    /// per-object constant sources renamed to the instance record (cbuffer InstanceBuffer, indexed by SV_InstanceID), so
     /// every arithmetic expression, its operand order and the matrix layout stay those of VSMain. The original entry
     /// points are compiled from the unchanged <see cref="TriangleShader"/> text.
     /// </summary>
