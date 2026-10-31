@@ -27,7 +27,7 @@ public sealed class ApplicationPackageTests
         AssertPeX64Executable(executable, 3);
         var crossgenPacks = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages",
             "microsoft.netcore.app.crossgen2.linux-x64");
-        if (OperatingSystem.IsLinux() && Directory.Exists(crossgenPacks) && Environment.GetEnvironmentVariable("BLITZCS_PACKAGE_R2R") != "0")
+        if (OperatingSystem.IsLinux() && Directory.Exists(crossgenPacks))
         {
             using var game = new System.Reflection.PortableExecutable.PEReader(File.OpenRead(Path.Combine(package, "hello.dll")));
             Assert.NotNull(game.PEHeaders.CorHeader);

@@ -33,9 +33,8 @@ public sealed class WindowHost : IDisposable
     private long _lastPump;
     private bool _pumped;
 
-    /// <summary>Default minimum wall time between SDL pumps triggered by input polls (BLITZCS_INPUT_PUMP_US overrides; 0 disables).</summary>
-    internal static long DefaultPollIntervalMicros { get; } =
-        long.TryParse(Environment.GetEnvironmentVariable("BLITZCS_INPUT_PUMP_US"), out var us) && us >= 0 ? us : 300;
+    /// <summary>Minimum wall time between SDL pumps triggered by input polls.</summary>
+    internal const long DefaultPollIntervalMicros = 300;
 
     public WindowHost(int width, int height, string title) : this(new SdlWindowBackend(width, height, title), DefaultPollIntervalMicros) { }
 

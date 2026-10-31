@@ -164,12 +164,11 @@ internal static class ApplicationPublisher
     /// <summary>
     /// Compiles the generated game assembly ahead of time (ReadyToRun) so its very large methods are not
     /// JIT-compiled at tier 0 on first call. The SDK publish only precompiles the shell, because the original
-    /// Roslyn assembly is copied over it. Skipped when BLITZCS_PACKAGE_R2R=0, or when the crossgen2 pack is not
+    /// Roslyn assembly is copied over it. Skipped when the crossgen2 pack is not
     /// in the local NuGet cache; failures keep the IL-only assembly.
     /// </summary>
     internal static void PrecompileGameAssembly(string assembly, string package, string workspace, TextWriter error)
     {
-        if (Environment.GetEnvironmentVariable("BLITZCS_PACKAGE_R2R") == "0") return;
         try
         {
             var host = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
@@ -201,16 +200,6 @@ internal static class ApplicationPublisher
         }
     }
 
-    /// <summary>
-    /// Opt-in runtime tuning (BLITZCS_RUNTIME_TUNING=1), off by default and unmeasured: non-concurrent GC
-    /// (no background GC thread) and no PGO instrumentation (R2R code goes straight to tier-1 without
-    /// instrumented tier). Compare against the default package with the same scene before adopting.
-    /// Env-var A/B matrix: DOTNET_TieredPGO=0|1, DOTNET_TieredPGO_InstrumentOnlyHotCode=0|1,
-    /// DOTNET_TC_CallCountThreshold=30|100, DOTNET_TC_BackgroundWorkerTimeoutMs, DOTNET_OSR_HitLimit,
-    /// DOTNET_gcConcurrent=0|1, DOTNET_GCConserveMemory=0|5, DOTNET_TieredCompilation=0 (everything fully JITed).
-    /// </summary>
-    internal static bool RuntimeTuning => Environment.GetEnvironmentVariable("BLITZCS_RUNTIME_TUNING") == "1";
-
     internal static XElement CreatePropertyGroup(string name, bool graphical) =>
         new("PropertyGroup",
             new XElement("TargetFramework", "net10.0"),
@@ -225,8 +214,8 @@ internal static class ApplicationPublisher
             new XElement("PublishTrimmed", "false"),
             new XElement("PublishSingleFile", "false"),
             new XElement("PublishReadyToRun", "true"),
-            new XElement("TieredPGO", RuntimeTuning ? "false" : "true"),
+            new XElement("TieredPGO", "true"),
             new XElement("InvariantGlobalization", "true"),
-            new XElement("ConcurrentGarbageCollection", RuntimeTuning ? "false" : "true"),
+            new XElement("ConcurrentGarbageCollection", "true"),
             new XElement("ServerGarbageCollection", "false"));
 }
