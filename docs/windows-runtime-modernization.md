@@ -212,3 +212,4 @@ runtime, but RGB output negotiation fails with `MF_E_TOPO_CODEC_NOT_FOUND` on bo
 architectures. Frame decoding remains unverified on native Windows. Successful
 compilation and isolated graphics tests do not establish successful full game
 startup or a gameplay performance result.
+- `Blitz3DCS.Engine.Windows.Tests --instancing-smoke` renders additive sprites, lit instanced mesh runs and a blended mesh run with structural pixel checks. Its log (`BLITZCS_ENGINE_WINDOWS_SMOKE_LOG`) holds `passed`, a `hash=` line and per-pass `pass.*`/`regions.*` lines; run it by default, with `BLITZCS_D3D11_NOINSTANCING=1` and with `BLITZCS_D3D11_NOOPT=1` and compare the logs byte for byte.

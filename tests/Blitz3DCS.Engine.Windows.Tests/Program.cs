@@ -4,9 +4,9 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
-        if (args.Length != 1 || args[0] is not ("--smoke" or "--camera-smoke" or "--texture-smoke" or "--image-smoke" or "--system-smoke" or "--font-smoke" or "--model-smoke" or "--drawing-smoke" or "--sprite-smoke" or "--render-queue-smoke" or "--plane-smoke" or "--movie-smoke"))
+        if (args.Length != 1 || args[0] is not ("--smoke" or "--camera-smoke" or "--texture-smoke" or "--image-smoke" or "--system-smoke" or "--font-smoke" or "--model-smoke" or "--drawing-smoke" or "--sprite-smoke" or "--render-queue-smoke" or "--plane-smoke" or "--movie-smoke" or "--instancing-smoke"))
         {
-            Console.Error.WriteLine("Usage: Blitz3DCS.Engine.Windows.Tests --smoke|--camera-smoke|--texture-smoke|--image-smoke|--system-smoke|--font-smoke|--model-smoke|--drawing-smoke|--sprite-smoke|--render-queue-smoke|--plane-smoke|--movie-smoke");
+            Console.Error.WriteLine("Usage: Blitz3DCS.Engine.Windows.Tests --smoke|--camera-smoke|--texture-smoke|--image-smoke|--system-smoke|--font-smoke|--model-smoke|--drawing-smoke|--sprite-smoke|--render-queue-smoke|--plane-smoke|--movie-smoke|--instancing-smoke");
             return 2;
         }
 
@@ -37,8 +37,15 @@ internal static class Program
                 LegacyGraphicsPlaneTests.RunSmoke();
             if (args[0] == "--movie-smoke")
                 LegacyMovieBindingTests.RunSmoke();
+            var report = "";
+            if (args[0] == "--instancing-smoke")
+            {
+                LegacyGraphicsInstancingSmokeTests.RunSmoke();
+                report = LegacyGraphicsInstancingSmokeTests.LastReport;
+                Console.Write(report);
+            }
             Console.WriteLine($"Engine.Windows native {args[0].Trim('-')} smoke passed.");
-            WriteSmokeStatus("passed");
+            WriteSmokeStatus("passed" + report);
             return 0;
         }
         catch (Exception error)
