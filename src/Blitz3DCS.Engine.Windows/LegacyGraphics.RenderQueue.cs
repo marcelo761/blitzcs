@@ -43,33 +43,33 @@ public static partial class LegacyGraphics
         var eye = new Vector3(cameraWorld.M41, cameraWorld.M42, cameraWorld.M43);
         if (optimized) scene.CopyVisibleEntityWorlds(RenderTraversal, RenderWorlds);
         else scene.CopyVisibleEntityIds(RenderTraversal);
-        EngineProfile.Count(EngineProfile.RtVisited, RenderTraversal.Count);
+        if (EngineProfile.Enabled) _tally.Visited += RenderTraversal.Count;
         var hasSprites = !optimized || Sprites.Count != 0;
         for (var entityIndex = 0; entityIndex < RenderTraversal.Count; entityIndex++)
         {
             var id = RenderTraversal[entityIndex];
             if (!MeshEntities.TryGetValue(id, out var entity)) continue;
-            EngineProfile.Count(EngineProfile.RtMeshes);
+            if (EngineProfile.Enabled) _tally.Meshes++;
             var entityWorld = ToWorldMatrix(optimized ? RenderWorlds[entityIndex] : scene.GetWorldTransform(id));
             var distanceSquared = Vector3.DistanceSquared(eye, new Vector3(entityWorld.M41, entityWorld.M42, entityWorld.M43));
             var fade = 1f;
             if (entity.AutoFade is { } range)
             {
                 var distance = MathF.Sqrt(distanceSquared);
-                if (distance >= range.Far) { EngineProfile.Count(EngineProfile.RtCullDist); continue; }
+                if (distance >= range.Far) { if (EngineProfile.Enabled) _tally.CullDist++; continue; }
                 if (distance >= range.Near) fade = 1 - (distance - range.Near) / (range.Far - range.Near);
-                if (fade <= 0) { EngineProfile.Count(EngineProfile.RtCullDist); continue; }
+                if (fade <= 0) { if (EngineProfile.Enabled) _tally.CullDist++; continue; }
             }
-            if (entity.Animated is { SkinCulled: true }) { EngineProfile.Count(EngineProfile.RtCullFrustum); continue; }
+            if (entity.Animated is { SkinCulled: true }) { if (EngineProfile.Enabled) _tally.CullFrustum++; continue; }
             SpriteState? sprite = null;
             var isSprite = hasSprites && Sprites.TryGetValue(id, out sprite);
             var world = isSprite ? BuildSpriteWorldMatrix(sprite!, entityWorld, cameraWorld) : entityWorld;
             var wvp = world * view * projection;
             if (entity.Plane is not null)
             {
-                if (!PreparePlane(entity, world, cameraWorld, camera)) { EngineProfile.Count(EngineProfile.RtCullFrustum); continue; }
+                if (!PreparePlane(entity, world, cameraWorld, camera)) { if (EngineProfile.Enabled) _tally.CullFrustum++; continue; }
             }
-            else if (!isSprite && !IsMeshVisible(entity, wvp)) { EngineProfile.Count(EngineProfile.RtCullFrustum); continue; }
+            else if (!isSprite && !IsMeshVisible(entity, wvp)) { if (EngineProfile.Enabled) _tally.CullFrustum++; continue; }
             var surfaces = entity.Geometry.SurfaceStates;
             for (var index = 0; index < entity.SurfaceHandles.Count; index++)
             {
@@ -92,7 +92,7 @@ public static partial class LegacyGraphics
                 color.W *= fade;
                 var blend = ResolveMaterialBlend(ComposeBlend(surface.Material, material), stages, transparent,
                     color.W, surface.Material.Effects | material.Effects);
-                if (EngineProfile.Enabled) CountDrawCategory(blend, isSprite, masked, entity.Animated is { Skin: not null });
+                if (EngineProfile.Enabled) _tally.Category(blend, isSprite, masked, entity.Animated is { Skin: not null });
                 if (_sceneDrawCount == _sceneDraws.Length)
                     Array.Resize(ref _sceneDraws, _sceneDraws.Length * 2);
                 _sceneDraws[_sceneDrawCount++] = new SceneDraw(entity, surface, index, world, wvp, color, blend,
@@ -146,6 +146,7 @@ public static partial class LegacyGraphics
     {
         var traversalStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         BuildSceneDraws(scene, camera, cameraWorld, view, projection, EngineOptimizations.Traversal);
+        if (EngineProfile.Enabled) _tally.Flush();
         var drawCount = _sceneDrawCount;
         var draws = _sceneDraws;
         var sortStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
@@ -163,7 +164,9 @@ public static partial class LegacyGraphics
         for (var drawIndex = 0; drawIndex < drawCount; drawIndex++)
         {
             ref readonly var draw = ref draws[legacyOrder ? drawIndex : order[drawIndex]];
-            var stateStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+            // Per-draw timestamps are too costly: time one draw in StateSampleStride and scale (phase boundaries stay exact).
+            var sampled = EngineProfile.Enabled && (drawIndex & (StateSampleStride - 1)) == 0;
+            var stateStart = sampled ? EngineProfile.Now() : 0;
             var material = draw.Entity.Material;
             var surfaceMaterial = draw.Surface.Material;
             for (var index = 0; index < RenderLayers.Length; index++)
@@ -172,7 +175,8 @@ public static partial class LegacyGraphics
                 material.UpdateLayer(index);
                 RenderLayers[index] = material.Textures[index] is not null ? material.Layers[index] : surfaceMaterial.Layers[index];
             }
-            if (EngineProfile.Enabled) CountDrawState(in draw, surfaceMaterial.Effects | material.Effects, stateStart);
+            if (sampled) _tally.StateTicks += (EngineProfile.Now() - stateStart) * StateSampleStride;
+            if (EngineProfile.Enabled) CountDrawState(in draw, surfaceMaterial.Effects | material.Effects);
             D3D11Mesh gpuMesh;
             if (draw.Entity.Plane is { } plane)
                 gpuMesh = PlaneGpuMesh(renderer, plane);
@@ -196,6 +200,7 @@ public static partial class LegacyGraphics
         if (drawCount > 0) renderer.SubmitQueuedDraws();
         if (EngineProfile.Enabled)
         {
+            _tally.Flush();
             EngineProfile.Count(EngineProfile.RtUniqueMat, StatMaterialKeys.Count);
             StatMaterialKeys.Clear();
             _statHasPrevious = false;
@@ -209,27 +214,20 @@ public static partial class LegacyGraphics
     private static int _statPreviousBlend, _statPreviousEffects, _statPreviousOrder;
     private static bool _statHasPrevious;
 
-    private static void CountDrawCategory(int blend, bool sprite, bool masked, bool animated)
-    {
-        EngineProfile.Count(blend switch { 0 => EngineProfile.RtOpaque, 1 => EngineProfile.RtAlpha, 3 => EngineProfile.RtAdditive, _ => EngineProfile.RtOtherBlend });
-        if (sprite) EngineProfile.Count(EngineProfile.RtSprite);
-        if (masked) EngineProfile.Count(EngineProfile.RtMasked);
-        if (animated) EngineProfile.Count(EngineProfile.RtAnim);
-    }
+    private const int StateSampleStride = 8;
+    private static RenderTally _tally;
 
-    /// <summary>Counts unique material/texture sets and draws whose state equals the previous draw's; times state building.</summary>
-    private static void CountDrawState(in SceneDraw draw, int effects, long stateStart)
+    /// <summary>Counts unique material/texture sets and draws whose state equals the previous draw's (integer tallies only).</summary>
+    private static void CountDrawState(in SceneDraw draw, int effects)
     {
-        var hash = new HashCode();
-        hash.Add(draw.Blend); hash.Add(effects); hash.Add(draw.Order != 0);
+        var hash = (draw.Blend * 31 + effects) * 31 + (draw.Order != 0 ? 1 : 0);
         var same = _statHasPrevious && _statPreviousBlend == draw.Blend && _statPreviousEffects == effects
-            && _statPreviousOrder == draw.Order && ((ReadOnlySpan<D3D11TextureLayer>)RenderLayers).SequenceEqual(StatPreviousLayers);
-        for (var i = 0; i < RenderLayers.Length; i++) hash.Add(RenderLayers[i]);
-        StatMaterialKeys.Add(hash.ToHashCode());
-        if (same) EngineProfile.Count(EngineProfile.RtBatchable);
+            && _statPreviousOrder == draw.Order && LayerStats.Same(RenderLayers, StatPreviousLayers);
+        for (var i = 0; i < RenderLayers.Length; i++) hash = LayerStats.Hash(hash, in RenderLayers[i]);
+        StatMaterialKeys.Add(hash);
+        if (same) _tally.Batchable++;
         RenderLayers.CopyTo(StatPreviousLayers, 0);
         _statPreviousBlend = draw.Blend; _statPreviousEffects = effects; _statPreviousOrder = draw.Order; _statHasPrevious = true;
-        EngineProfile.AddSince(EngineProfile.RtState, stateStart);
     }
 
     private readonly record struct SceneDraw(MeshEntity Entity, SurfaceState Surface, int SurfaceIndex,

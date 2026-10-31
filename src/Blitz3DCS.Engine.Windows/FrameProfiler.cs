@@ -151,6 +151,72 @@ internal sealed class FrameProfiler
 }
 
 /// <summary>
+/// Per-frame render-queue tallies kept in plain integer fields (no slot lookup or profiler fetch per draw) and
+/// folded into the profiler counters once per frame by <see cref="Flush"/>.
+/// </summary>
+internal struct RenderTally
+{
+    internal int Visited, Meshes, CullFrustum, CullDist, Opaque, Alpha, Additive, OtherBlend, Sprite, Masked, Anim, Batchable;
+    /// <summary>Sampled state-build ticks, already scaled by the sampling stride.</summary>
+    internal long StateTicks;
+
+    /// <summary>Records the blend/sprite/masked/animated category of one queued draw.</summary>
+    internal void Category(int blend, bool sprite, bool masked, bool animated)
+    {
+        switch (blend) { case 0: Opaque++; break; case 1: Alpha++; break; case 3: Additive++; break; default: OtherBlend++; break; }
+        if (sprite) Sprite++;
+        if (masked) Masked++;
+        if (animated) Anim++;
+    }
+
+    /// <summary>Adds every non-zero tally to the profiler's current frame and clears it.</summary>
+    internal void Flush()
+    {
+        Add(EngineProfile.RtVisited, Visited); Add(EngineProfile.RtMeshes, Meshes);
+        Add(EngineProfile.RtCullFrustum, CullFrustum); Add(EngineProfile.RtCullDist, CullDist);
+        Add(EngineProfile.RtOpaque, Opaque); Add(EngineProfile.RtAlpha, Alpha); Add(EngineProfile.RtAdditive, Additive);
+        Add(EngineProfile.RtOtherBlend, OtherBlend); Add(EngineProfile.RtSprite, Sprite); Add(EngineProfile.RtMasked, Masked);
+        Add(EngineProfile.RtAnim, Anim); Add(EngineProfile.RtBatchable, Batchable);
+        if (StateTicks != 0) EngineProfile.AddTicks(EngineProfile.RtState, StateTicks);
+        this = default;
+    }
+
+    private static void Add(int counter, int amount)
+    {
+        if (amount != 0) EngineProfile.Count(counter, amount);
+    }
+}
+
+/// <summary>Allocation-free texture-layer equality and hashing for the per-draw state statistics.</summary>
+internal static class LayerStats
+{
+    internal static bool Same(ReadOnlySpan<D3D11TextureLayer> a, D3D11TextureLayer[] b)
+    {
+        for (var i = 0; i < a.Length; i++) if (!Same(in a[i], in b[i])) return false;
+        return true;
+    }
+
+    internal static bool Same(in D3D11TextureLayer a, in D3D11TextureLayer b) =>
+        ReferenceEquals(a.Texture, b.Texture) && a.Blend == b.Blend && a.ClampU == b.ClampU && a.ClampV == b.ClampV
+        && a.UseAlpha == b.UseAlpha && a.CoordinateSet == b.CoordinateSet && a.Masked == b.Masked
+        && a.BumpScale.Equals(b.BumpScale) && a.BumpOffset.Equals(b.BumpOffset)
+        && a.UvTransform.Equals(b.UvTransform) && a.BumpMatrix.Equals(b.BumpMatrix);
+
+    internal static int Hash(int seed, in D3D11TextureLayer l)
+    {
+        var h = seed * 31 + (l.Texture is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(l.Texture));
+        h = h * 31 + l.Blend;
+        h = h * 31 + ((l.ClampU ? 1 : 0) | (l.ClampV ? 2 : 0) | (l.UseAlpha ? 4 : 0) | (l.Masked ? 8 : 0));
+        h = h * 31 + l.CoordinateSet;
+        h = h * 31 + l.BumpScale.GetHashCode();
+        h = h * 31 + l.BumpOffset.GetHashCode();
+        if (l.UvTransform.HasValue) h = h * 31 + l.UvTransform.Value.GetHashCode();
+        if (l.BumpMatrix.HasValue) h = h * 31 + l.BumpMatrix.Value.GetHashCode();
+        return h;
+    }
+}
+
+/// <summary>
 /// Env-gated profiler front end. BLITZCS_ENGINE_PROFILE=1 enables; BLITZCS_ENGINE_PROFILE_LOG=path writes there
 /// (no file otherwise: stderr). When disabled the static readonly flag lets the JIT drop every call site.
 /// </summary>
