@@ -146,9 +146,15 @@ public static partial class LegacyGraphics
             SelectionChangeBuffer.Clear();
             if (PendingSelectionMeshes.Count != 0)
             {
-                foreach (var id in PendingSelectionMeshes)
+                // HashSet.Clear zeroes arrays sized by the set's historical peak; a short pending set is emptied
+                // entry by entry instead (O(count)), which matters because every pick query runs this prepare.
+                SelectionChangeBuffer.AddRange(PendingSelectionMeshes);
+                foreach (var id in SelectionChangeBuffer)
                     if (MeshEntities.TryGetValue(id, out var added)) ReevaluateSelection(scene, added);
-                PendingSelectionMeshes.Clear();
+                if (SelectionChangeBuffer.Count <= 64)
+                    foreach (var id in SelectionChangeBuffer) PendingSelectionMeshes.Remove(id);
+                else PendingSelectionMeshes.Clear();
+                SelectionChangeBuffer.Clear();
             }
         }
         // Incremental: only geometries whose own surfaces changed since the last prepare need a look.
