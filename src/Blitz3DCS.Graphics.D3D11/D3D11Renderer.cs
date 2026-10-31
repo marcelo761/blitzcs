@@ -398,6 +398,64 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     }
 
     /// <summary>Updates an existing dynamic mesh without replacing its GPU buffers.</summary>
+    /// <summary>
+    /// Creates a mesh whose vertex and index buffers are dynamic with at least the given capacities, so geometry
+    /// that is rebuilt every frame can be rewritten in place (Map WriteDiscard) instead of recreating buffers.
+    /// </summary>
+    public D3D11Mesh CreateResizableMesh(ReadOnlySpan<D3D11Vertex> vertices, ReadOnlySpan<uint> indices,
+        int vertexCapacity, uint indexCapacity)
+    {
+        CheckAccess();
+        ValidateTriangles(vertices, indices);
+        vertexCapacity = Math.Max(vertexCapacity, vertices.Length);
+        indexCapacity = Math.Max(indexCapacity, (uint)indices.Length);
+        ID3D11Buffer? vertexBuffer = null;
+        ID3D11Buffer? indexBuffer = null;
+        try
+        {
+            vertexBuffer = _device!.CreateBuffer(checked((uint)vertexCapacity * (uint)sizeof(D3D11Vertex)), BindFlags.VertexBuffer,
+                ResourceUsage.Dynamic, CpuAccessFlags.Write);
+            indexBuffer = _device.CreateBuffer(checked(indexCapacity * sizeof(uint)), BindFlags.IndexBuffer,
+                ResourceUsage.Dynamic, CpuAccessFlags.Write);
+            if (vertices.Length > 0) Upload(vertexBuffer, MemoryMarshal.AsBytes(vertices));
+            if (indices.Length > 0) Upload(indexBuffer, MemoryMarshal.AsBytes(indices));
+            var mesh = new D3D11Mesh(this, vertexBuffer, indexBuffer, (uint)indices.Length, vertices.Length, dynamic: true)
+            { IsResizable = true, VertexCapacity = vertexCapacity, IndexCapacity = indexCapacity };
+            _meshes.Add(mesh);
+            return mesh;
+        }
+        catch
+        {
+            indexBuffer?.Dispose();
+            vertexBuffer?.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Rewrites a resizable mesh in place when the new geometry fits its buffers. Returns false (changing nothing)
+    /// when it does not fit or the mesh is not resizable; the caller then creates a larger mesh.
+    /// </summary>
+    public bool TryUpdateResizableMesh(D3D11Mesh mesh, ReadOnlySpan<D3D11Vertex> vertices, ReadOnlySpan<uint> indices)
+    {
+        CheckAccess();
+        ArgumentNullException.ThrowIfNull(mesh);
+        if (!ReferenceEquals(mesh.Owner, this)) throw new ArgumentException("The mesh belongs to a different renderer.", nameof(mesh));
+        mesh.ThrowIfDisposed();
+        if (!mesh.IsResizable || vertices.Length > mesh.VertexCapacity || (uint)indices.Length > mesh.IndexCapacity) return false;
+        ValidateTriangles(vertices, indices);
+        var profileStart = D3D11FrameCounters.Enabled ? D3D11FrameCounters.Now() : 0;
+        if (vertices.Length > 0) Upload(mesh.VertexBuffer, MemoryMarshal.AsBytes(vertices));
+        if (indices.Length > 0) Upload(mesh.IndexBuffer, MemoryMarshal.AsBytes(indices));
+        mesh.VertexCount = vertices.Length;
+        mesh.IndexCount = (uint)indices.Length;
+        if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.DynamicVertexUploads); D3D11FrameCounters.AddSince(D3D11FrameCounters.DynamicUploadTicks, profileStart); }
+        return true;
+    }
+
+    /// <summary>Whether the renderer-side optimizations are enabled (BLITZCS_D3D11_NOOPT unset).</summary>
+    public static bool OptimizationsEnabled => Optimize;
+
     public void UpdateMeshVertices(D3D11Mesh mesh, ReadOnlySpan<D3D11Vertex> vertices)
     {
         CheckAccess();

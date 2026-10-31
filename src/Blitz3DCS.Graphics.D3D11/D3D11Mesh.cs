@@ -21,9 +21,13 @@ public sealed class D3D11Mesh : IDisposable
     internal D3D11Renderer Owner { get; }
     internal ID3D11Buffer VertexBuffer { get; }
     internal ID3D11Buffer IndexBuffer { get; }
-    internal uint IndexCount { get; }
-    internal int VertexCount { get; }
+    internal uint IndexCount { get; set; }
+    internal int VertexCount { get; set; }
     internal bool IsDynamic { get; }
+    /// <summary>Resizable meshes own dynamic vertex and index buffers larger than their current contents.</summary>
+    internal bool IsResizable { get; init; }
+    internal int VertexCapacity { get; init; }
+    internal uint IndexCapacity { get; init; }
 
     public void Dispose()
     {

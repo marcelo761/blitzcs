@@ -519,9 +519,24 @@ public static partial class LegacyGraphics
     private static void EnsureGpuMesh(D3D11Renderer renderer, SurfaceState surface)
     {
         if (!surface.Dirty && surface.GpuMesh is not null) return;
-        var replacement = renderer.CreateMesh(CollectionsMarshal.AsSpan(surface.Vertices), CollectionsMarshal.AsSpan(surface.Indices));
+        var vertices = CollectionsMarshal.AsSpan(surface.Vertices);
+        var indices = CollectionsMarshal.AsSpan(surface.Indices);
         var previous = surface.GpuMesh;
-        surface.GpuMesh = replacement;
+        var plan = GpuMeshUpdatePlan.Decide(D3D11Renderer.OptimizationsEnabled, previous is not null,
+            previous?.IsResizable ?? false, previous?.VertexCapacity ?? 0, previous?.IndexCapacity ?? 0,
+            vertices.Length, indices.Length);
+        switch (plan.Action)
+        {
+            case GpuMeshAction.UpdateInPlace when previous is not null && renderer.TryUpdateResizableMesh(previous, vertices, indices):
+                surface.Dirty = false;
+                return;
+            case GpuMeshAction.CreateResizable:
+                surface.GpuMesh = renderer.CreateResizableMesh(vertices, indices, plan.VertexCapacity, plan.IndexCapacity);
+                break;
+            default:
+                surface.GpuMesh = renderer.CreateMesh(vertices, indices);
+                break;
+        }
         surface.Dirty = false;
         previous?.Dispose();
     }
