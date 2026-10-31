@@ -191,13 +191,21 @@ internal static class EngineProfile
         // draws folded into them; objBufBytes: bytes written to the object constant buffer; cbBinds:
         // *SetConstantBuffers1 offset binds; drawFlushes: queue flushes (one object-buffer Map each).
         D3dApiDraws = RenderBase + 23, D3dInstancedDraws = RenderBase + 24, D3dInstancedObjects = RenderBase + 25,
-        D3dObjectBufferBytes = RenderBase + 26, D3dConstantBufferBinds = RenderBase + 27, D3dDrawFlushes = RenderBase + 28;
+        D3dObjectBufferBytes = RenderBase + 26, D3dConstantBufferBinds = RenderBase + 27, D3dDrawFlushes = RenderBase + 28,
+        // Instancing diagnostics: first failing criterion of a run end (mesh/texture/sampler/state/other), run-length
+        // histogram (1, 2, 3-4, 5-8, 9+) and draws moved by the additive grouping.
+        D3dBreakMesh = RenderBase + 29, D3dBreakTex = RenderBase + 30, D3dBreakSampler = RenderBase + 31,
+        D3dBreakState = RenderBase + 32, D3dBreakOther = RenderBase + 33, D3dRunLen1 = RenderBase + 34,
+        D3dRunLen2 = RenderBase + 35, D3dRunLen3To4 = RenderBase + 36, D3dRunLen5To8 = RenderBase + 37,
+        D3dRunLen9Plus = RenderBase + 38, D3dReordered = RenderBase + 39;
     internal static readonly string[] RenderCounterNames =
     [
         "skinModels", "skinMeshes", "skinVerts", "skinSkipped", "skinClean", "skinBones", "skinUploads",
         "rtVisited", "rtMeshes", "rtCullFrustum", "rtCullDist", "rtSurfaces", "rtSortKeys", "rtUniqueMat", "rtOpaque",
         "rtAlpha", "rtAdditive", "rtOtherBlend", "rtSprite", "rtMasked", "rtAnim", "rtBatchable", "rtLights",
-        "apiDraws", "instDraws", "instObjects", "objBufBytes", "cbBinds", "drawFlushes"
+        "apiDraws", "instDraws", "instObjects", "objBufBytes", "cbBinds", "drawFlushes",
+        "instRunBreakMesh", "instRunBreakTex", "instRunBreakSampler", "instRunBreakState", "instRunBreakOther",
+        "instRunLen1", "instRunLen2", "instRunLen3to4", "instRunLen5to8", "instRunLen9plus", "instReordered"
     ];
     internal static readonly string[] CounterNames = [.. BaseCounterNames, .. EngineStats.CounterNames, .. RenderCounterNames];
 
@@ -320,6 +328,17 @@ internal static class EngineProfile
         p.AddCount(D3dObjectBufferBytes, v[D3D11FrameCounters.ObjectBufferBytes]);
         p.AddCount(D3dConstantBufferBinds, v[D3D11FrameCounters.ConstantBufferBinds]);
         p.AddCount(D3dDrawFlushes, v[D3D11FrameCounters.DrawQueueFlushes]);
+        p.AddCount(D3dBreakMesh, v[D3D11FrameCounters.InstRunBreakMesh]);
+        p.AddCount(D3dBreakTex, v[D3D11FrameCounters.InstRunBreakTex]);
+        p.AddCount(D3dBreakSampler, v[D3D11FrameCounters.InstRunBreakSampler]);
+        p.AddCount(D3dBreakState, v[D3D11FrameCounters.InstRunBreakState]);
+        p.AddCount(D3dBreakOther, v[D3D11FrameCounters.InstRunBreakOther]);
+        p.AddCount(D3dRunLen1, v[D3D11FrameCounters.InstRunLen1]);
+        p.AddCount(D3dRunLen2, v[D3D11FrameCounters.InstRunLen2]);
+        p.AddCount(D3dRunLen3To4, v[D3D11FrameCounters.InstRunLen3To4]);
+        p.AddCount(D3dRunLen5To8, v[D3D11FrameCounters.InstRunLen5To8]);
+        p.AddCount(D3dRunLen9Plus, v[D3D11FrameCounters.InstRunLen9Plus]);
+        p.AddCount(D3dReordered, v[D3D11FrameCounters.ReorderedDraws]);
         Array.Clear(v);
         FoldEngineStats(p, EngineStats.Counts, EngineStats.Ticks);
         var now = Stopwatch.GetTimestamp();

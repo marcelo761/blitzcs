@@ -15,6 +15,16 @@ internal interface IDrawRecordSource
     bool CanInstance(int first, int candidate);
 }
 
+/// <summary>Adds the commutativity query the order-independent grouping needs on top of <see cref="IDrawRecordSource"/>.</summary>
+internal interface IReorderSource : IDrawRecordSource
+{
+    /// <summary>
+    /// Whether the draw's output does not depend on its position among other commutative draws: additive blending
+    /// (a pure sum into the target) with a read-only depth test.
+    /// </summary>
+    bool Commutative(int index);
+}
+
 /// <summary>One device draw: a single queued draw or an instanced run of consecutive queued draws.</summary>
 internal struct PlannedDraw
 {
@@ -90,6 +100,58 @@ internal static class DrawRecordPlanner
             i += run;
         }
         return cursor;
+    }
+
+    /// <summary>How many most recent groups a draw is compared with when looking for a group to join.</summary>
+    public const int GroupSearchLimit = 32;
+
+    /// <summary>
+    /// Fills <paramref name="order"/> with the submit order: identity, except that inside each maximal block of
+    /// consecutive commutative draws, draws that can share an instanced draw are gathered behind the first of
+    /// their kind (groups keep first-appearance order, members keep their relative order). Non-commutative draws
+    /// never move and nothing moves across them. Returns whether the order differs from the identity.
+    /// </summary>
+    public static bool GroupCommutative<T>(ref T source, int[] order, int[] groupOf, int[] groupStart) where T : IReorderSource
+    {
+        var count = source.Count;
+        var changed = false;
+        for (var i = 0; i < count; i++) order[i] = i;
+        for (var start = 0; start < count;)
+        {
+            if (!source.Commutative(start)) { start++; continue; }
+            var end = start + 1;
+            while (end < count && source.Commutative(end)) end++;
+            if (end - start > 1) changed |= GroupBlock(ref source, order, groupOf, groupStart, start, end);
+            start = end;
+        }
+        return changed;
+    }
+
+    private static bool GroupBlock<T>(ref T source, int[] order, int[] groupOf, int[] groupStart, int start, int end)
+        where T : IReorderSource
+    {
+        var groups = 0; // groupStart[g] first holds the head draw of group g, then its member count, then its output position
+        for (var i = start; i < end; i++)
+        {
+            var group = -1;
+            for (var g = groups - 1; g >= 0 && g >= groups - GroupSearchLimit; g--)
+                if (source.CanInstance(groupStart[g], i)) { group = g; break; }
+            if (group < 0) { group = groups++; groupStart[group] = i; }
+            groupOf[i] = group;
+        }
+        if (groups == end - start) return false;
+        for (var g = 0; g < groups; g++) groupStart[g] = 0;
+        for (var i = start; i < end; i++) groupStart[groupOf[i]]++;
+        var position = start;
+        for (var g = 0; g < groups; g++) { var size = groupStart[g]; groupStart[g] = position; position += size; }
+        var changed = false;
+        for (var i = start; i < end; i++)
+        {
+            var slot = groupStart[groupOf[i]]++;
+            order[slot] = i;
+            changed |= slot != i;
+        }
+        return changed;
     }
 
     private static int Allocate(ref int cursor, int bytes)

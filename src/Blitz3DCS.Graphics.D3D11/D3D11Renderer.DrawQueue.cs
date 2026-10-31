@@ -208,6 +208,7 @@ public sealed unsafe partial class D3D11Renderer
         if (count == 0) return;
         _queueCount = 0;
         _queueEpoch++;
+        if (_instancing && InstancingReorder) GroupCommutativeDraws(count);
         var source = new QueuedRecordSource(this, count);
         var bytes = DrawRecordPlanner.Plan(ref source, _instancing, _drawPlan);
         var reservation = _objectRing!.Reserve(bytes);
@@ -242,8 +243,91 @@ public sealed unsafe partial class D3D11Renderer
             D3D11FrameCounters.Add(D3D11FrameCounters.ApiDraws, plan.Length);
             D3D11FrameCounters.Add(D3D11FrameCounters.InstancedDraws, instancedDraws);
             D3D11FrameCounters.Add(D3D11FrameCounters.InstancedObjects, instancedObjects);
+            CountRuns(plan);
             CountSkips();
         }
+    }
+
+    internal static readonly bool InstancingReorder = Environment.GetEnvironmentVariable("BLITZCS_D3D11_NOREORDER") != "1";
+
+    private int[] _reorder = [], _reorderGroupOf = [], _reorderGroupStart = [];
+    private QueuedMeshDraw[] _reorderDraws = [];
+    private TransformConstants[] _reorderTransforms = [];
+    private MaterialConstants[] _reorderMaterials = [];
+    private D3D11Texture?[] _reorderTextures = [];
+
+    /// <summary>
+    /// Gathers identical additive draws (a pure sum into the target, read-only depth) that are separated by other
+    /// additive draws so they can form instanced runs; the sum does not depend on the order of the addends.
+    /// </summary>
+    private void GroupCommutativeDraws(int count)
+    {
+        if (_reorder.Length < count)
+        {
+            var size = _queuedDraws.Length;
+            _reorder = new int[size]; _reorderGroupOf = new int[size]; _reorderGroupStart = new int[size + 1];
+        }
+        var source = new QueuedRecordSource(this, count);
+        if (!DrawRecordPlanner.GroupCommutative(ref source, _reorder, _reorderGroupOf, _reorderGroupStart)) return;
+        if (_reorderDraws.Length < _queuedDraws.Length)
+        {
+            _reorderDraws = new QueuedMeshDraw[_queuedDraws.Length];
+            _reorderTransforms = new TransformConstants[_queuedDraws.Length];
+            _reorderMaterials = new MaterialConstants[_queuedDraws.Length];
+            _reorderTextures = new D3D11Texture?[_queuedTextures.Length];
+        }
+        for (var k = 0; k < count; k++)
+        {
+            var from = _reorder[k];
+            _reorderDraws[k] = _queuedDraws[from];
+            _reorderTransforms[k] = _queuedTransforms[from];
+            _reorderMaterials[k] = _queuedMaterials[from];
+            Array.Copy(_queuedTextures, from * StageSlots, _reorderTextures, k * StageSlots, StageSlots);
+        }
+        Array.Copy(_reorderDraws, _queuedDraws, count);
+        Array.Copy(_reorderTransforms, _queuedTransforms, count);
+        Array.Copy(_reorderMaterials, _queuedMaterials, count);
+        Array.Copy(_reorderTextures, _queuedTextures, count * StageSlots);
+        Array.Clear(_reorderDraws, 0, count);
+        Array.Clear(_reorderTextures, 0, count * StageSlots);
+        if (D3D11FrameCounters.Enabled)
+        {
+            var moved = 0;
+            for (var k = 0; k < count; k++) if (_reorder[k] != k) moved++;
+            D3D11FrameCounters.Add(D3D11FrameCounters.ReorderedDraws, moved);
+        }
+    }
+
+    /// <summary>Records the run-length histogram and, for every run that ended, the first criterion that failed.</summary>
+    private void CountRuns(ReadOnlySpan<PlannedDraw> plan)
+    {
+        for (var i = 0; i < plan.Length; i++)
+        {
+            var run = plan[i].Count;
+            D3D11FrameCounters.Add(run switch
+            {
+                1 => D3D11FrameCounters.InstRunLen1, 2 => D3D11FrameCounters.InstRunLen2,
+                <= 4 => D3D11FrameCounters.InstRunLen3To4, <= 8 => D3D11FrameCounters.InstRunLen5To8,
+                _ => D3D11FrameCounters.InstRunLen9Plus,
+            });
+            if (i + 1 < plan.Length)
+                D3D11FrameCounters.Add(ClassifyBreak(_queuedDraws[plan[i].First], _queuedDraws[plan[i + 1].First],
+                    _queuedTextures.AsSpan(plan[i].First * StageSlots, StageSlots),
+                    _queuedTextures.AsSpan(plan[i + 1].First * StageSlots, StageSlots)));
+        }
+    }
+
+    /// <summary>The counter naming the first <see cref="CanShareInstancedDraw"/> criterion two neighbouring draws fail.</summary>
+    internal static int ClassifyBreak(in QueuedMeshDraw first, in QueuedMeshDraw next,
+        ReadOnlySpan<D3D11Texture?> firstTextures, ReadOnlySpan<D3D11Texture?> nextTextures)
+    {
+        if (!ReferenceEquals(first.Mesh, next.Mesh) || first.IndexCount != next.IndexCount) return D3D11FrameCounters.InstRunBreakMesh;
+        if (first.Stages != next.Stages) return D3D11FrameCounters.InstRunBreakTex;
+        for (var stage = 0; stage < first.Stages; stage++)
+            if (!ReferenceEquals(firstTextures[stage], nextTextures[stage])) return D3D11FrameCounters.InstRunBreakTex;
+        if (first.SamplerBits != next.SamplerBits) return D3D11FrameCounters.InstRunBreakSampler;
+        if (first.AlphaBlend != next.AlphaBlend || first.State != next.State) return D3D11FrameCounters.InstRunBreakState;
+        return D3D11FrameCounters.InstRunBreakOther;
     }
 
     private void WritePlannedRecords(Span<byte> region, in PlannedDraw draw)
@@ -361,12 +445,16 @@ public sealed unsafe partial class D3D11Renderer
         return SameBytesExceptColor(firstMaterial, candidateMaterial);
     }
 
+    /// <summary>Additive blend (SrcAlpha, One) with the read-only depth state: output is a sum, independent of order.</summary>
+    internal static bool IsCommutative(in D3D11LightingDrawState state) => state.Blend == 3 && state.DepthMode == 1;
+
     private static bool SameBytesExceptColor(in MaterialConstants a, in MaterialConstants b) =>
         MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(in a, 1))[16..]
             .SequenceEqual(MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(in b, 1))[16..]);
 
-    private readonly struct QueuedRecordSource(D3D11Renderer renderer, int count) : IDrawRecordSource
+    private readonly struct QueuedRecordSource(D3D11Renderer renderer, int count) : IReorderSource
     {
+        public bool Commutative(int index) => IsCommutative(renderer._queuedDraws[index].State);
         public int Count => count;
         public bool SameTransform(int a, int b) => SameBytes(renderer._queuedTransforms[a], renderer._queuedTransforms[b]);
         public bool SameMaterial(int a, int b) => SameBytes(renderer._queuedMaterials[a], renderer._queuedMaterials[b]);
