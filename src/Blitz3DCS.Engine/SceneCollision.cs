@@ -190,25 +190,16 @@ public sealed partial class SceneGraph
         var nodes = _typedNodes;
         var states = _typedStates;
         var typedCount = _typedCount;
-        // Untyped entities never hold collision results (EntityType resets them), so only typed ones need clearing.
-        for (var i = 0; i < typedCount; i++)
-        {
-            var collisions = states[i].Collisions;
-            if (collisions.Count != 0) collisions.Clear();
-        }
-
         EngineStats.AddTicks(EngineStats.ColBroad, statStart);
-        var sources = _sourceIndices;
-        for (var i = 0; i < _sourceCount; i++)
-        {
-            var index = sources[i];
-            ProcessCollisionsTimed(nodes[index], states[index]);
-        }
-
-        // Previous transforms of untyped entities are unobservable: EntityType/Show/Hide/Copy reset them on use.
+        // Mirrors World::update (world.cpp:485-493): per object beginUpdate (clear its results, object.cpp:63), collide as
+        // a source against targets at their PREVIOUS transform (world.cpp:206), endUpdate (prev = current, object.cpp:75-78).
+        // Untyped entities hold no results and their previous transforms are unobservable (EntityType/Show/Hide/Copy reset
+        // them on use), so only typed entities take part. Order: persistent root list, depth first (upstream: creation order).
         for (var i = 0; i < typedCount; i++)
         {
             var state = states[i];
+            if (state.Collisions.Count != 0) state.Collisions.Clear();
+            if (_rulesBySource[state.Type] is not null) ProcessCollisionsTimed(nodes[i], state);
             var current = GetWorldTransform(nodes[i]);
             if (EngineStats.Enabled)
             {
@@ -304,24 +295,20 @@ public sealed partial class SceneGraph
 
     private void UpdateWorldLegacy()
     {
+        // Reference implementation of the upstream order (world.cpp:474-493), deliberately unoptimised.
         foreach (var node in _enabledCollisionNodes)
         {
             var state = GetCollisionState(node.Id);
-            state.Collisions.Clear();
             if (state.Type == 0) continue;
             (_collisionEntitiesByType[state.Type] ??= []).Add(node);
         }
 
-        foreach (var source in _enabledCollisionNodes)
-        {
-            var state = GetCollisionState(source.Id);
-            if (state.Type != 0 && HasSourceCollisionRule(state.Type))
-                ProcessCollisionsTimed(source, state);
-        }
-
         foreach (var node in _enabledCollisionNodes)
         {
             var state = GetCollisionState(node.Id);
+            state.Collisions.Clear();
+            if (state.Type != 0 && HasSourceCollisionRule(state.Type))
+                ProcessCollisionsTimed(node, state);
             state.PreviousTransform = GetWorldTransform(node);
             state.HasPreviousTransform = true;
         }
@@ -617,7 +604,7 @@ public sealed partial class SceneGraph
                 var targetState = target.CollisionState ?? GetCollisionState(target.Id);
                 var statTryStart = EngineStats.Now();
                 EngineStats.Add(EngineStats.ColPairs);
-                var hitFound = TryHit(rule, target, targetState, lineStart, lineDirection, sourceRadius, yScale, nearestTime, broad, out var candidate);
+                var hitFound = TryHit(rule, target, targetState, lineStart, lineDirection, sourceRadius, yScale, nearestTime, broad, out var candidate, previous: true);
                 if (EngineStats.Enabled) _statTry += Stopwatch.GetTimestamp() - statTryStart;
                 if (!hitFound) continue;
                 nearest = candidate;
@@ -632,10 +619,11 @@ public sealed partial class SceneGraph
 
     /// <param name="broad">Apply the swept-volume broadphase; only the collision sweep sets this, picking passes false.</param>
     private bool TryHit(CollisionRule rule, Node target, CollisionEntityState targetState, SceneVector3 lineStart,
-        SceneVector3 lineDirection, float radius, float yScale, float maxTime, bool broad, out SweepHit hit)
+        SceneVector3 lineDirection, float radius, float yScale, float maxTime, bool broad, out SweepHit hit, bool previous = false)
     {
         hit = default;
-        var targetTransform = GetWorldTransform(target);
+        // Collision sweeps test targets at the previous-frame transform (world.cpp:206); picking uses the current one.
+        var targetTransform = previous ? targetState.PreviousTransform : GetWorldTransform(target);
         if (broad && BroadReject(rule.Method, targetTransform, targetState, yScale))
         {
             EngineStats.Add(EngineStats.ColPairsRejBound);

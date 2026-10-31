@@ -9,8 +9,10 @@ public sealed class SceneCollisionTests
     public void Sphere_collision_records_symmetric_one_based_results_and_stop_response()
     {
         var scene = new SceneGraph();
-        var source = scene.CreatePivot();
+        // Upstream World::update clears each object's results when that object's turn comes (world.cpp:488,
+        // object.cpp:63), so the target must precede the source for both sides to keep the record.
         var target = scene.CreatePivot();
+        var source = scene.CreatePivot();
         scene.PositionEntity(target, 5, 0, 0);
         scene.EntityType(source, 1);
         scene.EntityType(target, 2);
