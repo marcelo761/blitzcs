@@ -455,9 +455,6 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         return true;
     }
 
-    /// <summary>Always true; kept only until callers drop the check.</summary>
-    public static bool OptimizationsEnabled => true;
-
     public void UpdateMeshVertices(D3D11Mesh mesh, ReadOnlySpan<D3D11Vertex> vertices)
     {
         CheckAccessKeepDraws();

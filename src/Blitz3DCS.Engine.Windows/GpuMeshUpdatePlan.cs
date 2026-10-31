@@ -11,10 +11,10 @@ internal readonly record struct GpuMeshUpdatePlan(GpuMeshAction Action, int Vert
 {
     private const int MinimumVertexCapacity = 32;
 
-    internal static GpuMeshUpdatePlan Decide(bool optimized, bool hasMesh, bool meshResizable, int vertexCapacity,
+    internal static GpuMeshUpdatePlan Decide(bool hasMesh, bool meshResizable, int vertexCapacity,
         uint indexCapacity, int vertexCount, int indexCount)
     {
-        if (!optimized || !hasMesh) return new(GpuMeshAction.CreateImmutable, 0, 0);
+        if (!hasMesh) return new(GpuMeshAction.CreateImmutable, 0, 0);
         if (meshResizable && vertexCount <= vertexCapacity && (uint)indexCount <= indexCapacity)
             return new(GpuMeshAction.UpdateInPlace, vertexCapacity, indexCapacity);
         var vertices = Math.Max(MinimumVertexCapacity, (int)RoundUp((uint)Math.Max(vertexCount, 1) + (uint)Math.Max(vertexCount, 1) / 2));

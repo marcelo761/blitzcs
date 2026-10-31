@@ -521,7 +521,7 @@ public static partial class LegacyGraphics
         var vertices = CollectionsMarshal.AsSpan(surface.Vertices);
         var indices = CollectionsMarshal.AsSpan(surface.Indices);
         var previous = surface.GpuMesh;
-        var plan = GpuMeshUpdatePlan.Decide(D3D11Renderer.OptimizationsEnabled, previous is not null,
+        var plan = GpuMeshUpdatePlan.Decide(previous is not null,
             previous?.IsResizable ?? false, previous?.VertexCapacity ?? 0, previous?.IndexCapacity ?? 0,
             vertices.Length, indices.Length);
         switch (plan.Action)
