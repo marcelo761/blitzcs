@@ -10,7 +10,7 @@ namespace Blitz3DCS.Engine.Windows;
 public static partial class LegacyGraphics
 {
     private static readonly Dictionary<int, MeshEntity> MeshEntities = [];
-    private static readonly Dictionary<int, CameraState> Cameras = [];
+    internal static readonly Dictionary<int, CameraState> Cameras = [];
     private static readonly Dictionary<int, SurfaceState> Surfaces = [];
     private static readonly D3D11TextureLayer[] RenderLayers = new D3D11TextureLayer[8];
     private static D3D11Renderer? _renderer;
@@ -190,6 +190,7 @@ public static partial class LegacyGraphics
             var surface = new SurfaceState(handle, mesh) { Material = material, Geometry = owner.Geometry };
             Surfaces.Add(handle, surface);
             owner.SurfaceHandles.Add(handle);
+            owner.Geometry.SurfaceStates.Add(surface);
             SurfaceState.MutationEpoch++;
             MarkGeometryChanged(owner.Geometry);
             return handle;
@@ -604,6 +605,8 @@ public static partial class LegacyGraphics
         public (Vector3 Minimum, Vector3 Maximum)? CullBox { get; set; }
         public int References { get; set; } = 1;
         public List<int> SurfaceHandles { get; } = [];
+        /// <summary>SurfaceState objects parallel to SurfaceHandles (the dictionary entry is never replaced), for lookup-free traversal.</summary>
+        public List<SurfaceState> SurfaceStates { get; } = [];
         public long CollisionVersion { get; set; } = -1;
         /// <summary>Member of the maintained collision-relevant set (owned by PrepareCollisionGeometry).</summary>
         public bool InCollisionSet { get; set; }
@@ -641,7 +644,7 @@ public static partial class LegacyGraphics
         }
     }
 
-    private sealed class CameraState(int entity, (int R, int G, int B) clearColor)
+    internal sealed class CameraState(int entity, (int R, int G, int B) clearColor)
     {
         public int Entity { get; } = entity;
         public (float R, float G, float B) ClearColor { get; set; } =

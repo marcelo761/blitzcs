@@ -34,21 +34,23 @@ public static partial class LegacyGraphics
 
     public static int TrisRendered() => _trianglesRendered;
 
-    private static void DrawSceneMeshes(D3D11Renderer renderer, SceneGraph scene, CameraState camera,
-        Matrix4x4 cameraWorld, Matrix4x4 view, Matrix4x4 projection)
+    /// <summary>Walks the visible hierarchy, culls, and fills <see cref="_sceneDraws"/> (unsorted).</summary>
+    internal static void BuildSceneDraws(SceneGraph scene, CameraState camera, Matrix4x4 cameraWorld,
+        Matrix4x4 view, Matrix4x4 projection, bool optimized)
     {
-        var traversalStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         _sceneDrawCount = 0;
         _trianglesRendered = 0;
         var eye = new Vector3(cameraWorld.M41, cameraWorld.M42, cameraWorld.M43);
-        scene.CopyVisibleEntityIds(RenderTraversal);
+        if (optimized) scene.CopyVisibleEntityWorlds(RenderTraversal, RenderWorlds);
+        else scene.CopyVisibleEntityIds(RenderTraversal);
         EngineProfile.Count(EngineProfile.RtVisited, RenderTraversal.Count);
+        var hasSprites = !optimized || Sprites.Count != 0;
         for (var entityIndex = 0; entityIndex < RenderTraversal.Count; entityIndex++)
         {
             var id = RenderTraversal[entityIndex];
             if (!MeshEntities.TryGetValue(id, out var entity)) continue;
             EngineProfile.Count(EngineProfile.RtMeshes);
-            var entityWorld = ToWorldMatrix(scene.GetWorldTransform(id));
+            var entityWorld = ToWorldMatrix(optimized ? RenderWorlds[entityIndex] : scene.GetWorldTransform(id));
             var distanceSquared = Vector3.DistanceSquared(eye, new Vector3(entityWorld.M41, entityWorld.M42, entityWorld.M43));
             var fade = 1f;
             if (entity.AutoFade is { } range)
@@ -59,7 +61,8 @@ public static partial class LegacyGraphics
                 if (fade <= 0) { EngineProfile.Count(EngineProfile.RtCullDist); continue; }
             }
             if (entity.Animated is { SkinCulled: true }) { EngineProfile.Count(EngineProfile.RtCullFrustum); continue; }
-            var isSprite = Sprites.TryGetValue(id, out var sprite);
+            SpriteState? sprite = null;
+            var isSprite = hasSprites && Sprites.TryGetValue(id, out sprite);
             var world = isSprite ? BuildSpriteWorldMatrix(sprite!, entityWorld, cameraWorld) : entityWorld;
             var wvp = world * view * projection;
             if (entity.Plane is not null)
@@ -67,9 +70,10 @@ public static partial class LegacyGraphics
                 if (!PreparePlane(entity, world, cameraWorld, camera)) { EngineProfile.Count(EngineProfile.RtCullFrustum); continue; }
             }
             else if (!isSprite && !IsMeshVisible(entity, wvp)) { EngineProfile.Count(EngineProfile.RtCullFrustum); continue; }
+            var surfaces = entity.Geometry.SurfaceStates;
             for (var index = 0; index < entity.SurfaceHandles.Count; index++)
             {
-                var surface = Surfaces[entity.SurfaceHandles[index]];
+                var surface = optimized ? surfaces[index] : Surfaces[entity.SurfaceHandles[index]];
                 if (surface.Indices.Count == 0 && entity.Plane is null) continue;
                 var material = entity.Material;
                 ValidateComposedMaterial(surface.Material, material);
@@ -95,18 +99,16 @@ public static partial class LegacyGraphics
                     entity.Order, distanceSquared, entityIndex);
             }
         }
+    }
+
+    private static void SortSceneDraws(bool legacy)
+    {
         var drawCount = _sceneDrawCount;
         var draws = _sceneDraws;
         if (_drawOrder.Length < drawCount) _drawOrder = new int[draws.Length];
         var order = _drawOrder;
-        var sortStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
-        if (EngineProfile.Enabled) EngineProfile.AddTicks(EngineProfile.RtTraverse, sortStart - traversalStart);
-        EngineProfile.Count(EngineProfile.RtSurfaces, drawCount);
-        EngineProfile.Count(EngineProfile.RtSortKeys, drawCount);
         for (var i = 0; i < drawCount; i++) order[i] = i;
-        // The comparer is a strict total order (entity index + surface index are unique per draw),
-        // so an unstable sort over an index array yields the same sequence as sorting the structs.
-        if (EngineOptimizations.Disabled)
+        if (legacy)
             Array.Sort(draws, 0, drawCount, SceneDrawComparer.Instance);
         else
         {
@@ -114,6 +116,44 @@ public static partial class LegacyGraphics
             Array.Sort(order, 0, drawCount, IndexComparer);
             IndexComparer.Draws = null;
         }
+    }
+
+    private static readonly List<SceneTransform> RenderWorlds = [];
+
+    /// <summary>Test hook: the draw sequence (submit order) produced by the legacy or the optimized path.</summary>
+    internal static List<(int Entity, int SurfaceIndex, Matrix4x4 World, Matrix4x4 Wvp, Vector4 Color, int Blend)>
+        SnapshotSceneDrawsForTesting(int cameraEntity, int width, int height, bool optimized)
+    {
+        var scene = RequireScene();
+        var camera = GetCamera(cameraEntity);
+        var cameraWorld = ToWorldMatrix(scene.GetWorldTransform(cameraEntity));
+        Matrix4x4.Invert(cameraWorld, out var view);
+        var projection = CreateCameraProjection(camera, width, height);
+        BuildSceneDraws(scene, camera, cameraWorld, view, projection, optimized);
+        SortSceneDraws(!optimized);
+        var result = new List<(int, int, Matrix4x4, Matrix4x4, Vector4, int)>();
+        for (var i = 0; i < _sceneDrawCount; i++)
+        {
+            ref readonly var draw = ref _sceneDraws[optimized ? _drawOrder[i] : i];
+            result.Add((draw.Entity.Entity, draw.SurfaceIndex, draw.World, draw.WorldViewProjection, draw.Color, draw.Blend));
+        }
+        ClearSceneDraws();
+        return result;
+    }
+
+    private static void DrawSceneMeshes(D3D11Renderer renderer, SceneGraph scene, CameraState camera,
+        Matrix4x4 cameraWorld, Matrix4x4 view, Matrix4x4 projection)
+    {
+        var traversalStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+        BuildSceneDraws(scene, camera, cameraWorld, view, projection, !EngineOptimizations.Disabled);
+        var drawCount = _sceneDrawCount;
+        var draws = _sceneDraws;
+        var sortStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
+        if (EngineProfile.Enabled) EngineProfile.AddTicks(EngineProfile.RtTraverse, sortStart - traversalStart);
+        EngineProfile.Count(EngineProfile.RtSurfaces, drawCount);
+        EngineProfile.Count(EngineProfile.RtSortKeys, drawCount);
+        SortSceneDraws(EngineOptimizations.Disabled);
+        var order = _drawOrder;
         if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.RtSort, sortStart);
         D3D11Fog? cameraFog = null;
         if (drawCount > 0) cameraFog = GetCameraFogForRendering(camera.Entity);
