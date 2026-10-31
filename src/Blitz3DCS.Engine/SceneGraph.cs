@@ -8,7 +8,7 @@ public sealed partial class SceneGraph
 
     // Root entities ordered by dictionary slot, i.e. the order `_nodes.Values` enumerates them. Slots are assigned with
     // the same LIFO free-list policy as Dictionary<TKey,TValue>, so iterating _roots matches the original root scan.
-    private readonly List<Node> _roots = [];
+    private readonly List<Node> _rootList = [];
     private readonly List<int> _freeSlots = [];
     private int _nextSlot;
     /// <summary>Bumped by every change that can alter enabled-node order, collision types or rules.</summary>
@@ -33,29 +33,40 @@ public sealed partial class SceneGraph
         _structureVersion++;
     }
 
+    // O(1) add/remove: roots are indexed by slot and the slot-ordered list is rebuilt lazily on first read after a change.
+    private Node?[] _rootBySlot = new Node?[64];
+    private bool _rootsDirty;
+
+    /// <summary>Slot-ordered root list (the original dictionary iteration order), rebuilt on demand.</summary>
+    private List<Node> _roots
+    {
+        get
+        {
+            if (_rootsDirty)
+            {
+                _rootList.Clear();
+                var slots = _rootBySlot;
+                var limit = Math.Min(_nextSlot, slots.Length);
+                for (var i = 0; i < limit; i++)
+                    if (slots[i] is { } root) _rootList.Add(root);
+                _rootsDirty = false;
+            }
+            return _rootList;
+        }
+    }
+
     private void AddRoot(Node node)
     {
-        var low = 0;
-        var high = _roots.Count;
-        while (low < high)
-        {
-            var mid = (low + high) >> 1;
-            if (_roots[mid].Slot < node.Slot) low = mid + 1; else high = mid;
-        }
-        _roots.Insert(low, node);
+        if (node.Slot >= _rootBySlot.Length) Array.Resize(ref _rootBySlot, Math.Max(node.Slot + 1, _rootBySlot.Length * 2));
+        _rootBySlot[node.Slot] = node;
+        _rootsDirty = true;
         node.InRoots = true;
     }
 
     private void RemoveRoot(Node node)
     {
-        var low = 0;
-        var high = _roots.Count;
-        while (low < high)
-        {
-            var mid = (low + high) >> 1;
-            if (_roots[mid].Slot < node.Slot) low = mid + 1; else high = mid;
-        }
-        _roots.RemoveAt(low);
+        _rootBySlot[node.Slot] = null;
+        _rootsDirty = true;
         node.InRoots = false;
     }
 
