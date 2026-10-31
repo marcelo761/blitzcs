@@ -81,6 +81,7 @@ public sealed partial class AudioRuntime : IDisposable
                 _device = device;
                 _mixer = mixer;
                 _slotTokens = slotTokens;
+                PublishChannels();
                 _errorCode = 0;
                 _mixRate = mixRate;
                 _maxSoftwareChannels = maxSoftwareChannels;
@@ -124,6 +125,7 @@ public sealed partial class AudioRuntime : IDisposable
             streams = _assets.Values.Select(static asset => asset.Buffered).OfType<BufferedAudioStream>().ToArray();
             _assets.Clear();
             _channels.Clear();
+            PublishChannels();
             _paused.Clear();
             _slotTokens = [];
             if (_device != 0)

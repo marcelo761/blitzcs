@@ -142,6 +142,7 @@ public sealed partial class AudioRuntime
             var token = Token();
             _slotTokens[slot] = token;
             _channels[token] = slot;
+            PublishChannels();
             try { EnsurePump(); }
             catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
             { _mixer.Stop(slot); PruneChannels(); return Fail(3, error.Message, -1); }
@@ -191,13 +192,29 @@ public sealed partial class AudioRuntime
         {
             PruneChannels();
             if (_mixer is null || !_channels.Remove(channel, out var slot)) return Fail(14, "Invalid or stopped channel.");
-            _mixer.Stop(slot); _paused.Remove(channel); _slotTokens[slot] = 0; return Success();
+            _mixer.Stop(slot); _paused.Remove(channel); _slotTokens[slot] = 0; PublishChannels(); return Success();
         }
     }
+    /// <summary>
+    /// Lock-free: reads the channel-token snapshot republished (under the gate) after every change to the live
+    /// channel set, so a game-thread poll never waits for the mixer section that holds the gate.
+    /// </summary>
     public int IsPlaying(int channel)
     {
-        lock (_gate) { PruneChannels(); return _mixer is null ? Fail(2, "Audio is not initialized.") : _channels.ContainsKey(channel) ? Success() : Fail(14, "Invalid or stopped channel."); }
+        var snapshot = Volatile.Read(ref _snapshot);
+        if (!snapshot.Ready) return FailUnlocked(2, "Audio is not initialized.");
+        return snapshot.Tokens.Contains(channel) ? SuccessUnlocked() : FailUnlocked(14, "Invalid or stopped channel.");
     }
+    private sealed class ChannelSnapshot(bool ready, HashSet<int> tokens)
+    {
+        internal readonly bool Ready = ready;
+        internal readonly HashSet<int> Tokens = tokens;
+    }
+    private ChannelSnapshot _snapshot = new(false, []);
+    private void PublishChannels() =>
+        Volatile.Write(ref _snapshot, new ChannelSnapshot(_mixer is not null, new HashSet<int>(_channels.Keys)));
+    private int FailUnlocked(int code, string message) { Volatile.Write(ref _errorCode, code); LastError = message; return 0; }
+    private int SuccessUnlocked() { Volatile.Write(ref _errorCode, 0); LastError = null; return 1; }
     public int SetVolume(int channel, int volume) => Control(channel, mixer => mixer.SetVolume(Slot(channel), volume is >= 0 and <= 255 ? volume : 0));
     public int SetPan(int channel, int pan) => pan is < 0 or > 255 ? InvalidParameter("Pan must be between 0 and 255.")
         : Control(channel, mixer => mixer.SetPan(Slot(channel), pan));
@@ -258,14 +275,16 @@ public sealed partial class AudioRuntime
     }
     private void PruneChannels()
     {
+        var changed = false;
         for (var slot = 0; slot < _slotTokens.Length; slot++)
         {
             var token = _slotTokens[slot];
             if (token != 0 && (_mixer is null || !_mixer.IsPlaying(slot)))
             {
-                _channels.Remove(token); _paused.Remove(token); _slotTokens[slot] = 0;
+                _channels.Remove(token); _paused.Remove(token); _slotTokens[slot] = 0; changed = true;
             }
         }
+        if (changed) PublishChannels();
     }
     private void EnsurePump()
     {
