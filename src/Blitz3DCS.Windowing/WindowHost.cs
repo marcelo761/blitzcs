@@ -28,13 +28,24 @@ public sealed class WindowHost : IDisposable
     private double _wheelRemainder;
     private const string Cp1252Special = "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ";
 
-    public WindowHost(int width, int height, string title) : this(new SdlWindowBackend(width, height, title)) { }
+    private readonly long _pollIntervalTicks;
+    private readonly Func<long> _clock;
+    private long _lastPump;
+    private bool _pumped;
+
+    /// <summary>Default minimum wall time between SDL pumps triggered by input polls (BLITZCS_INPUT_PUMP_US overrides; 0 disables).</summary>
+    internal static long DefaultPollIntervalMicros { get; } =
+        long.TryParse(Environment.GetEnvironmentVariable("BLITZCS_INPUT_PUMP_US"), out var us) && us >= 0 ? us : 300;
+
+    public WindowHost(int width, int height, string title) : this(new SdlWindowBackend(width, height, title), DefaultPollIntervalMicros) { }
 
     internal static WindowHost CreateHiddenApplicationWindow(string title) =>
-        new(new SdlWindowBackend(1, 1, title, hidden: true));
+        new(new SdlWindowBackend(1, 1, title, hidden: true), DefaultPollIntervalMicros);
 
-    internal WindowHost(IWindowBackend backend)
+    internal WindowHost(IWindowBackend backend, long pollIntervalMicros = 0, Func<long>? clock = null)
     {
+        _clock = clock ?? System.Diagnostics.Stopwatch.GetTimestamp;
+        _pollIntervalTicks = clock is null ? pollIntervalMicros * System.Diagnostics.Stopwatch.Frequency / 1_000_000 : pollIntervalMicros;
         _backend = backend;
         _dispatch = ProcessEvent;
         _hasFocus = backend.HasFocus;
@@ -68,21 +79,38 @@ public sealed class WindowHost : IDisposable
     public void ShowPointer() { CheckAccess(); _backend.ShowPointer(); }
     public void HidePointer() { CheckAccess(); _backend.HidePointer(); }
 
-    public void PumpEvents() { CheckAccess(); _backend.PumpEvents(_dispatch); }
-    public int KeyDown(int scan) { PumpEvents(); return _input.KeyDown(scan); }
-    public int KeyHit(int scan) { PumpEvents(); return _input.KeyHit(scan); }
+    /// <summary>Always pumps (boundary calls: Flip/Delay/Flush/Wait/WindowOpen).</summary>
+    public void PumpEvents()
+    {
+        CheckAccess();
+        _backend.PumpEvents(_dispatch);
+        if (_pollIntervalTicks > 0) { _lastPump = _clock(); _pumped = true; }
+    }
+
+    /// <summary>Pump for read-only polls: skipped when the previous pump is younger than the poll interval.</summary>
+    private void PollPump()
+    {
+        if (_pollIntervalTicks > 0 && _pumped)
+        {
+            CheckAccess();
+            if (_clock() - _lastPump < _pollIntervalTicks) return;
+        }
+        PumpEvents();
+    }
+    public int KeyDown(int scan) { PollPump(); return _input.KeyDown(scan); }
+    public int KeyHit(int scan) { PollPump(); return _input.KeyHit(scan); }
     public void FlushKeys() { PumpEvents(); _input.FlushKeys(); }
-    public int GetKey() { PumpEvents(); return Translate(_input.GetScanCode()); }
-    public int MouseDown(int button) { PumpEvents(); return _input.MouseDown(button); }
-    public int MouseHit(int button) { PumpEvents(); return _input.MouseHit(button); }
-    public int GetMouse() { PumpEvents(); return _input.GetMouse(); }
+    public int GetKey() { PollPump(); return Translate(_input.GetScanCode()); }
+    public int MouseDown(int button) { PollPump(); return _input.MouseDown(button); }
+    public int MouseHit(int button) { PollPump(); return _input.MouseHit(button); }
+    public int GetMouse() { PollPump(); return _input.GetMouse(); }
     public void FlushMouse() { PumpEvents(); _input.FlushMouse(); }
-    public int MouseX() { PumpEvents(); return _input.MouseX; }
-    public int MouseY() { PumpEvents(); return _input.MouseY; }
-    public int MouseZ() { PumpEvents(); return _input.MouseZ; }
-    public int MouseXSpeed() { PumpEvents(); return _input.MouseXSpeed(); }
-    public int MouseYSpeed() { PumpEvents(); return _input.MouseYSpeed(); }
-    public int MouseZSpeed() { PumpEvents(); return _input.MouseZSpeed(); }
+    public int MouseX() { PollPump(); return _input.MouseX; }
+    public int MouseY() { PollPump(); return _input.MouseY; }
+    public int MouseZ() { PollPump(); return _input.MouseZ; }
+    public int MouseXSpeed() { PollPump(); return _input.MouseXSpeed(); }
+    public int MouseYSpeed() { PollPump(); return _input.MouseYSpeed(); }
+    public int MouseZSpeed() { PollPump(); return _input.MouseZSpeed(); }
 
     public void MoveMouse(int x, int y)
     {
