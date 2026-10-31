@@ -151,7 +151,7 @@ public static partial class LegacyGraphics
                 pending.Push(scene.GetChild(current, index));
         }
 
-        if (EngineOptimizations.Disabled && subtree.Any(MeshEntities.ContainsKey)) ClearCollisionGeometrySelectionCache();
+        if (!EngineOptimizations.IncrSelection && subtree.Any(MeshEntities.ContainsKey)) ClearCollisionGeometrySelectionCache();
         ReleaseAnimatedModels(subtree);
         foreach (var current in subtree)
         {

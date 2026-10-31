@@ -63,7 +63,7 @@ public sealed partial class SceneGraph
     /// <summary>Marks one entity's polygon-collision requirement as possibly changed (original behaviour: bump the global version).</summary>
     private void NoteSelectionChanged(int entity)
     {
-        if (EngineOptimizations.Disabled) { _polygonGeometrySelectionVersion++; return; }
+        if (!EngineOptimizations.IncrSelection) { _polygonGeometrySelectionVersion++; return; }
         if (_selectionDirty.Count >= SelectionDirtyLimit) { _selectionDirty.Clear(); _polygonGeometrySelectionVersion++; return; }
         _selectionDirty.Add(entity);
     }
@@ -86,12 +86,12 @@ public sealed partial class SceneGraph
         {
             var state = GetCollisionState(target.Id);
             EngineStats.Add(EngineStats.SelBumpType);
-            if (state.Type != type || EngineOptimizations.Disabled) { changed = true; NoteSelectionChanged(target.Id); }
+            if (state.Type != type || !EngineOptimizations.IncrSelection) { changed = true; NoteSelectionChanged(target.Id); }
             state.Type = type;
             ResetCollisionState(state, target);
         }
         // An unchanged type cannot alter the collision lists or the polygon selection.
-        if (changed || EngineOptimizations.Disabled) _structureVersion++;
+        if (changed || !EngineOptimizations.IncrSelection) _structureVersion++;
     }
 
     public int GetEntityType(int entity) => GetCollisionState(entity).Type;
@@ -133,7 +133,7 @@ public sealed partial class SceneGraph
     {
         var state = GetCollisionState(entity);
         EngineStats.Add(EngineStats.SelBumpPlane);
-        if (state.InfinitePlane != enabled || EngineOptimizations.Disabled) NoteSelectionChanged(entity);
+        if (state.InfinitePlane != enabled || !EngineOptimizations.IncrSelection) NoteSelectionChanged(entity);
         state.InfinitePlane = enabled;
     }
 
@@ -157,7 +157,7 @@ public sealed partial class SceneGraph
     public void ClearCollisions()
     {
         EngineStats.Add(EngineStats.SelBumpRules);
-        if (_collisionRules.Count == 0 && !EngineOptimizations.Disabled) return;
+        if (_collisionRules.Count == 0 && EngineOptimizations.IncrSelection) return;
         _collisionRules.Clear();
         _structureVersion++;
         _polygonGeometrySelectionVersion++;
@@ -168,7 +168,7 @@ public sealed partial class SceneGraph
     {
         _ = elapsed;
         var statStart = EngineStats.Now();
-        if (EngineOptimizations.Disabled || _legacyCollisionPath) { UpdateWorldOriginal(statStart); return; }
+        if (!EngineOptimizations.CollState || _legacyCollisionPath) { UpdateWorldOriginal(statStart); return; }
 
         if (_collisionCacheVersion != _structureVersion) RebuildCollisionCache();
         if (EngineStats.Enabled)
@@ -364,7 +364,7 @@ public sealed partial class SceneGraph
         var existed = _collisionEntities.Remove(entity);
         if (_nodes.TryGetValue(entity, out var forgotten)) forgotten.CollisionState = null;
         if (_pickedEntity == entity) _pickedEntity = 0;
-        if (!existed && !EngineOptimizations.Disabled) return; // never had collision state: nothing references it
+        if (!existed && EngineOptimizations.IncrSelection) return; // never had collision state: nothing references it
         _structureVersion++;
         NoteSelectionChanged(entity);
         foreach (var state in _collisionEntities.Values)
@@ -377,7 +377,7 @@ public sealed partial class SceneGraph
         if (!_collisionEntities.TryGetValue(source, out var sourceState))
         {
             // A source without state is the default state; the copy stays stateless.
-            if (EngineOptimizations.Disabled) { _structureVersion++; _polygonGeometrySelectionVersion++; }
+            if (!EngineOptimizations.IncrSelection) { _structureVersion++; _polygonGeometrySelectionVersion++; }
             return;
         }
         _structureVersion++;
@@ -417,7 +417,7 @@ public sealed partial class SceneGraph
     private CollisionEntityState GetCollisionState(Node node)
     {
         var cached = node.CollisionState;
-        if (cached is not null && !EngineOptimizations.Disabled) return cached;
+        if (cached is not null && EngineOptimizations.CollState) return cached;
         if (_collisionEntities.TryGetValue(node.Id, out var state)) { node.CollisionState = state; return state; }
         state = new CollisionEntityState { PreviousTransform = GetWorldTransform(node), HasPreviousTransform = true };
         _collisionEntities.Add(node.Id, state);
@@ -578,7 +578,7 @@ public sealed partial class SceneGraph
         var statFindStart = EngineStats.Now();
         // Conservative swept-volume bounds (scaled space) of the whole start->end segment, padded by the source radius
         // and a safety margin; a target whose bound is disjoint from it cannot produce a hit.
-        _broadOn = !_legacyCollisionPath && !EngineOptimizations.Disabled;
+        _broadOn = !_legacyCollisionPath && EngineOptimizations.Broadphase;
         if (_broadOn)
         {
             var end = Add(lineStart, lineDirection);
@@ -587,7 +587,7 @@ public sealed partial class SceneGraph
             _sweepMax = new(MathF.Max(lineStart.X, end.X) + pad, MathF.Max(lineStart.Y, end.Y) + pad, MathF.Max(lineStart.Z, end.Z) + pad);
             _broadOn = float.IsFinite(pad) && float.IsFinite(_sweepMin.X + _sweepMin.Y + _sweepMin.Z + _sweepMax.X + _sweepMax.Y + _sweepMax.Z);
         }
-        ReadOnlySpan<CollisionRule> rules = _legacyCollisionPath || EngineOptimizations.Disabled
+        ReadOnlySpan<CollisionRule> rules = _legacyCollisionPath || !EngineOptimizations.CollState
             ? CollectionsMarshal.AsSpan(_collisionRules)
             : _rulesBySource[sourceType];
         for (var ruleIndex = 0; ruleIndex < rules.Length; ruleIndex++)

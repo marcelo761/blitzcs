@@ -30,7 +30,7 @@ public sealed class ScenePickingTests
             scene.TakeSelectionChanges(dirty);
             return scene.PolygonGeometrySelectionVersion > before || dirty.Count > 0;
         }
-        var optimized = !EngineOptimizations.Disabled;
+        var optimized = EngineOptimizations.IncrSelection;
 
         Assert.True(Changed(() => scene.EntityType(entity, 2)));
         Assert.Equal(!optimized, Changed(() => scene.EntityType(entity, 2))); // idempotent: no change when optimized

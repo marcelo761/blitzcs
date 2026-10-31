@@ -114,7 +114,7 @@ public static partial class LegacyGraphics
                     var gpuVertices = baseVertices;
                     int[]? vertexMap = null;
                     uint[]? gpuIndices = null;
-                    if (!EngineOptimizations.Disabled && TryCompactSurface(group, baseVertices, out var compact, out var map, out var remapped))
+                    if (EngineOptimizations.SkinFuse && TryCompactSurface(group, baseVertices, out var compact, out var map, out var remapped))
                     {
                         gpuVertices = compact;
                         vertexMap = map;

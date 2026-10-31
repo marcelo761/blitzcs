@@ -13,7 +13,7 @@ public sealed class B3dSkinningBuffer
     private readonly Matrix4x4[] _normalMatrices;
     private readonly Matrix4x4[] _poseMatrices;
     private bool _skinMatricesPrepared;
-    private readonly bool _legacy = EngineOptimizations.Disabled;
+    private readonly bool _legacy = !EngineOptimizations.SkinFuse;
     // Flattened per-vertex data for the fast path (built once; the source mesh is immutable after load).
     private readonly Vector3[] _srcPosition;
     private readonly Vector3[] _srcNormal;

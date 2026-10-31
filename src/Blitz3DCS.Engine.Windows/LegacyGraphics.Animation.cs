@@ -66,7 +66,7 @@ public static partial class LegacyGraphics
             scene.ApplyAnimationPose(model.Entities[index], nodes[index]);
         // Fast path: skinning only depends on the entity world matrices, which PrepareAnimatedGeometry compares
         // against the previous frame, so an unchanged pose skips deformation and upload.
-        if (EngineOptimizations.Disabled) model.SkinDirty = true;
+        if (!EngineOptimizations.SkinFuse) model.SkinDirty = true;
     }
 
     private static void UpdateAnimations(SceneGraph scene, float elapsed)
@@ -110,7 +110,7 @@ public static partial class LegacyGraphics
 
     internal static void PrepareAnimatedGeometry(Matrix4x4? viewProjection = null)
     {
-        var cullSkin = viewProjection is not null && !EngineOptimizations.Disabled;
+        var cullSkin = viewProjection is not null && EngineOptimizations.SkinCull;
         var scene = RequireScene();
         foreach (var model in AnimatedModels.Values)
         {
@@ -143,7 +143,7 @@ public static partial class LegacyGraphics
                 var deformStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
                 EngineProfile.Count(EngineProfile.SkinMeshes);
                 EngineProfile.Count(EngineProfile.SkinVerts, mesh.Positions.Length);
-                if (EngineOptimizations.Disabled) DeformMeshLegacy(model, mesh);
+                if (!EngineOptimizations.SkinFuse) DeformMeshLegacy(model, mesh);
                 else DeformMeshFused(model, mesh);
                 mesh.Dirty = false;
                 if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.SkinDeform, deformStart);

@@ -61,13 +61,13 @@ public static partial class LegacyGraphics
     private static void NoteMeshAdded(int entity)
     {
         EngineStats.Add(EngineStats.SelBumpCount);
-        if (!EngineOptimizations.Disabled) PendingSelectionMeshes.Add(entity);
+        if (EngineOptimizations.IncrSelection) PendingSelectionMeshes.Add(entity);
     }
 
     private static void NoteMeshRemoved(MeshEntity mesh)
     {
         EngineStats.Add(EngineStats.SelBumpCount);
-        if (EngineOptimizations.Disabled) return;
+        if (!EngineOptimizations.IncrSelection) return;
         PendingSelectionMeshes.Remove(mesh.Entity);
         DeselectMesh(mesh);
     }
@@ -112,11 +112,12 @@ public static partial class LegacyGraphics
     private static void PrepareCollisionGeometry(SceneGraph scene)
     {
         var selectionVersion = scene.PolygonGeometrySelectionVersion;
-        var optimized = !EngineOptimizations.Disabled;
+        var incr = EngineOptimizations.IncrSelection;
+        var geomOpt = EngineOptimizations.CollGeom;
         var meshCount = MeshEntities.Count;
         if (!ReferenceEquals(_collisionGeometrySelectionScene, scene) ||
             _collisionGeometrySelectionVersion != selectionVersion ||
-            (!optimized && _collisionGeometryMeshCount != meshCount))
+            (!incr && _collisionGeometryMeshCount != meshCount))
         {
             ResetCollisionSet();
             SelectionChangeBuffer.Clear();
@@ -135,7 +136,7 @@ public static partial class LegacyGraphics
             _collisionGeometryMeshCount = meshCount;
             _collisionFullPassNeeded = true;
         }
-        else if (optimized)
+        else if (incr)
         {
             // Incremental: only entities whose own state changed and newly created meshes need a look.
             SelectionChangeBuffer.Clear();
@@ -151,8 +152,8 @@ public static partial class LegacyGraphics
             }
         }
         // Incremental: only geometries whose own surfaces changed since the last prepare need a look.
-        if (optimized && !_collisionFullPassNeeded && PendingCollisionGeometries.Count == 0) return;
-        var full = _collisionFullPassNeeded || !optimized;
+        if (geomOpt && !_collisionFullPassNeeded && PendingCollisionGeometries.Count == 0) return;
+        var full = _collisionFullPassNeeded || !geomOpt;
 
         if (full)
         {

@@ -145,19 +145,19 @@ public static partial class LegacyGraphics
         Matrix4x4 cameraWorld, Matrix4x4 view, Matrix4x4 projection)
     {
         var traversalStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
-        BuildSceneDraws(scene, camera, cameraWorld, view, projection, !EngineOptimizations.Disabled);
+        BuildSceneDraws(scene, camera, cameraWorld, view, projection, EngineOptimizations.Traversal);
         var drawCount = _sceneDrawCount;
         var draws = _sceneDraws;
         var sortStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         if (EngineProfile.Enabled) EngineProfile.AddTicks(EngineProfile.RtTraverse, sortStart - traversalStart);
         EngineProfile.Count(EngineProfile.RtSurfaces, drawCount);
         EngineProfile.Count(EngineProfile.RtSortKeys, drawCount);
-        SortSceneDraws(EngineOptimizations.Disabled);
+        SortSceneDraws(!EngineOptimizations.DrawSort);
         var order = _drawOrder;
         if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.RtSort, sortStart);
         D3D11Fog? cameraFog = null;
         if (drawCount > 0) cameraFog = GetCameraFogForRendering(camera.Entity);
-        var legacyOrder = EngineOptimizations.Disabled;
+        var legacyOrder = !EngineOptimizations.DrawSort;
         var submitStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         if (EngineProfile.Enabled) EngineProfile.AddTicks(EngineProfile.Traversal, submitStart - traversalStart);
         for (var drawIndex = 0; drawIndex < drawCount; drawIndex++)

@@ -37,7 +37,7 @@ public sealed class LegacyGraphicsSkinningFusedTests
                     reference.DeformInto(model.Pose, model.CurrentWorld, positions);
                     foreach (var surface in mesh.Surfaces)
                     {
-                        if (!EngineOptimizations.Disabled) Assert.Equal(3, surface.Vertices.Length);
+                        if (EngineOptimizations.SkinFuse) Assert.Equal(3, surface.Vertices.Length);
                         var full = new B3dVector3[5];
                         for (var slot = 0; slot < surface.VertexMap.Length; slot++) full[surface.VertexMap[slot]] = surface.SourceNormals[slot];
                         var normals = new B3dVector3[5];
@@ -53,12 +53,12 @@ public sealed class LegacyGraphicsSkinningFusedTests
                             Assert.Equal(Bits(normals[v].Y), Bits(vertex.Normal.Y));
                             Assert.Equal(Bits(normals[v].Z), Bits(vertex.Normal.Z));
                         }
-                        foreach (var index in surface.Indices) Assert.True(index < surface.Vertices.Length || EngineOptimizations.Disabled);
+                        foreach (var index in surface.Indices) Assert.True(index < surface.Vertices.Length || !EngineOptimizations.SkinFuse);
                     }
                 }
             }
 
-            if (EngineOptimizations.Disabled) return;
+            if (!EngineOptimizations.SkinFuse) return;
             // Same animation time again: pose and world matrices are unchanged, so nothing is re-skinned or uploaded.
             var rootModel = LegacyGraphics.AnimatedModels[root];
             LegacyGraphics.SetAnimTime(root, 10f);

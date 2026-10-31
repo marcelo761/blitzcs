@@ -163,7 +163,7 @@ public sealed partial class SceneGraph
 
     internal int[] GetRootEntityIds()
     {
-        if (EngineOptimizations.Disabled) return _nodes.Values.Where(node => node.Parent is null).Select(node => node.Id).ToArray();
+        if (!EngineOptimizations.Traversal) return _nodes.Values.Where(node => node.Parent is null).Select(node => node.Id).ToArray();
         var ids = new int[_roots.Count];
         for (var i = 0; i < ids.Length; i++) ids[i] = _roots[i].Id;
         return ids;
@@ -321,7 +321,7 @@ public sealed partial class SceneGraph
     // the node or its descendants (original behaviour under BLITZCS_ENGINE_NOOPT=1).
     private static bool NoOp(bool same)
     {
-        if (!same || EngineOptimizations.Disabled) return false;
+        if (!same || !EngineOptimizations.SetterGuard) return false;
         EngineStats.Add(EngineStats.XformNoop);
         return true;
     }

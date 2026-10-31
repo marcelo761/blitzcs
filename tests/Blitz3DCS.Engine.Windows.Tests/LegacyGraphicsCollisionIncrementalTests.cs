@@ -49,7 +49,7 @@ public sealed class LegacyGraphicsCollisionIncrementalTests
                 LegacyGraphics.AddTriangle(surface, 0, 1, 2);
                 LegacyGraphics.UpdateWorld();
             }
-            if (!EngineOptimizations.Disabled) Assert.Equal(before, LegacyGraphics.CollisionPrepMeshTotalForTesting);
+            if (EngineOptimizations.CollGeom) Assert.Equal(before, LegacyGraphics.CollisionPrepMeshTotalForTesting);
             Assert.Equal(0, LegacyGraphics.CollisionStaleMeshCountForTesting());
         });
     }
@@ -70,8 +70,8 @@ public sealed class LegacyGraphicsCollisionIncrementalTests
             LegacyGraphics.VertexCoords(LegacyGraphics.GetSurface(a, 1), 0, -5, -5, 3);
             LegacyGraphics.UpdateWorld();
             LegacyGraphics.UpdateWorld();
-            if (!EngineOptimizations.Disabled) Assert.Equal(m0 + 1, LegacyGraphics.CollisionPrepMeshTotalForTesting);
-            if (!EngineOptimizations.Disabled) Assert.Equal(r0 + 1, LegacyGraphics.CollisionPrepRebuiltTotalForTesting);
+            if (EngineOptimizations.CollGeom) Assert.Equal(m0 + 1, LegacyGraphics.CollisionPrepMeshTotalForTesting);
+            if (EngineOptimizations.CollGeom) Assert.Equal(r0 + 1, LegacyGraphics.CollisionPrepRebuiltTotalForTesting);
 
             var c = Triangle();
             scene.EntityType(c, 2);
@@ -213,7 +213,7 @@ public sealed class LegacyGraphicsCollisionIncrementalTests
                 Assert.Equal(10, LegacyGraphics.PolygonCollisionMeshCountForTesting);
                 LegacyGraphics.FreeEntity(kept);
             }
-            if (!EngineOptimizations.Disabled)
+            if (EngineOptimizations.CollGeom && EngineOptimizations.IncrSelection)
             {
                 Assert.Equal(rebuilds, LegacyGraphics.CollisionSelectionRebuildTotalForTesting);
                 Assert.Equal(prepared, LegacyGraphics.CollisionPrepMeshTotalForTesting);
