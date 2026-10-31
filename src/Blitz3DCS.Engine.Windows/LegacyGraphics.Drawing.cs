@@ -21,7 +21,7 @@ public static partial class LegacyGraphics
     private static void RectImpl(int x, int y, int width, int height, int solid)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
+        EnsureSelectedBufferUnlocked();
         if (width <= 0 || height <= 0) return;
 
         var target = GetBuffer(ResolveBufferHandle(0));
@@ -52,7 +52,7 @@ public static partial class LegacyGraphics
     public static void Line(int x1, int y1, int x2, int y2)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
+        EnsureSelectedBufferUnlocked();
         var target = GetBuffer(ResolveBufferHandle(0));
         if (!ClipLine(ref x1, ref y1, ref x2, ref y2, target.Width, target.Height)) return;
 
@@ -126,7 +126,7 @@ public static partial class LegacyGraphics
     public static void Oval(int x, int y, int width, int height, int solid = 1)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
+        EnsureSelectedBufferUnlocked();
         if (width <= 0 || height <= 0) return;
         var target = GetBuffer(ResolveBufferHandle(0));
         var top = Math.Max(0L, y);

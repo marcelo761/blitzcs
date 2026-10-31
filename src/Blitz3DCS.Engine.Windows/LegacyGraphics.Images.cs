@@ -14,7 +14,6 @@ public static partial class LegacyGraphics
         ValidateImageDimensions(width, height);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frames);
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
 
         var texture = CreateTexture(width, height, flags: 2, frames);
         try
@@ -91,7 +90,6 @@ public static partial class LegacyGraphics
     {
         CheckThreadIfStarted();
         if (_movie?.Image == image) BlitzMovie_Close();
-        EnsureNoBufferLocked();
         if (!Images.Remove(image, out var state)) throw new ArgumentOutOfRangeException(nameof(image));
         if (Textures.ContainsKey(state.Texture)) FreeTexture(state.Texture);
     }
@@ -115,7 +113,7 @@ public static partial class LegacyGraphics
     {
         UpdateMovieImage(image);
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
+        EnsureSelectedBufferUnlocked();
         var state = GetImage(image);
         if ((uint)frame >= (uint)state.Frames) throw new ArgumentOutOfRangeException(nameof(frame));
         var target = GetBuffer(ResolveBufferHandle(0));
@@ -140,7 +138,6 @@ public static partial class LegacyGraphics
         ValidateRgb(red, green, blue);
         var state = GetImage(image);
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         var frames = ReadImageFrames(state);
         foreach (var pixels in frames) MaskPixels(pixels, red, green, blue);
         UploadImageFrames(state, frames);
@@ -339,7 +336,6 @@ public static partial class LegacyGraphics
     private static int CreateImageFromFrames(int width, int height, byte[][] frames)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         var texture = CreateTexture(width, height, flags: 2, frames.Length);
         try
         {
@@ -380,7 +376,7 @@ public static partial class LegacyGraphics
     {
         UpdateMovieImage(image);
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
+        EnsureSelectedBufferUnlocked();
         var state = GetImage(image);
         if ((uint)frame >= (uint)state.Frames) throw new ArgumentOutOfRangeException(nameof(frame));
         var target = GetBuffer(ResolveBufferHandle(0));
@@ -404,8 +400,8 @@ public static partial class LegacyGraphics
     private static byte[][] ReadImageFrames(ImageState state)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         var rep = GetTexture(state.Texture);
+        EnsureTextureUnlocked(rep);
         var frames = new byte[state.Frames][];
         for (var index = 0; index < frames.Length; index++)
             frames[index] = RequireRenderer().ReadTexturePixels(rep.Frames[index].Resource);
@@ -415,9 +411,9 @@ public static partial class LegacyGraphics
     private static void UploadImageFrames(ImageState state, byte[][] frames)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         if (frames.Length != state.Frames) throw new ArgumentException("Image frame count cannot change during a pixel update.", nameof(frames));
         var rep = GetTexture(state.Texture);
+        EnsureTextureUnlocked(rep);
         for (var index = 0; index < frames.Length; index++)
         {
             ValidatePixelBuffer(frames[index], state.Width, state.Height);
@@ -428,7 +424,7 @@ public static partial class LegacyGraphics
     private static void ReplaceImagePixels(ImageState state, byte[][] frames, int width, int height, int handleX, int handleY)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
+        EnsureTextureUnlocked(GetTexture(state.Texture));
         if (frames.Length != state.Frames) throw new ArgumentException("Image frame count cannot change during a pixel transform.", nameof(frames));
         var replacement = CreateTexture(width, height, flags: 2, frames.Length);
         try

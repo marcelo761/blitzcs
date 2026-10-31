@@ -107,7 +107,7 @@ public static partial class LegacyGraphics
     private static void TextImpl(int x, int y, string text, int centerX, int centerY)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
+        EnsureSelectedBufferUnlocked();
         ArgumentNullException.ThrowIfNull(text);
         var font = CurrentFont();
         if (centerX != 0) x -= StringWidth(text) / 2;

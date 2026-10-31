@@ -89,7 +89,6 @@ public static partial class LegacyGraphics
         ArgumentException.ThrowIfNullOrEmpty(file);
         ValidateTextureFlags(flags);
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         DecodedImage image;
         try
         {
@@ -121,7 +120,6 @@ public static partial class LegacyGraphics
         ArgumentException.ThrowIfNullOrEmpty(file);
         ValidateTextureFlags(flags);
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
 
         // Blitz3D treats invalid animation geometry as a request for the whole image.
         if (width <= 0 || height <= 0 || first < 0 || count <= 0)
@@ -206,7 +204,6 @@ public static partial class LegacyGraphics
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frames);
         _ = checked(checked(width * height) * 4 * frames);
-        EnsureNoBufferLocked();
 
         var renderer = RequireRenderer();
         var textureHandle = _nextTextureHandle;
@@ -250,8 +247,8 @@ public static partial class LegacyGraphics
     {
         CheckThreadIfStarted();
         if (texture == 0) return;
-        EnsureNoBufferLocked();
         var rep = GetTexture(texture);
+        EnsureTextureUnlocked(rep);
         Textures.Remove(texture);
         rep.ReleaseCallerHandle();
         DisposeIfUnreferenced(rep);
@@ -313,7 +310,6 @@ public static partial class LegacyGraphics
     public static void TextureBlend(int texture, int blend)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         if (blend is not (0 or 1 or 2 or 3 or 5 or 6))
             throw new NotSupportedException($"Texture blend mode {blend} is not implemented; supported modes are 0, 1, 2, 3, 5, and 6.");
         GetTexture(texture).Blend = blend;
@@ -325,7 +321,6 @@ public static partial class LegacyGraphics
     public static void TextureBumpEnvMat(int texture, int x, int y, float value)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         ArgumentOutOfRangeException.ThrowIfNegative(x);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(x, 1);
         ArgumentOutOfRangeException.ThrowIfNegative(y);
@@ -338,7 +333,6 @@ public static partial class LegacyGraphics
     public static void TextureBumpEnvScale(int texture, float scale)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         if (!float.IsFinite(scale)) throw new ArgumentOutOfRangeException(nameof(scale), "Bump environment scale must be finite.");
         GetTexture(texture).BumpEnvScale = scale;
     }
@@ -347,7 +341,6 @@ public static partial class LegacyGraphics
     public static void TextureBumpEnvOffset(int texture, float offset)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         if (!float.IsFinite(offset)) throw new ArgumentOutOfRangeException(nameof(offset), "Bump environment offset must be finite.");
         GetTexture(texture).BumpEnvOffset = offset;
     }
@@ -372,7 +365,7 @@ public static partial class LegacyGraphics
     public static void SetBuffer(int buffer)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
+        // Original bbSetBuffer only switches the current canvas; it never checks or changes lock state.
         _ = RequireRenderer();
         _ = GetBuffer(buffer);
         _selectedBuffer = buffer;
@@ -467,8 +460,8 @@ public static partial class LegacyGraphics
     internal static void ClearSelectedBuffer(float red, float green, float blue)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         var target = GetBuffer(_selectedBuffer);
+        EnsureBufferUnlocked(target);
         if (target.IsBackBuffer)
             RequireRenderer().Clear(red, green, blue);
         else
@@ -514,10 +507,25 @@ public static partial class LegacyGraphics
         _nextTextureBufferHandle = FirstTextureBufferHandle;
     }
 
-    internal static void EnsureNoBufferLocked()
+    /// <summary>
+    /// Rejects a drawing-pipeline operation whose destination is itself locked. The original runtime has no
+    /// global lock state: LockBuffer is a per-canvas lock count (gxcanvas.cpp lock/unlock), SetBuffer just
+    /// switches the current canvas (bbgraphics.cpp bbSetBuffer), and Blt-based drawing only fails on the
+    /// locked surface itself. Operations on any other buffer proceed while it is locked.
+    /// </summary>
+    private static void EnsureBufferUnlocked(BufferState buffer)
     {
-        if (BackBufferState.Instance.LockedPixels is not null || TextureBuffers.Values.Any(buffer => buffer.LockedPixels is not null))
-            throw new InvalidOperationException("Only pixel read/write/copy operations are allowed while a buffer is locked.");
+        if (buffer.LockedPixels is not null)
+            throw new InvalidOperationException("Only pixel read/write/copy operations are allowed while the target buffer is locked.");
+    }
+
+    private static void EnsureSelectedBufferUnlocked() => EnsureBufferUnlocked(GetBuffer(_selectedBuffer));
+
+    /// <summary>Rejects an operation that replaces or releases a texture while any of its frame buffers is locked.</summary>
+    private static void EnsureTextureUnlocked(TextureRep rep)
+    {
+        foreach (var buffer in TextureBuffers.Values)
+            if (ReferenceEquals(buffer.Rep, rep)) EnsureBufferUnlocked(buffer);
     }
 
     internal static void ValidateTextureFlags(int flags)

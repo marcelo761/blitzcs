@@ -68,8 +68,8 @@ public static partial class LegacyGraphics
     {
         if (_movie is null || _movie.Image != image || !_movie.Update()) return;
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
         var target = GetImage(image);
+        EnsureTextureUnlocked(GetTexture(target.Texture));
         var video = _movie.Video;
         if (target.Width != video.Width || target.Height != video.Height)
             throw new InvalidOperationException("The movie target image dimensions changed during playback.");

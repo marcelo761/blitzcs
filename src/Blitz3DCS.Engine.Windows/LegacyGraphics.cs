@@ -87,7 +87,7 @@ public static partial class LegacyGraphics
 
     public static void Flip(int sync = 1)
     {
-        EnsureNoBufferLocked();
+        EnsureBufferUnlocked(BackBufferState.Instance);
         var profileStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         RequireRenderer().Present(sync != 0);
         if (EngineProfile.Enabled) { EngineProfile.Add(EngineProfile.Present, profileStart); EngineProfile.EndFrame(); }
@@ -332,7 +332,7 @@ public static partial class LegacyGraphics
     private static void RenderWorldCore(float tween)
     {
         CheckThreadIfStarted();
-        EnsureNoBufferLocked();
+        EnsureBufferUnlocked(BackBufferState.Instance);
         if (GraphicsBuffer() != BackBuffer())
             throw new NotSupportedException("Rendering a 3D world into a texture buffer is not implemented; select BackBuffer first.");
         var renderer = RequireRenderer();
