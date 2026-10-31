@@ -28,6 +28,8 @@ public sealed class D3D11Mesh : IDisposable
     internal bool IsResizable { get; init; }
     internal int VertexCapacity { get; init; }
     internal uint IndexCapacity { get; init; }
+    /// <summary>Renderer draw-queue epoch of the latest queued draw of this mesh (see D3D11Renderer.FlushDrawsReferencing).</summary>
+    internal int QueueEpoch { get; set; }
 
     public void Dispose()
     {

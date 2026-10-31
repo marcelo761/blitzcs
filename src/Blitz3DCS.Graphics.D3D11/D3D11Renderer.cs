@@ -308,6 +308,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             CreateDevice(hwnd);
             CreateWindowResources(_width, _height);
             CreateTrianglePipeline();
+            CreateObjectConstantPipeline();
         }
         catch
         {
@@ -374,7 +375,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
 
     private D3D11Mesh CreateMeshCore(ReadOnlySpan<D3D11Vertex> vertices, ReadOnlySpan<uint> indices, bool dynamic)
     {
-        CheckAccess();
+        CheckAccessKeepDraws();
         ValidateTriangles(vertices, indices);
 
         ID3D11Buffer? vertexBuffer = null;
@@ -405,7 +406,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     public D3D11Mesh CreateResizableMesh(ReadOnlySpan<D3D11Vertex> vertices, ReadOnlySpan<uint> indices,
         int vertexCapacity, uint indexCapacity)
     {
-        CheckAccess();
+        CheckAccessKeepDraws();
         ValidateTriangles(vertices, indices);
         vertexCapacity = Math.Max(vertexCapacity, vertices.Length);
         indexCapacity = Math.Max(indexCapacity, (uint)indices.Length);
@@ -438,10 +439,11 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     /// </summary>
     public bool TryUpdateResizableMesh(D3D11Mesh mesh, ReadOnlySpan<D3D11Vertex> vertices, ReadOnlySpan<uint> indices)
     {
-        CheckAccess();
+        CheckAccessKeepDraws();
         ArgumentNullException.ThrowIfNull(mesh);
         if (!ReferenceEquals(mesh.Owner, this)) throw new ArgumentException("The mesh belongs to a different renderer.", nameof(mesh));
         mesh.ThrowIfDisposed();
+        FlushDrawsReferencing(mesh);
         if (!mesh.IsResizable || vertices.Length > mesh.VertexCapacity || (uint)indices.Length > mesh.IndexCapacity) return false;
         ValidateTriangles(vertices, indices);
         var profileStart = D3D11FrameCounters.Enabled ? D3D11FrameCounters.Now() : 0;
@@ -458,10 +460,11 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
 
     public void UpdateMeshVertices(D3D11Mesh mesh, ReadOnlySpan<D3D11Vertex> vertices)
     {
-        CheckAccess();
+        CheckAccessKeepDraws();
         ArgumentNullException.ThrowIfNull(mesh);
         if (!ReferenceEquals(mesh.Owner, this)) throw new ArgumentException("The mesh belongs to a different renderer.", nameof(mesh));
         mesh.ThrowIfDisposed();
+        FlushDrawsReferencing(mesh);
         if (!mesh.IsDynamic) throw new ArgumentException("The mesh must have been created with CreateDynamicMesh.", nameof(mesh));
         if (vertices.Length != mesh.VertexCount) throw new ArgumentException("Vertex updates must preserve the mesh vertex count.", nameof(vertices));
         var profileStart = D3D11FrameCounters.Enabled ? D3D11FrameCounters.Now() : 0;
@@ -822,7 +825,8 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         Matrix4x4? world = null,
         uint? indexCount = null)
     {
-        CheckAccess();
+        if (_queueDraws) CheckAccessKeepDraws();
+        else CheckAccess();
         ArgumentNullException.ThrowIfNull(mesh);
         if (!ReferenceEquals(mesh.Owner, this)) throw new ArgumentException("The mesh belongs to a different renderer.", nameof(mesh));
         mesh.ThrowIfDisposed();
@@ -863,6 +867,13 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             }
         }
 
+        if (_queueDraws)
+        {
+            QueueMesh(mesh, activeIndexCount, worldViewProjection, layers, alphaBlend, color, fog,
+                worldView ?? Matrix4x4.Identity, drawState, world ?? Matrix4x4.Identity);
+            return;
+        }
+
         EnsureMipmapsGenerated(layers);
 
         UploadTransform(worldViewProjection, worldView ?? Matrix4x4.Identity, world ?? Matrix4x4.Identity);
@@ -880,7 +891,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         BindPsConstantBuffer(1, _materialBuffer!);
         BindLightingDrawState(drawState, alphaBlend);
         _context!.DrawIndexed(activeIndexCount, 0, 0);
-        if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.MeshDraws); D3D11FrameCounters.Add(D3D11FrameCounters.Triangles, activeIndexCount / 3); D3D11FrameCounters.Add(D3D11FrameCounters.ConstantBufferMaps, 2); }
+        if (D3D11FrameCounters.Enabled) { D3D11FrameCounters.Add(D3D11FrameCounters.MeshDraws); D3D11FrameCounters.Add(D3D11FrameCounters.ApiDraws); D3D11FrameCounters.Add(D3D11FrameCounters.Triangles, activeIndexCount / 3); D3D11FrameCounters.Add(D3D11FrameCounters.ConstantBufferMaps, 2); }
     }
 
     /// <summary>
@@ -919,6 +930,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         D3D11Texture? destination = null)
     {
         CheckAccessNoFlush();
+        FlushMeshQueue();
         ArgumentNullException.ThrowIfNull(source);
         ValidateTextureEndpoint(source, nameof(source));
         ValidateTextureEndpoint(destination, nameof(destination));
@@ -1449,7 +1461,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     private void UploadTransform(in Matrix4x4 worldViewProjection, in Matrix4x4 worldView) =>
         UploadTransform(worldViewProjection, worldView, Matrix4x4.Identity);
 
-    private void UploadTransform(in Matrix4x4 worldViewProjection, in Matrix4x4 worldView, in Matrix4x4 world)
+    private Matrix4x4 NormalMatrixFor(in Matrix4x4 world)
     {
         Matrix4x4 normal;
         if (Optimize && _hasLastNormal && world == _lastWorld) normal = _lastNormal;
@@ -1464,13 +1476,23 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
             if (Matrix4x4.Invert(world, out var inverseWorld)) normal = Matrix4x4.Transpose(inverseWorld);
             _lastWorld = world; _lastNormal = normal; _hasLastNormal = true;
         }
-        var transformed = new TransformConstants
-        {
-            WorldViewProjection = Matrix4x4.Transpose(worldViewProjection),
-            WorldView = Matrix4x4.Transpose(worldView),
-            World = Matrix4x4.Transpose(world),
-            NormalMatrix = Matrix4x4.Transpose(normal),
-        };
+        return normal;
+    }
+
+    /// <summary>The cbuffer Transform record exactly as both submission paths upload it (HLSL column-major, so transposed).</summary>
+    internal static void BuildTransformConstants(out TransformConstants constants, in Matrix4x4 worldViewProjection,
+        in Matrix4x4 worldView, in Matrix4x4 world, in Matrix4x4 normal)
+    {
+        constants.WorldViewProjection = Matrix4x4.Transpose(worldViewProjection);
+        constants.WorldView = Matrix4x4.Transpose(worldView);
+        constants.World = Matrix4x4.Transpose(world);
+        constants.NormalMatrix = Matrix4x4.Transpose(normal);
+    }
+
+    private void UploadTransform(in Matrix4x4 worldViewProjection, in Matrix4x4 worldView, in Matrix4x4 world)
+    {
+        var normal = NormalMatrixFor(world);
+        BuildTransformConstants(out var transformed, worldViewProjection, worldView, world, normal);
         if (Optimize && _hasLastTransform && SameBytes(transformed, _lastTransform))
         {
             if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.SkippedConstantBufferMaps);
@@ -1491,14 +1513,32 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     private void UploadMaterial(ReadOnlySpan<D3D11TextureLayer> layers, Vector4 color, bool clampRegion = false, D3D11Fog? fog = null,
         int effects = 3, float shininess = 0)
     {
-        var constants = new MaterialConstants
+        var constants = new MaterialConstants();
+        BuildMaterialConstants(ref constants, layers, color, clampRegion, fog, effects, shininess);
+        if (Optimize && _hasLastMaterial && SameBytes(constants, _lastMaterial))
         {
-            Color = color,
-            RegionFlags = new Vector4(clampRegion ? 1 : 0, effects, 0, 0),
-            FogColor = fog is { } activeFog ? new Vector4(activeFog.Color, 1) : Vector4.Zero,
-            FogParameters = fog is { } parameters ? new Vector4(parameters.Start, parameters.End, 1, 0) : Vector4.Zero,
-            Shininess = new Vector4(Math.Clamp(shininess, 0, 1), Math.Clamp(shininess, 0, 1) * 128, 0, 0),
-        };
+            if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.SkippedConstantBufferMaps);
+            return;
+        }
+        var mapped = _context!.Map(_materialBuffer!, 0, MapMode.WriteDiscard);
+        try { *(MaterialConstants*)mapped.DataPointer = constants; }
+        finally { _context.Unmap(_materialBuffer!, 0); }
+        _lastMaterial = constants;
+        _hasLastMaterial = true;
+    }
+
+    /// <summary>
+    /// The cbuffer Material record exactly as both submission paths upload it. <paramref name="constants"/> must be
+    /// zeroed (default) on entry: unused stages stay zero.
+    /// </summary>
+    internal static void BuildMaterialConstants(ref MaterialConstants constants, ReadOnlySpan<D3D11TextureLayer> layers,
+        Vector4 color, bool clampRegion, D3D11Fog? fog, int effects, float shininess)
+    {
+        constants.Color = color;
+        constants.RegionFlags = new Vector4(clampRegion ? 1 : 0, effects, 0, 0);
+        constants.FogColor = fog is { } activeFog ? new Vector4(activeFog.Color, 1) : Vector4.Zero;
+        constants.FogParameters = fog is { } parameters ? new Vector4(parameters.Start, parameters.End, 1, 0) : Vector4.Zero;
+        constants.Shininess = new Vector4(Math.Clamp(shininess, 0, 1), Math.Clamp(shininess, 0, 1) * 128, 0, 0);
         if (layers.Length > 0 && layers[0].Texture is not null && layers[0].Masked)
         {
             constants.RegionFlags.Z = 1;
@@ -1525,16 +1565,6 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
                 SetComponent(ref constants.Alpha1, component, enabled && layer.UseAlpha ? 1 : 0);
             }
         }
-        if (Optimize && _hasLastMaterial && SameBytes(constants, _lastMaterial))
-        {
-            if (D3D11FrameCounters.Enabled) D3D11FrameCounters.Add(D3D11FrameCounters.SkippedConstantBufferMaps);
-            return;
-        }
-        var mapped = _context!.Map(_materialBuffer!, 0, MapMode.WriteDiscard);
-        try { *(MaterialConstants*)mapped.DataPointer = constants; }
-        finally { _context.Unmap(_materialBuffer!, 0); }
-        _lastMaterial = constants;
-        _hasLastMaterial = true;
     }
 
     private void SetPixelResources(ReadOnlySpan<D3D11TextureLayer> layers)
@@ -1581,7 +1611,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct TransformConstants
+    internal struct TransformConstants
     {
         public Matrix4x4 WorldViewProjection;
         public Matrix4x4 WorldView;
@@ -1590,7 +1620,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct MaterialConstants
+    internal struct MaterialConstants
     {
         public Vector4 Color;
         public Vector4 Blend0;
@@ -1607,7 +1637,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     }
 
     [InlineArray(8)]
-    private struct StageVectors { private Vector4 _element0; }
+    internal struct StageVectors { private Vector4 _element0; }
 
     private void ClearPipelineState()
     {
@@ -1624,6 +1654,15 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
     }
 
     private void CheckAccess()
+    {
+        CheckAccessNoFlush();
+        FlushBlits();
+        FlushMeshQueue();
+    }
+
+    /// <summary>Thread/disposal checks and pending blits, but queued mesh draws stay queued (they only reference
+    /// resources this call does not modify).</summary>
+    private void CheckAccessKeepDraws()
     {
         CheckAccessNoFlush();
         FlushBlits();
@@ -1644,6 +1683,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         if (_meshes.Remove(mesh))
         {
             FlushBlits();
+            FlushDrawsReferencing(mesh);
             ClearPipelineState();
             mesh.DisposeFromRenderer();
         }
@@ -1657,6 +1697,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         if (_textures.Remove(texture))
         {
             FlushBlits();
+            FlushMeshQueue();
             ClearPipelineState();
             texture.DisposeFromRenderer();
         }
@@ -1715,6 +1756,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         DisposeTextureSamplers();
         _inputLayout?.Dispose(); _inputLayout = null;
         _transformBuffer?.Dispose(); _transformBuffer = null;
+        ReleaseObjectConstantPipeline();
         _materialBuffer?.Dispose(); _materialBuffer = null;
         _lightingBuffer?.Dispose(); _lightingBuffer = null;
         _multiplyBlendState?.Dispose(); _multiplyBlendState = null;
@@ -1748,6 +1790,7 @@ public sealed unsafe partial class D3D11Renderer : IDisposable
         if (_disposed) return;
         _disposed = true;
         _blits.Discard();
+        DiscardMeshQueue();
         ReleaseGraphicsResources();
         if (_window is not null)
         {

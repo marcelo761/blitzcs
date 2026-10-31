@@ -5,7 +5,7 @@ public enum PipelineSlot
 {
     InputLayout, VertexBuffer, IndexBuffer, Topology, VertexShader, PixelShader,
     VsConstantBuffer0, VsConstantBuffer1, VsConstantBuffer2, PsConstantBuffer1, PsConstantBuffer2,
-    Blend, DepthStencil, Rasterizer, RenderTarget, DepthView, Count,
+    Blend, DepthStencil, Rasterizer, RenderTarget, DepthView, VsConstantBuffer3, Count,
 }
 
 /// <summary>
