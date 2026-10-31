@@ -1,7 +1,7 @@
 namespace Blitz3DCS.Engine;
 
 /// <summary>
-/// Pick-target bounds index used by LinePick/EntityPick/EntityVisible (EngineOptimizations.PickAccel).
+/// Pick-target bounds index used by LinePick/EntityPick/EntityVisible.
 /// Every entity with a nonzero pick mode owns a <see cref="PickEntry"/> holding a conservative world-space AABB of
 /// everything its narrow-phase test can report (sphere: centre +- radius, box: centre +- sum of the extents along the
 /// unit basis used by TryBox, polygon: the transformed local triangle bounds), padded by a float-error margin.
@@ -29,7 +29,7 @@ public sealed partial class SceneGraph
     private int _pickChurn;
     private bool _legacyPickPath;
 
-    /// <summary>Testing hook: run picking queries on the original full scan (same as BLITZCS_ENGINE_NO=pickaccel).</summary>
+    /// <summary>Testing hook: run picking queries on the original full scan (reference implementation used by differential tests).</summary>
     internal bool UseLegacyPickPathForTesting { get => _legacyPickPath; set => _legacyPickPath = value; }
 
     /// <summary>Testing/diagnostics: number of static pick BVH rebuilds.</summary>
@@ -38,7 +38,7 @@ public sealed partial class SceneGraph
     /// <summary>Testing/diagnostics: number of narrow-phase target tests run by accelerated pick queries.</summary>
     internal long PickNarrowTestsForTesting { get; private set; }
 
-    private bool PickAccelActive => EngineOptimizations.PickAccel && !_legacyPickPath;
+    private bool PickAccelActive => !_legacyPickPath;
 
     private sealed class PickEntry(Node node, CollisionEntityState state, List<PickEntry> dirtyList)
     {
@@ -73,7 +73,6 @@ public sealed partial class SceneGraph
     /// <summary>Registers, refreshes or drops the pick entry of <paramref name="state"/> after its pick mode changed.</summary>
     private void PickTrack(Node node, CollisionEntityState state)
     {
-        if (!EngineOptimizations.PickAccel) return;
         if (state.PickMode == 0)
         {
             PickUntrack(state);

@@ -53,7 +53,7 @@ public sealed class TextureDecodeParityTests
             Assert.Equal(expected.Height, first.Height);
             Assert.Equal(expected.Rgba8, first.Rgba8);
             Assert.Equal(expected.Rgba8, second.Rgba8);
-            if (!TextureLoadOptions.Disabled) Assert.Same(first.Rgba8, second.Rgba8);
+            Assert.Same(first.Rgba8, second.Rgba8);
         }
         finally { File.Delete(path); }
     }

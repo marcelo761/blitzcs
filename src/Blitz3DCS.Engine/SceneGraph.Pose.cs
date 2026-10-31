@@ -47,18 +47,18 @@ public sealed partial class SceneGraph
         if (pose.HasPositionKeys)
         {
             var value = new SceneVector3(pose.LocalPosition.X, pose.LocalPosition.Y, pose.LocalPosition.Z);
-            if (!EngineOptimizations.SetterGuard || !SameBits(node.LocalPosition, value)) { node.LocalPosition = value; changed = true; }
+            if (!SameBits(node.LocalPosition, value)) { node.LocalPosition = value; changed = true; }
         }
         if (pose.HasScaleKeys)
         {
             var value = new SceneVector3(pose.LocalScale.X, pose.LocalScale.Y, pose.LocalScale.Z);
-            if (!EngineOptimizations.SetterGuard || !SameBits(node.LocalScale, value)) { node.LocalScale = value; changed = true; }
+            if (!SameBits(node.LocalScale, value)) { node.LocalScale = value; changed = true; }
         }
         if (pose.HasRotationKeys)
         {
             var value = new Rotation(pose.LocalRotation.W, pose.LocalRotation.X,
                 pose.LocalRotation.Y, pose.LocalRotation.Z).Normalized();
-            if (!EngineOptimizations.SetterGuard || !SameBits(node.LocalRotation, value)) { node.LocalRotation = value; changed = true; }
+            if (!SameBits(node.LocalRotation, value)) { node.LocalRotation = value; changed = true; }
         }
         if (changed) { EngineStats.Add(EngineStats.XformInvAnim); InvalidateLocal(node); }
         else EngineStats.Add(EngineStats.XformNoop);

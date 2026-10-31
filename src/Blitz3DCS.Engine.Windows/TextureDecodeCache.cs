@@ -1,12 +1,5 @@
 namespace Blitz3DCS.Engine.Windows;
 
-internal static class TextureLoadOptions
-{
-    /// <summary>Set BLITZCS_TEXLOAD_NOOPT=1 to restore the original per-load decode path.</summary>
-    internal static readonly bool Disabled =
-        Environment.GetEnvironmentVariable("BLITZCS_TEXLOAD_NOOPT") == "1";
-}
-
 /// <summary>
 /// Bounded LRU of decoded (and optionally colour-keyed) RGBA8 pixel buffers shared by repeated loads of one file.
 /// Buffers are immutable once published; callers only upload them, so texture state stays per texture handle.

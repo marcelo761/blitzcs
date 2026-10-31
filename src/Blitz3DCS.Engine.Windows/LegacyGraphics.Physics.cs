@@ -7,7 +7,6 @@ public static partial class LegacyGraphics
 {
     private static SceneGraph? _collisionGeometrySelectionScene;
     private static long _collisionGeometrySelectionVersion = long.MinValue;
-    private static int _collisionGeometryMeshCount = -1;
     private static readonly List<MeshEntity> PolygonCollisionMeshes = [];
 
     internal static int PolygonCollisionMeshCountForTesting => PolygonCollisionMeshes.Count;
@@ -61,13 +60,12 @@ public static partial class LegacyGraphics
     private static void NoteMeshAdded(int entity)
     {
         EngineStats.Add(EngineStats.SelBumpCount);
-        if (EngineOptimizations.IncrSelection) PendingSelectionMeshes.Add(entity);
+        PendingSelectionMeshes.Add(entity);
     }
 
     private static void NoteMeshRemoved(MeshEntity mesh)
     {
         EngineStats.Add(EngineStats.SelBumpCount);
-        if (!EngineOptimizations.IncrSelection) return;
         PendingSelectionMeshes.Remove(mesh.Entity);
         DeselectMesh(mesh);
     }
@@ -112,12 +110,8 @@ public static partial class LegacyGraphics
     private static void PrepareCollisionGeometry(SceneGraph scene)
     {
         var selectionVersion = scene.PolygonGeometrySelectionVersion;
-        var incr = EngineOptimizations.IncrSelection;
-        var geomOpt = EngineOptimizations.CollGeom;
-        var meshCount = MeshEntities.Count;
         if (!ReferenceEquals(_collisionGeometrySelectionScene, scene) ||
-            _collisionGeometrySelectionVersion != selectionVersion ||
-            (!incr && _collisionGeometryMeshCount != meshCount))
+            _collisionGeometrySelectionVersion != selectionVersion)
         {
             ResetCollisionSet();
             SelectionChangeBuffer.Clear();
@@ -133,10 +127,9 @@ public static partial class LegacyGraphics
             _collisionSelectionRebuildTotal++;
             _collisionGeometrySelectionScene = scene;
             _collisionGeometrySelectionVersion = selectionVersion;
-            _collisionGeometryMeshCount = meshCount;
             _collisionFullPassNeeded = true;
         }
-        else if (incr)
+        else
         {
             // Incremental: only entities whose own state changed and newly created meshes need a look.
             SelectionChangeBuffer.Clear();
@@ -158,8 +151,8 @@ public static partial class LegacyGraphics
             }
         }
         // Incremental: only geometries whose own surfaces changed since the last prepare need a look.
-        if (geomOpt && !_collisionFullPassNeeded && PendingCollisionGeometries.Count == 0) return;
-        var full = _collisionFullPassNeeded || !geomOpt;
+        if (!_collisionFullPassNeeded && PendingCollisionGeometries.Count == 0) return;
+        var full = _collisionFullPassNeeded;
 
         if (full)
         {
@@ -264,7 +257,6 @@ public static partial class LegacyGraphics
         PendingSelectionMeshes.Clear();
         _collisionGeometrySelectionScene = null;
         _collisionGeometrySelectionVersion = long.MinValue;
-        _collisionGeometryMeshCount = -1;
         _collisionFullPassNeeded = true;
     }
 

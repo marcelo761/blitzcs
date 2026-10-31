@@ -174,7 +174,6 @@ public sealed partial class SceneGraph
 
     internal int[] GetRootEntityIds()
     {
-        if (!EngineOptimizations.Traversal) return _nodes.Values.Where(node => node.Parent is null).Select(node => node.Id).ToArray();
         var ids = new int[_roots.Count];
         for (var i = 0; i < ids.Length; i++) ids[i] = _roots[i].Id;
         return ids;
@@ -329,10 +328,10 @@ public sealed partial class SceneGraph
     private static bool SameBits(Rotation a, Rotation b) => SameBits(a.W, b.W) && SameBits(a.X, b.X) && SameBits(a.Y, b.Y) && SameBits(a.Z, b.Z);
 
     // A setter that stores the exact bit pattern already present changes nothing observable, so it must not dirty
-    // the node or its descendants (original behaviour under BLITZCS_ENGINE_NOOPT=1).
+    // the node or its descendants.
     private static bool NoOp(bool same)
     {
-        if (!same || !EngineOptimizations.SetterGuard) return false;
+        if (!same) return false;
         EngineStats.Add(EngineStats.XformNoop);
         return true;
     }

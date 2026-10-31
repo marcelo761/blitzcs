@@ -30,23 +30,22 @@ public sealed class ScenePickingTests
             scene.TakeSelectionChanges(dirty);
             return scene.PolygonGeometrySelectionVersion > before || dirty.Count > 0;
         }
-        var optimized = EngineOptimizations.IncrSelection;
 
         Assert.True(Changed(() => scene.EntityType(entity, 2)));
-        Assert.Equal(!optimized, Changed(() => scene.EntityType(entity, 2))); // idempotent: no change when optimized
+        Assert.False(Changed(() => scene.EntityType(entity, 2))); // idempotent: no change
         Assert.True(Changed(() => scene.EntityPickMode(entity, 2)));
-        Assert.Equal(!optimized, Changed(() => scene.EntityPickMode(entity, 2)));
+        Assert.False(Changed(() => scene.EntityPickMode(entity, 2))); // idempotent: no change
         Assert.True(Changed(() => scene.Collisions(1, 2, 2, 1)));
         Assert.False(Changed(() => scene.Collisions(1, 2, 2, 1)));
         Assert.True(Changed(() => scene.ClearCollisions()));
-        Assert.Equal(!optimized, Changed(() => scene.ClearCollisions()));
+        Assert.False(Changed(() => scene.ClearCollisions())); // idempotent: no change
         Assert.True(Changed(() => scene.SetInfinitePlane(entity)));
-        Assert.Equal(!optimized, Changed(() => scene.SetInfinitePlane(entity)));
+        Assert.False(Changed(() => scene.SetInfinitePlane(entity))); // idempotent: no change
 
         var copy = 0;
         Assert.True(Changed(() => copy = scene.CopyEntity(entity)));
         Assert.True(Changed(() => scene.ForgetCollisionState(copy)));
-        Assert.Equal(!optimized, Changed(() => scene.ForgetCollisionState(copy))); // already empty: nothing to select
+        Assert.False(Changed(() => scene.ForgetCollisionState(copy))); // idempotent: no change
     }
 
     [Fact]

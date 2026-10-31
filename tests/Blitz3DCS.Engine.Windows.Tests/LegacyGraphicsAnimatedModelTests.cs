@@ -125,12 +125,9 @@ public sealed class LegacyGraphicsAnimatedModelTests
             LegacyScene.PositionEntity(root, 0, 0, -500); // behind the camera
             LegacyGraphics.SetAnimTime(root, 2);
             LegacyGraphics.PrepareAnimatedGeometry(viewProjection);
-            Assert.Equal(EngineOptimizations.SkinCull, mesh.SkinCulled);
-            if (EngineOptimizations.SkinCull)
-            {
-                Assert.True(mesh.Dirty);
-                Assert.Equal(surface.BaseSurfaceVertices[0].Position, surface.Vertices[0].Position);
-            }
+            Assert.True(mesh.SkinCulled);
+            Assert.True(mesh.Dirty);
+            Assert.Equal(surface.BaseSurfaceVertices[0].Position, surface.Vertices[0].Position);
 
             LegacyScene.PositionEntity(root, 0, 0, 10);
             LegacyGraphics.PrepareAnimatedGeometry(viewProjection);

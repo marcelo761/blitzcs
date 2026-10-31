@@ -61,22 +61,19 @@ public static partial class LegacyGraphics
         var masked = (flags & 4) != 0;
         string? fullPath = null;
         long ticks = 0, length = 0;
-        if (!TextureLoadOptions.Disabled)
+        try
         {
-            try
+            var info = new FileInfo(path);
+            if (info.Exists)
             {
-                var info = new FileInfo(path);
-                if (info.Exists)
-                {
-                    fullPath = info.FullName;
-                    ticks = info.LastWriteTimeUtc.Ticks;
-                    length = info.Length;
-                }
+                fullPath = info.FullName;
+                ticks = info.LastWriteTimeUtc.Ticks;
+                length = info.Length;
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
-            if (fullPath is not null && TextureDecodeCache.TryGet(fullPath, ticks, length, masked, out var w, out var h, out var cached))
-                return new DecodedImage(w, h, cached);
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
+        if (fullPath is not null && TextureDecodeCache.TryGet(fullPath, ticks, length, masked, out var w, out var h, out var cached))
+            return new DecodedImage(w, h, cached);
 
         DecodedImage image;
         using (var stream = File.OpenRead(path))

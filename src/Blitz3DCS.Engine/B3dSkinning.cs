@@ -13,7 +13,6 @@ public sealed class B3dSkinningBuffer
     private readonly Matrix4x4[] _normalMatrices;
     private readonly Matrix4x4[] _poseMatrices;
     private bool _skinMatricesPrepared;
-    private readonly bool _legacy = !EngineOptimizations.SkinFuse;
     // Flattened per-vertex data for the fast path (built once; the source mesh is immutable after load).
     private readonly Vector3[] _srcPosition;
     private readonly Vector3[] _srcNormal;
@@ -193,7 +192,7 @@ public sealed class B3dSkinningBuffer
         if (positions.Length != vertices.Count) throw new ArgumentException("Position output length must match the mesh vertex count.", nameof(positions));
         if (!normals.IsEmpty && normals.Length != vertices.Count) throw new ArgumentException("Normal output length must match the mesh vertex count.", nameof(normals));
 
-        if (_legacy || ForceLegacy) { DeformIntoCoreLegacy(currentWorldMatrices, positions, normals); return; }
+        if (ForceLegacy) { DeformIntoCoreLegacy(currentWorldMatrices, positions, normals); return; }
         DeformIntoFast(currentWorldMatrices, positions, normals);
     }
 
@@ -378,7 +377,7 @@ public sealed class B3dSkinningBuffer
         if (normals.Length != vertices.Count)
             throw new ArgumentException("Normal output length must match the mesh vertex count.", nameof(normals));
 
-        if (!(_legacy || ForceLegacy))
+        if (!ForceLegacy)
         {
             for (var v = 0; v < normals.Length; v++)
             {

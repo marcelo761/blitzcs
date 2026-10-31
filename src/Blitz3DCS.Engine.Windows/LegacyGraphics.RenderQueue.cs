@@ -34,7 +34,7 @@ public static partial class LegacyGraphics
 
     public static int TrisRendered() => _trianglesRendered;
 
-    /// <summary>Walks the visible hierarchy, culls, and fills <see cref="_sceneDraws"/> (unsorted).</summary>
+    /// <summary>Walks the visible hierarchy, culls, and fills <see cref="_sceneDraws"/> (unsorted). <paramref name="optimized"/> false is the reference implementation used by differential tests.</summary>
     internal static void BuildSceneDraws(SceneGraph scene, CameraState camera, Matrix4x4 cameraWorld,
         Matrix4x4 view, Matrix4x4 projection, bool optimized)
     {
@@ -101,6 +101,7 @@ public static partial class LegacyGraphics
         }
     }
 
+    // legacy: reference implementation used by differential tests.
     private static void SortSceneDraws(bool legacy)
     {
         var drawCount = _sceneDrawCount;
@@ -130,7 +131,7 @@ public static partial class LegacyGraphics
         Matrix4x4.Invert(cameraWorld, out var view);
         var projection = CreateCameraProjection(camera, width, height);
         BuildSceneDraws(scene, camera, cameraWorld, view, projection, optimized);
-        SortSceneDraws(!optimized);
+        SortSceneDraws(legacy: !optimized);
         var result = new List<(int, int, Matrix4x4, Matrix4x4, Vector4, int)>();
         for (var i = 0; i < _sceneDrawCount; i++)
         {
@@ -145,7 +146,7 @@ public static partial class LegacyGraphics
         Matrix4x4 cameraWorld, Matrix4x4 view, Matrix4x4 projection)
     {
         var traversalStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
-        BuildSceneDraws(scene, camera, cameraWorld, view, projection, EngineOptimizations.Traversal);
+        BuildSceneDraws(scene, camera, cameraWorld, view, projection, true);
         if (EngineProfile.Enabled) _tally.Flush();
         var drawCount = _sceneDrawCount;
         var draws = _sceneDraws;
@@ -153,17 +154,16 @@ public static partial class LegacyGraphics
         if (EngineProfile.Enabled) EngineProfile.AddTicks(EngineProfile.RtTraverse, sortStart - traversalStart);
         EngineProfile.Count(EngineProfile.RtSurfaces, drawCount);
         EngineProfile.Count(EngineProfile.RtSortKeys, drawCount);
-        SortSceneDraws(!EngineOptimizations.DrawSort);
+        SortSceneDraws(legacy: false);
         var order = _drawOrder;
         if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.RtSort, sortStart);
         D3D11Fog? cameraFog = null;
         if (drawCount > 0) cameraFog = GetCameraFogForRendering(camera.Entity);
-        var legacyOrder = !EngineOptimizations.DrawSort;
         var submitStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
         if (EngineProfile.Enabled) EngineProfile.AddTicks(EngineProfile.Traversal, submitStart - traversalStart);
         for (var drawIndex = 0; drawIndex < drawCount; drawIndex++)
         {
-            ref readonly var draw = ref draws[legacyOrder ? drawIndex : order[drawIndex]];
+            ref readonly var draw = ref draws[order[drawIndex]];
             // Per-draw timestamps are too costly: time one draw in StateSampleStride and scale (phase boundaries stay exact).
             var sampled = EngineProfile.Enabled && (drawIndex & (StateSampleStride - 1)) == 0;
             var stateStart = sampled ? EngineProfile.Now() : 0;

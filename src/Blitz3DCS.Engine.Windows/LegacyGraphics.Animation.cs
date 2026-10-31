@@ -64,9 +64,8 @@ public static partial class LegacyGraphics
         var nodes = model.Pose.Nodes;
         for (var index = 0; index < nodes.Length; index++)
             scene.ApplyAnimationPose(model.Entities[index], nodes[index]);
-        // Fast path: skinning only depends on the entity world matrices, which PrepareAnimatedGeometry compares
+        // Skinning only depends on the entity world matrices, which PrepareAnimatedGeometry compares
         // against the previous frame, so an unchanged pose skips deformation and upload.
-        if (!EngineOptimizations.SkinFuse) model.SkinDirty = true;
     }
 
     private static void UpdateAnimations(SceneGraph scene, float elapsed)
@@ -110,7 +109,7 @@ public static partial class LegacyGraphics
 
     internal static void PrepareAnimatedGeometry(Matrix4x4? viewProjection = null)
     {
-        var cullSkin = viewProjection is not null && EngineOptimizations.SkinCull;
+        var cullSkin = viewProjection is not null;
         var scene = RequireScene();
         foreach (var model in AnimatedModels.Values)
         {
@@ -143,8 +142,7 @@ public static partial class LegacyGraphics
                 var deformStart = EngineProfile.Enabled ? EngineProfile.Now() : 0;
                 EngineProfile.Count(EngineProfile.SkinMeshes);
                 EngineProfile.Count(EngineProfile.SkinVerts, mesh.Positions.Length);
-                if (!EngineOptimizations.SkinFuse) DeformMeshLegacy(model, mesh);
-                else DeformMeshFused(model, mesh);
+                DeformMeshFused(model, mesh);
                 mesh.Dirty = false;
                 if (EngineProfile.Enabled) EngineProfile.AddSince(EngineProfile.SkinDeform, deformStart);
             }
@@ -159,24 +157,6 @@ public static partial class LegacyGraphics
         skin.PrepareFrame(model.CurrentWorld);
         if (!skin.TryGetSkinnedBounds(out var minimum, out var maximum)) return false;
         return !BoxIntersectsClipVolume(minimum, maximum, model.CurrentWorld[mesh.NodeIndex] * viewProjection);
-    }
-
-    private static void DeformMeshLegacy(AnimatedModel model, AnimatedMesh mesh)
-    {
-        mesh.Skin!.DeformInto(model.Pose, model.CurrentWorld, mesh.Positions);
-        foreach (var surface in mesh.Surfaces)
-        {
-            mesh.Skin.DeformNormalsInto(surface.SourceNormals, surface.DeformedNormals);
-            for (var vertex = 0; vertex < surface.Vertices.Length; vertex++)
-            {
-                var source = surface.BaseSurfaceVertices[vertex];
-                var position = mesh.Positions[vertex];
-                var normal = surface.DeformedNormals[vertex];
-                surface.Vertices[vertex] = new D3D11Vertex(new Vector3(position.X, position.Y, position.Z),
-                    source.Color, new Vector3(normal.X, normal.Y, normal.Z), source.TexCoord, source.TexCoord2);
-            }
-            surface.UploadDirty = true;
-        }
     }
 
     // Bone matrices once per mesh, then one pass per surface straight into its GPU vertex array.

@@ -14,8 +14,9 @@ internal static class DdsDecoder
         signature[2] == (byte)'S' && signature[3] == (byte)' ';
 
     internal static (int Width, int Height, byte[] Rgba8) Decode(Stream stream, ReadOnlySpan<byte> signature) =>
-        Decode(stream, signature, TextureLoadOptions.Disabled);
+        Decode(stream, signature, legacy: false);
 
+    // legacy: reference implementation used by differential tests.
     internal static (int Width, int Height, byte[] Rgba8) Decode(Stream stream, ReadOnlySpan<byte> signature, bool legacy)
     {
         Span<byte> header = stackalloc byte[HeaderSize];

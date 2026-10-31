@@ -330,7 +330,7 @@ public sealed class ScenePickingDifferentialTests
         }
         Assert.True(hits > 20, $"too few hits ({hits}) to be meaningful");
         Assert.True(p.Queries > 160 * 20);
-        if (EngineOptimizations.PickAccel) Assert.True(p.Fast.PickNarrowTestsForTesting > 0);
+        Assert.True(p.Fast.PickNarrowTestsForTesting > 0);
     }
 
     [Fact]
@@ -423,7 +423,6 @@ public sealed class ScenePickingDifferentialTests
     [Fact]
     public void Static_targets_are_not_narrow_tested_by_a_short_probe_far_away()
     {
-        if (!EngineOptimizations.PickAccel) return;
         var g = new SceneGraph();
         for (var i = 0; i < 500; i++)
         {
