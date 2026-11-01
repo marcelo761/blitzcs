@@ -1,5 +1,7 @@
 # Windows x64 native-library status
 
+> **Deprecated.** BCSBRE (binary recompilation of legacy PE32 libraries) is no longer the supported Windows path. Windows packages use the managed Direct3D 11 / SDL3 runtime described in [windows-runtime-modernization.md](windows-runtime-modernization.md). This page is kept as a record of what the translator supported and its limits.
+
 BCSBRE accepts PE32 IA-32 libraries and emits target-specific x64 code artifacts. A Windows application loads those artifacts through the managed guest loader; they are not standalone PE64 DLLs. The original x86 DLL is input data, never passed to the operating system's 64-bit DLL loader. Changing a PE header would not adapt its ABI.
 
 ## Supported mechanisms
